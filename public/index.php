@@ -22,8 +22,8 @@ use Framework\Providers\FrameworkServiceProvider;
 if (file_exists(__DIR__ . '/../.env')) {
     $lines = file(__DIR__ . '/../.env', FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
     foreach ($lines as $line) {
-        if (strpos(trim($line), '#') === 0) continue;
-        if (strpos($line, '=') !== false) {
+        if (str_starts_with(trim($line), '#')) continue;
+        if (str_contains($line, '=')) {
             list($name, $value) = explode('=', $line, 2);
             $_ENV[trim($name)] = trim($value);
         }
@@ -67,7 +67,11 @@ try {
 
     // Register all services
     foreach ($providers as $provider) {
-        $provider->register($container);
+        try {
+            $provider->register($container);
+        } catch (ReflectionException $e) {
+            throw new RuntimeException('Service registration failed for ' . get_class($provider) . ': ' . $e->getMessage(), 0, $e);
+        }
     }
 
     // Register router after all services
@@ -77,21 +81,61 @@ try {
 
     // Boot all services
     foreach ($providers as $provider) {
-        $provider->boot($container);
+        try {
+            $provider->boot($container);
+        } catch (ReflectionException $e) {
+            throw new RuntimeException('Service boot failed for ' . get_class($provider) . ': ' . $e->getMessage(), 0, $e);
+        }
     }
 
     // Initialize and run application
-    $app = new Application($container);
-    $app->run();
+    try {
+        $app = new Application($container);
+        $app->run();
+    } catch (ReflectionException $e) {
+        throw new RuntimeException('Application execution failed: ' . $e->getMessage(), 0, $e);
+    }
 
+} catch (ReflectionException $e) {
+    // Handle reflection errors during dependency injection
+    if (isset($container) && $container->has('logger')) {
+        try {
+            $container->get('logger')->error('Reflection error during bootstrap: ' . $e->getMessage(), [
+                'exception' => $e,
+                'request_uri' => $_SERVER['REQUEST_URI'] ?? '',
+                'user_ip' => $_SERVER['REMOTE_ADDR'] ?? '',
+                'file' => $e->getFile(),
+                'line' => $e->getLine()
+            ]);
+        } catch (Throwable $logError) {
+            error_log('Bootstrap reflection error: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
+        }
+    } else {
+        error_log('Bootstrap reflection error: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
+    }
+
+    http_response_code(500);
+
+    if (($_ENV['APP_DEBUG'] ?? false)) {
+        echo '<pre>Reflection Error: ' . htmlspecialchars($e->getMessage()) . "\n\n";
+        echo 'File: ' . htmlspecialchars($e->getFile()) . "\n";
+        echo 'Line: ' . $e->getLine() . "\n\n";
+        echo 'Stack trace:' . "\n" . htmlspecialchars($e->getTraceAsString()) . '</pre>';
+    } else {
+        echo "Service configuration error. Please contact the administrator.";
+    }
 } catch (Throwable $e) {
     // Log error and show user-friendly message
     if (isset($container) && $container->has('logger')) {
-        $container->get('logger')->error('Application error: ' . $e->getMessage(), [
-            'exception' => $e,
-            'request_uri' => $_SERVER['REQUEST_URI'] ?? '',
-            'user_ip' => $_SERVER['REMOTE_ADDR'] ?? ''
-        ]);
+        try {
+            $container->get('logger')->error('Application error: ' . $e->getMessage(), [
+                'exception' => $e,
+                'request_uri' => $_SERVER['REQUEST_URI'] ?? '',
+                'user_ip' => $_SERVER['REMOTE_ADDR'] ?? ''
+            ]);
+        } catch (Throwable $logError) {
+            error_log('Bootstrap error: ' . $e->getMessage());
+        }
     } else {
         error_log('Bootstrap error: ' . $e->getMessage());
     }
