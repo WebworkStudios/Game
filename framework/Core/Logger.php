@@ -191,28 +191,4 @@ class Logger
     {
         $this->log('error', $message, $context);
     }
-
-    /**
-     * Log critical message
-     */
-    public function critical(string $message, array $context = []): void
-    {
-        $this->log('critical', $message, $context);
-    }
-
-    /**
-     * Get current correlation ID
-     */
-    public function getCorrelationId(): string
-    {
-        return $this->correlationId;
-    }
-
-    /**
-     * Set correlation ID
-     */
-    public function setCorrelationId(string $correlationId): void
-    {
-        $this->correlationId = $correlationId;
-    }
 }

@@ -30,7 +30,6 @@ class Router
     private array $namedRoutes = [];
 
     private Container $container;
-    private ?object $_logger = null; // Backing property for logger hook
 
     public function __construct(Container $container)
     {
@@ -38,17 +37,15 @@ class Router
         $this->discoverRoutes();
     }
 
-    // PHP 8.4 Property Hook for lazy logger loading
-    private ?object $logger {
-        get {
-            if ($this->_logger === null) {
-                try {
-                    $this->_logger = $this->container->has('logger') ? $this->container->get('logger') : null;
-                } catch (\Throwable $e) {
-                    $this->_logger = null;
-                }
-            }
-            return $this->_logger;
+    /**
+     * Get logger instance (lazy loaded)
+     */
+    private function getLogger(): ?object
+    {
+        try {
+            return $this->container->has('logger') ? $this->container->get('logger') : null;
+        } catch (Throwable) {
+            return null;
         }
     }
 
@@ -133,9 +130,9 @@ class Router
                     ];
                 }
             }
-        } catch (ReflectionException $e) {
+        } catch (ReflectionException) {
             // Log error but continue
-            error_log("Error registering routes for $className: " . $e->getMessage());
+            error_log("Error registering routes for $className");
         }
     }
 
@@ -164,7 +161,7 @@ class Router
             // Apply rate limiting
             if ($route['rateLimit']) {
                 if (!$this->container->has('rateLimiter')) {
-                    $this->logger?->warning('Rate limiter not configured but required for route');
+                    $this->getLogger()?->warning('Rate limiter not configured but required for route');
                 } else {
                     $rateLimiter = $this->container->get('rateLimiter');
                     if (!$rateLimiter->allowRequest($route['rateLimit'])) {
@@ -177,7 +174,7 @@ class Router
             // Apply middleware
             foreach ($route['middleware'] as $middleware) {
                 if (!$this->container->has($middleware)) {
-                    $this->logger?->error("Middleware [{$middleware}] not found");
+                    $this->getLogger()?->error("Middleware [{$middleware}] not found");
                     $this->handleError(new \Exception("Middleware not found: {$middleware}"));
                     return;
                 }
@@ -192,7 +189,7 @@ class Router
             // Execute action
             $this->executeAction($route['action'], $route['params'] ?? []);
 
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             $this->handleError($e);
         }
     }
@@ -257,7 +254,7 @@ class Router
     {
         http_response_code(404);
 
-        $this->logger?->info('404 Not Found', [
+        $this->getLogger()?->info('404 Not Found', [
             'uri' => $_SERVER['REQUEST_URI'] ?? '',
             'method' => $_SERVER['REQUEST_METHOD'] ?? '',
             'user_ip' => $_SERVER['REMOTE_ADDR'] ?? '',
@@ -283,7 +280,7 @@ class Router
     {
         http_response_code(429);
 
-        $this->logger?->warning('Rate limit exceeded', [
+        $this->getLogger()?->warning('Rate limit exceeded', [
             'uri' => $_SERVER['REQUEST_URI'] ?? '',
             'user_ip' => $_SERVER['REMOTE_ADDR'] ?? '',
             'user_agent' => $_SERVER['HTTP_USER_AGENT'] ?? ''
@@ -304,9 +301,9 @@ class Router
     /**
      * Handle errors
      */
-    private function handleError(\Throwable $e): void
+    private function handleError(Throwable $e): void
     {
-        $this->logger?->error('Router error: ' . $e->getMessage(), [
+        $this->getLogger()?->error('Router error: ' . $e->getMessage(), [
             'exception' => $e,
             'request_uri' => $_SERVER['REQUEST_URI'] ?? '',
             'user_ip' => $_SERVER['REMOTE_ADDR'] ?? '',

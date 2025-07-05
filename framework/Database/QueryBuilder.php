@@ -389,7 +389,11 @@ class QueryBuilder
                 case 'nested':
                     $nestedClause = $condition['query']->buildWhereClause();
                     if (!empty($nestedClause['sql'])) {
-                        $clauses[] = $boolean . '(' . ltrim($nestedClause['sql'], ' WHERE') . ')';
+                        $nestedSql = $nestedClause['sql'];
+                        if (str_starts_with($nestedSql, ' WHERE ')) {
+                            $nestedSql = substr($nestedSql, 7);
+                        }
+                        $clauses[] = $boolean . '(' . $nestedSql . ')';
                         $bindings = array_merge($bindings, $nestedClause['bindings']);
                     }
                     break;
@@ -404,7 +408,7 @@ class QueryBuilder
     /**
      * Add WHERE condition
      */
-    public function where(string|callable $column, string $operator = null, mixed $value = null): self
+    public function where(string|callable $column, string|int|float|null $operator = null, mixed $value = null): self
     {
         // Handle callable for nested conditions
         if (is_callable($column)) {
@@ -436,7 +440,7 @@ class QueryBuilder
         $this->where[] = [
             'type' => 'where',
             'column' => $column,
-            'operator' => $operator,
+            'operator' => (string)$operator, // Cast operator to string
             'value' => $value,
             'boolean' => 'AND'
         ];
