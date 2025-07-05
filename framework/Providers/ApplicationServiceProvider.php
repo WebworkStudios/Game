@@ -2,9 +2,6 @@
 /**
  * Application Service Provider
  * Application-specific services and business logic
- *
- * File: framework/Providers/ApplicationServiceProvider.php
- * Directory: /framework/Providers/
  */
 
 declare(strict_types=1);
@@ -98,26 +95,6 @@ class ApplicationServiceProvider implements ServiceProvider
      */
     private function initializeGameSettings(Container $container, array $config): void
     {
-        $gameConfig = $config['game'] ?? [];
-
-        if ($gameConfig['registration']['enabled'] ?? true) {
-            $container->get('logger')->info('Game registration is enabled', [
-                'email_verification' => $gameConfig['registration']['email_verification_required'] ?? false,
-                'auto_login' => $gameConfig['registration']['auto_login_after_registration'] ?? false,
-                'welcome_email' => $gameConfig['registration']['welcome_email'] ?? false,
-            ]);
-        } else {
-            $container->get('logger')->warning('Game registration is disabled');
-        }
-
-        // Log game defaults
-        $defaults = $gameConfig['defaults'] ?? [];
-        $container->get('logger')->debug('Game defaults configured', [
-            'starting_budget' => $defaults['starting_budget'] ?? 0,
-            'starting_league' => $defaults['starting_league'] ?? 'unknown',
-            'max_team_size' => $defaults['max_team_size'] ?? 0,
-            'min_team_size' => $defaults['min_team_size'] ?? 0,
-        ]);
     }
 
     /**
