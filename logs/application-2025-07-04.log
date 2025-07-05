@@ -1,0 +1,9 @@
+[2025-07-04 22:58:49] [ERROR] [req_686840891bc6c3.16755196] Application error: Database connection failed: SQLSTATE[HY000] [2006] MySQL server has gone away {"exception":{"errorInfo":null},"request_uri":"\/","user_ip":"127.0.0.1"}
+[2025-07-04 23:00:11] [ERROR] [req_686840db0aae57.95347823] Application error: Database connection failed: SQLSTATE[HY000] [2006] MySQL server has gone away {"exception":{"errorInfo":null},"request_uri":"\/","user_ip":"127.0.0.1"}
+[2025-07-04 23:04:06] [ERROR] [req_686841c6c7fbf1.70671138] Application error: Database connection failed: SQLSTATE[HY000] [2006] MySQL server has gone away {"exception":{"errorInfo":null},"request_uri":"\/","user_ip":"127.0.0.1"}
+[2025-07-04 23:05:04] [ERROR] [req_686841fff08a81.25195339] Application error: Database connection failed: SQLSTATE[HY000] [2006] MySQL server has gone away {"exception":{"errorInfo":null},"request_uri":"\/","user_ip":"127.0.0.1"}
+[2025-07-04 23:08:40] [ERROR] [req_686842d8a999c0.90283548] Application error: Database write connection [mysql] failed {"exception":{},"request_uri":"\/","user_ip":"127.0.0.1"}
+[2025-07-04 23:11:06] [DEBUG] [req_6868436a24c359.33150986] Database service provider booted successfully
+[2025-07-04 23:12:12] [DEBUG] [req_686843ac2e40a0.56829981] Database service provider booted successfully
+[2025-07-04 23:12:19] [DEBUG] [req_686843b38f2f96.98009305] Database service provider booted successfully
+[2025-07-04 23:16:43] [DEBUG] [req_686844bb0e4612.39760014] Database service provider booted successfully
