@@ -11,8 +11,8 @@
 return [
     // Application settings
     'app' => [
-        'name' => 'Football Manager',
-        'version' => '1.0.0',
+        'name' => 'Kickerscup',
+        'version' => '2.0.0',
         'environment' => $_ENV['APP_ENV'] ?? 'production',
         'debug' => filter_var($_ENV['APP_DEBUG'] ?? false, FILTER_VALIDATE_BOOLEAN),
         'timezone' => 'Europe/Berlin',
@@ -58,12 +58,6 @@ return [
                         'timeout' => 30,
                         'persistent' => false,
                     ],
-                    // Add more read replicas as needed
-                    // [
-                    //     'driver' => 'mysql',
-                    //     'host' => $_ENV['DB_READ_HOST_2'] ?? $_ENV['DB_HOST'] ?? 'localhost',
-                    //     // ... additional read replica configuration
-                    // ]
                 ]
             ]
         ]
@@ -210,37 +204,6 @@ return [
         'fallback_locale' => 'en',
         'cache_enabled' => true,
         'cache_ttl' => 3600, // 1 hour
-    ],
-
-    // Game configuration
-    'game' => [
-        'registration' => [
-            'enabled' => filter_var($_ENV['REGISTRATION_ENABLED'] ?? true, FILTER_VALIDATE_BOOLEAN),
-            'email_verification_required' => true,
-            'team_name_blacklist_enabled' => true,
-        ],
-        'league' => [
-            'max_teams_per_league' => 18,
-            'auto_create_leagues' => true,
-            'season_duration_days' => 90,
-        ],
-        'team' => [
-            'starting_cash' => 10000000, // 10 million Taler
-            'starting_as_credits' => 200,
-            'default_stadium_capacity' => 5000,
-            'default_pitch_quality' => 'british',
-        ],
-        'player' => [
-            'count_per_team' => 20,
-            'default_contract_duration' => 4, // seasons
-            'age_range' => [18, 28],
-            'strength_range' => [5, 7],
-            'position_distribution' => [
-                'GK' => 2, 'LB' => 2, 'LWB' => 1, 'RB' => 2, 'RWB' => 1,
-                'CB' => 3, 'LM' => 1, 'RM' => 1, 'CAM' => 1, 'CDM' => 2,
-                'LW' => 1, 'RW' => 1, 'ST' => 2
-            ],
-        ],
     ],
 
     // Performance configuration

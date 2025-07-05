@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 namespace Framework\Core;
 
+use ReflectionException;
+
 class Application
 {
     private Container $container;
@@ -14,6 +16,7 @@ class Application
 
     /**
      * Run the application
+     * @throws ReflectionException
      */
     public function run(): void
     {
