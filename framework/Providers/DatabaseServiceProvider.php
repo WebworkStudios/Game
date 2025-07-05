@@ -14,10 +14,7 @@ namespace Framework\Providers;
 use Framework\Core\Container;
 use Framework\Core\ServiceProvider;
 use Framework\Database\ConnectionPool;
-use League\Domain\LeagueRepository;
-use Player\Domain\PlayerRepository;
-use Team\Domain\TeamRepository;
-use User\Domain\UserRepository;
+
 
 class DatabaseServiceProvider implements ServiceProvider
 {
@@ -29,22 +26,6 @@ class DatabaseServiceProvider implements ServiceProvider
             return new ConnectionPool($config['database']);
         });
 
-        // Repositories
-        $container->singleton(UserRepository::class, function ($container) {
-            return new UserRepository($container->get('db'));
-        });
-
-        $container->singleton(TeamRepository::class, function ($container) {
-            return new TeamRepository($container->get('db'));
-        });
-
-        $container->singleton(PlayerRepository::class, function ($container) {
-            return new PlayerRepository($container->get('db'));
-        });
-
-        $container->singleton(LeagueRepository::class, function ($container) {
-            return new LeagueRepository($container->get('db'));
-        });
     }
 
     public function boot(Container $container): void
