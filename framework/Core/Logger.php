@@ -191,4 +191,12 @@ class Logger
     {
         $this->log('error', $message, $context);
     }
+
+    /**
+     * Set correlation ID manually
+     */
+    public function setCorrelationId(string $correlationId): void
+    {
+        $this->correlationId = $correlationId;
+    }
 }

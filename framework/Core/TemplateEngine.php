@@ -1,13 +1,8 @@
 <?php
-
 /**
  * Template Engine
  * Simple PHP template rendering engine
- *
- * File: framework/Core/TemplateEngine.php
- * Directory: /framework/Core/
  */
-
 declare(strict_types=1);
 
 namespace Framework\Core;
@@ -15,10 +10,19 @@ namespace Framework\Core;
 class TemplateEngine
 {
     private string $templatePath;
+    private array $globals = []; // Add globals storage
 
     public function __construct(string $templatePath = '')
     {
         $this->templatePath = $templatePath ?: __DIR__ . '/../../templates/';
+    }
+
+    /**
+     * Add global variable available to all templates
+     */
+    public function addGlobal(string $key, mixed $value): void
+    {
+        $this->globals[$key] = $value;
     }
 
     /**
@@ -42,8 +46,11 @@ class TemplateEngine
             throw new \InvalidArgumentException("Template [{$template}] not found at {$templateFile}");
         }
 
+        // Merge data with globals (data takes precedence)
+        $templateData = array_merge($this->globals, $data);
+
         // Extract data to variables
-        extract($data, EXTR_SKIP);
+        extract($templateData, EXTR_SKIP);
 
         // Include template
         include $templateFile;
