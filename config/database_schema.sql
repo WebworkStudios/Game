@@ -1,10 +1,9 @@
--- Database Schema for Football Manager
+-- Database Schema for Football Manager - FIXED VERSION
 -- File: config/database_schema.sql
 -- Directory: /config/
 
 SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci;
-SET
-foreign_key_checks = 0;
+SET foreign_key_checks = 0;
 
 -- Users table
 CREATE TABLE `users`
@@ -33,7 +32,9 @@ CREATE TABLE `users`
     INDEX                       `idx_email_verification_token` (`email_verification_token`),
     INDEX                       `idx_password_reset_token` (`password_reset_token`),
     INDEX                       `idx_status` (`status`),
-    INDEX                       `idx_created_at` (`created_at`)
+    INDEX                       `idx_created_at` (`created_at`),
+    INDEX                       `idx_email_verified` (`email_verified`),
+    INDEX                       `idx_status_created` (`status`, `created_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Leagues table
@@ -56,7 +57,7 @@ CREATE TABLE `leagues`
     INDEX               `idx_current_teams` (`current_teams`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Teams table
+-- Teams table - FIXED with proper constraints
 CREATE TABLE `teams`
 (
     `id`                INT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -84,11 +85,12 @@ CREATE TABLE `teams`
     INDEX               `idx_league_id` (`league_id`),
     INDEX               `idx_name` (`name`),
     INDEX               `idx_points` (`points` DESC),
-    FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
-    FOREIGN KEY (`league_id`) REFERENCES `leagues` (`id`) ON DELETE RESTRICT
+    INDEX               `idx_league_points` (`league_id`, `points` DESC),
+    CONSTRAINT `fk_teams_user_id` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT `fk_teams_league_id` FOREIGN KEY (`league_id`) REFERENCES `leagues` (`id`) ON DELETE RESTRICT ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Players table
+-- Players table - FIXED with proper constraints
 CREATE TABLE `players`
 (
     `id`                INT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -122,7 +124,9 @@ CREATE TABLE `players`
     INDEX               `idx_strength` (`strength`),
     INDEX               `idx_status` (`status`),
     INDEX               `idx_market_value` (`market_value` DESC),
-    FOREIGN KEY (`team_id`) REFERENCES `teams` (`id`) ON DELETE CASCADE
+    INDEX               `idx_team_position` (`team_id`, `position`),
+    INDEX               `idx_strength_age` (`strength`, `age`),
+    CONSTRAINT `fk_players_team_id` FOREIGN KEY (`team_id`) REFERENCES `teams` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Rate limiting table
@@ -164,7 +168,7 @@ CREATE TABLE `email_queue`
     INDEX           `idx_to_email` (`to_email`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Game settings table
+-- Game settings table - FIXED with proper constraint
 CREATE TABLE `game_settings`
 (
     `id`            INT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -176,10 +180,10 @@ CREATE TABLE `game_settings`
     `updated_at`    TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`),
     INDEX           `idx_setting_key` (`setting_key`),
-    FOREIGN KEY (`updated_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
+    CONSTRAINT `fk_game_settings_updated_by` FOREIGN KEY (`updated_by`) REFERENCES `users` (`id`) ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Audit log table
+-- Audit log table - FIXED with proper constraint
 CREATE TABLE `audit_logs`
 (
     `id`             BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -196,10 +200,10 @@ CREATE TABLE `audit_logs`
     PRIMARY KEY (`id`),
     INDEX            `idx_user_id` (`user_id`),
     INDEX            `idx_action` (`action`),
-    INDEX            `idx_resource` (`resource_type`, `resource_id`),
+    INDEX            `idx_resource` (`resource_type`, `resource_id`),4
     INDEX            `idx_correlation_id` (`correlation_id`),
     INDEX            `idx_created_at` (`created_at`),
-    FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
+    CONSTRAINT `fk_audit_logs_user_id` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Insert default league
@@ -217,12 +221,4 @@ VALUES ('registration_enabled', 'true', 'Whether new user registration is enable
        ('email_verification_required', 'true', 'Whether email verification is required'),
        ('team_name_blacklist_enabled', 'true', 'Whether team name blacklist is enforced');
 
--- Create indexes for better performance
-CREATE INDEX `idx_users_email_verified` ON `users` (`email_verified`);
-CREATE INDEX `idx_users_status_created` ON `users` (`status`, `created_at`);
-CREATE INDEX `idx_teams_league_points` ON `teams` (`league_id`, `points` DESC);
-CREATE INDEX `idx_players_team_position` ON `players` (`team_id`, `position`);
-CREATE INDEX `idx_players_strength_age` ON `players` (`strength`, `age`);
-
-SET
-foreign_key_checks = 1;
+SET foreign_key_checks = 1;

@@ -13,6 +13,7 @@ declare(strict_types=1);
 namespace Framework\Validation;
 
 use Framework\Database\ConnectionPool;
+use Throwable;
 
 class Validator
 {
@@ -45,33 +46,60 @@ class Validator
     {
         $this->customRules = [
             'unique_email' => function ($value, $data) {
-                if ($this->db->table('users')->where('email', $value)->count() > 0) {
-                    return 'This email address is already registered.';
+                try {
+                    $count = $this->db->table('users')
+                        ->where('email', '=', $value)
+                        ->count();
+
+                    if ($count > 0) {
+                        return 'This email address is already registered.';
+                    }
+                    return true;
+                } catch (Throwable $e) {
+                    error_log('Email validation error: ' . $e->getMessage());
+                    return 'Unable to validate email address.';
                 }
-                return true;
             },
 
             'unique_trainer_name' => function ($value, $data) {
-                if ($this->db->table('users')->where('trainer_name', $value)->count() > 0) {
-                    return 'This trainer name is already taken.';
+                try {
+                    $count = $this->db->table('users')
+                        ->where('trainer_name', '=', $value)
+                        ->count();
+
+                    if ($count > 0) {
+                        return 'This trainer name is already taken.';
+                    }
+                    return true;
+                } catch (Throwable $e) {
+                    error_log('Trainer name validation error: ' . $e->getMessage());
+                    return 'Unable to validate trainer name.';
                 }
-                return true;
             },
 
             'valid_team_name' => function ($value, $data) {
-                // Check against blacklist
-                foreach ($this->teamNameBlacklist as $blacklistedName) {
-                    if (strcasecmp(trim($value), trim($blacklistedName)) === 0) {
-                        return 'This team name is not allowed due to licensing restrictions.';
+                try {
+                    // Check against blacklist
+                    foreach ($this->teamNameBlacklist as $blacklistedName) {
+                        if (strcasecmp(trim($value), trim($blacklistedName)) === 0) {
+                            return 'This team name is not allowed due to licensing restrictions.';
+                        }
                     }
-                }
 
-                // Check for uniqueness
-                if ($this->db->table('teams')->where('name', $value)->count() > 0) {
-                    return 'This team name is already taken.';
-                }
+                    // Check for uniqueness
+                    $count = $this->db->table('teams')
+                        ->where('name', '=', $value)
+                        ->count();
 
-                return true;
+                    if ($count > 0) {
+                        return 'This team name is already taken.';
+                    }
+
+                    return true;
+                } catch (Throwable $e) {
+                    error_log('Team name validation error: ' . $e->getMessage());
+                    return 'Unable to validate team name.';
+                }
             }
         ];
     }

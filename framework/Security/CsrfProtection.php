@@ -40,10 +40,20 @@ class CsrfProtection
      */
     private function validateToken(): bool
     {
+        // Ensure session is started
+        if (session_status() === PHP_SESSION_NONE) {
+            session_start();
+        }
+
         $token = $_POST[$this->tokenName] ?? $_GET[$this->tokenName] ?? '';
 
         if (empty($token)) {
             $this->sendCsrfError('CSRF token missing');
+            return false;
+        }
+
+        if (!isset($_SESSION['csrf_tokens']) || !is_array($_SESSION['csrf_tokens'])) {
+            $this->sendCsrfError('Invalid CSRF token session');
             return false;
         }
 
@@ -54,13 +64,13 @@ class CsrfProtection
 
         $tokenTime = $_SESSION['csrf_tokens'][$token];
 
-        if (time() - $tokenTime > $this->tokenLifetime) {
+        if (!is_numeric($tokenTime) || (time() - $tokenTime) > $this->tokenLifetime) {
             unset($_SESSION['csrf_tokens'][$token]);
             $this->sendCsrfError('CSRF token expired');
             return false;
         }
 
-        // Remove used token
+        // Remove used token (one-time use)
         unset($_SESSION['csrf_tokens'][$token]);
 
         return true;
@@ -100,22 +110,36 @@ class CsrfProtection
      */
     public function generateToken(): string
     {
-        $token = bin2hex(random_bytes(32));
+        // Ensure session is started
+        if (session_status() === PHP_SESSION_NONE) {
+            session_start();
+        }
 
+        // Initialize CSRF tokens array if not exists
+        if (!isset($_SESSION['csrf_tokens']) || !is_array($_SESSION['csrf_tokens'])) {
+            $_SESSION['csrf_tokens'] = [];
+        }
+
+        $token = bin2hex(random_bytes(32));
         $_SESSION['csrf_tokens'][$token] = time();
 
-        // Clean old tokens
+        // Clean old tokens to prevent memory bloat
         $this->cleanExpiredTokens();
+
+        // Limit number of tokens per session
+        if (count($_SESSION['csrf_tokens']) > 10) {
+            $oldestToken = array_key_first($_SESSION['csrf_tokens']);
+            unset($_SESSION['csrf_tokens'][$oldestToken]);
+        }
 
         return $token;
     }
-
     /**
      * Clean expired tokens
      */
     private function cleanExpiredTokens(): void
     {
-        if (!isset($_SESSION['csrf_tokens'])) {
+        if (!isset($_SESSION['csrf_tokens']) || !is_array($_SESSION['csrf_tokens'])) {
             $_SESSION['csrf_tokens'] = [];
             return;
         }
@@ -123,7 +147,7 @@ class CsrfProtection
         $currentTime = time();
 
         foreach ($_SESSION['csrf_tokens'] as $token => $timestamp) {
-            if ($currentTime - $timestamp > $this->tokenLifetime) {
+            if (!is_numeric($timestamp) || ($currentTime - $timestamp) > $this->tokenLifetime) {
                 unset($_SESSION['csrf_tokens'][$token]);
             }
         }

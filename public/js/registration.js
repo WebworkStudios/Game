@@ -53,9 +53,9 @@ function calculatePasswordStrength(password) {
 
     // Length check
     if (password.length >= 8) {
-        score += 20;
+        score += 25;
     } else {
-        feedback.push('At least 8 characters');
+        feedback.push('at least 8 characters');
     }
 
     if (password.length >= 12) {
@@ -64,35 +64,30 @@ function calculatePasswordStrength(password) {
 
     // Character variety checks
     if (/[a-z]/.test(password)) {
-        score += 15;
+        score += 20;
     } else {
-        feedback.push('Lowercase letter');
+        feedback.push('lowercase letter');
     }
 
     if (/[A-Z]/.test(password)) {
-        score += 15;
+        score += 20;
     } else {
-        feedback.push('Uppercase letter');
+        feedback.push('uppercase letter');
     }
 
     if (/[0-9]/.test(password)) {
         score += 15;
     } else {
-        feedback.push('Number');
+        feedback.push('number');
     }
 
     if (/[^a-zA-Z0-9]/.test(password)) {
-        score += 15;
+        score += 20;
     } else {
-        feedback.push('Special character');
+        feedback.push('special character');
     }
 
-    // Bonus for good length
-    if (password.length >= 16) {
-        score += 10;
-    }
-
-    const level = score >= 80 ? 'strong' : score >= 60 ? 'medium' : score >= 40 ? 'weak' : '';
+    const level = score >= 85 ? 'strong' : score >= 65 ? 'medium' : score >= 45 ? 'weak' : '';
 
     return {
         score: score,
@@ -183,7 +178,7 @@ function validateField(field) {
             } else {
                 const strength = calculatePasswordStrength(value);
                 if (strength.score < 60) {
-                    errorMessage = 'Password is too weak';
+                    errorMessage = 'Password is too weak. ' + strength.feedback.join(', ');
                     isValid = false;
                 }
             }
@@ -194,7 +189,7 @@ function validateField(field) {
             if (!value) {
                 errorMessage = 'Password confirmation is required';
                 isValid = false;
-            } else if (value !== passwordField.value) {
+            } else if (passwordField && value !== passwordField.value) {
                 errorMessage = 'Passwords do not match';
                 isValid = false;
             }
@@ -222,7 +217,6 @@ function validateField(field) {
 
     return isValid;
 }
-
 /**
  * Show field error
  */

@@ -1,6 +1,6 @@
 <?php
 /**
- * Database Connection Pool
+ * Database Connection Pool - Complete Fixed Version
  * Manages multiple database connections with read/write separation
  *
  * File: framework/Database/ConnectionPool.php
@@ -32,36 +32,30 @@ class ConnectionPool
     public function __construct(array $config)
     {
         $this->config = $config;
-        $this->initializeConnections();
+        // Connections are created lazily when first accessed
+        // This prevents connection errors during bootstrap
     }
 
     /**
-     * Initialize database connections
+     * Get query builder for table (read operations)
      */
-    private function initializeConnections(): void
-    {
-        foreach ($this->config['connections'] as $name => $connectionConfig) {
-            // Initialize connection arrays
-            $this->readConnections[$name] = [];
-            $this->readConnectionIndexes[$name] = 0;
-
-            // Note: Connections are created lazily when first accessed
-            // This prevents connection errors during bootstrap
-        }
-    }
-
-    /**
-     * Get query builder for table
-     */
-    public function table(string $table, string $connection = 'default'): QueryBuilder
+    public function table(string $table, string $connection = 'mysql'): QueryBuilder
     {
         return new QueryBuilder($this->getReadConnection($connection), $table);
     }
 
     /**
+     * Get query builder for write operations
+     */
+    public function writeTable(string $table, string $connection = 'mysql'): QueryBuilder
+    {
+        return new QueryBuilder($this->getWriteConnection($connection), $table);
+    }
+
+    /**
      * Get read connection (load balanced)
      */
-    public function getReadConnection(string $name = 'default'): PDO
+    public function getReadConnection(string $name = 'mysql'): PDO
     {
         if (!isset($this->config['connections'][$name])) {
             throw new InvalidArgumentException("Connection configuration [{$name}] not found");
@@ -70,13 +64,23 @@ class ConnectionPool
         $connectionConfig = $this->config['connections'][$name];
 
         // Initialize read connections lazily
-        if (empty($this->readConnections[$name])) {
-            if (isset($connectionConfig['read'])) {
+        if (!isset($this->readConnections[$name])) {
+            $this->readConnections[$name] = [];
+            $this->readConnectionIndexes[$name] = 0;
+
+            if (isset($connectionConfig['read']) && !empty($connectionConfig['read'])) {
                 foreach ($connectionConfig['read'] as $readConfig) {
-                    $this->readConnections[$name][] = $this->createConnection($readConfig);
+                    try {
+                        $this->readConnections[$name][] = $this->createConnection($readConfig);
+                    } catch (PDOException $e) {
+                        // Log read connection failure but continue with write connection
+                        error_log("Read connection failed: " . $e->getMessage());
+                    }
                 }
-            } else {
-                // Use write connection as read connection if no read replicas
+            }
+
+            // If no read connections available, use write connection
+            if (empty($this->readConnections[$name])) {
                 $this->readConnections[$name][] = $this->getWriteConnection($name);
             }
         }
@@ -97,6 +101,25 @@ class ConnectionPool
     }
 
     /**
+     * Get write connection
+     */
+    public function getWriteConnection(string $name = 'mysql'): PDO
+    {
+        if (!isset($this->config['connections'][$name])) {
+            throw new InvalidArgumentException("Connection configuration [{$name}] not found");
+        }
+
+        // Create connection lazily
+        if (!isset($this->writeConnections[$name])) {
+            $this->writeConnections[$name] = $this->createConnection(
+                $this->config['connections'][$name]['write']
+            );
+        }
+
+        return $this->writeConnections[$name];
+    }
+
+    /**
      * Create a PDO connection
      */
     private function createConnection(array $config): PDO
@@ -114,10 +137,16 @@ class ConnectionPool
         ];
 
         // Add SSL options if configured
-        if (!empty($config['ssl'])) {
-            $options[PDO::MYSQL_ATTR_SSL_CA] = $config['ssl']['ca'] ?? null;
-            $options[PDO::MYSQL_ATTR_SSL_CERT] = $config['ssl']['cert'] ?? null;
-            $options[PDO::MYSQL_ATTR_SSL_KEY] = $config['ssl']['key'] ?? null;
+        if (!empty($config['ssl']) && is_array($config['ssl'])) {
+            if (!empty($config['ssl']['ca'])) {
+                $options[PDO::MYSQL_ATTR_SSL_CA] = $config['ssl']['ca'];
+            }
+            if (!empty($config['ssl']['cert'])) {
+                $options[PDO::MYSQL_ATTR_SSL_CERT] = $config['ssl']['cert'];
+            }
+            if (!empty($config['ssl']['key'])) {
+                $options[PDO::MYSQL_ATTR_SSL_KEY] = $config['ssl']['key'];
+            }
             $options[PDO::MYSQL_ATTR_SSL_VERIFY_SERVER_CERT] = $config['ssl']['verify_server_cert'] ?? false;
         }
 
@@ -130,7 +159,7 @@ class ConnectionPool
             );
         } catch (PDOException $e) {
             throw new PDOException(
-                "Database connection failed: " . $e->getMessage(),
+                "Database connection [{$config['host']}:{$config['port']}] failed: " . $e->getMessage(),
                 (int)$e->getCode(),
                 $e
             );
@@ -171,36 +200,9 @@ class ConnectionPool
     }
 
     /**
-     * Get write connection
-     */
-    public function getWriteConnection(string $name = 'default'): PDO
-    {
-        if (!isset($this->config['connections'][$name])) {
-            throw new InvalidArgumentException("Connection configuration [{$name}] not found");
-        }
-
-        // Create connection lazily
-        if (!isset($this->writeConnections[$name])) {
-            $this->writeConnections[$name] = $this->createConnection(
-                $this->config['connections'][$name]['write']
-            );
-        }
-
-        return $this->writeConnections[$name];
-    }
-
-    /**
-     * Get query builder for write operations
-     */
-    public function writeTable(string $table, string $connection = 'default'): QueryBuilder
-    {
-        return new QueryBuilder($this->getWriteConnection($connection), $table);
-    }
-
-    /**
      * Execute a transaction
      */
-    public function transaction(callable $callback, string $connection = 'default'): mixed
+    public function transaction(callable $callback, string $connection = 'mysql'): mixed
     {
         $pdo = $this->getWriteConnection($connection);
 
@@ -240,7 +242,7 @@ class ConnectionPool
 
             // Test read connections
             try {
-                if (isset($connectionConfig['read'])) {
+                if (isset($connectionConfig['read']) && !empty($connectionConfig['read'])) {
                     foreach ($connectionConfig['read'] as $index => $readConfig) {
                         try {
                             $readConnection = $this->createConnection($readConfig);
@@ -295,12 +297,120 @@ class ConnectionPool
 
         foreach ($this->config['connections'] as $name => $connectionConfig) {
             $stats[$name] = [
-                'write_connections' => 1,
-                'read_connections' => count($this->readConnections[$name]),
-                'current_read_index' => $this->readConnectionIndexes[$name]
+                'write_connections' => isset($this->writeConnections[$name]) ? 1 : 0,
+                'read_connections' => count($this->readConnections[$name] ?? []),
+                'current_read_index' => $this->readConnectionIndexes[$name] ?? 0,
+                'write_active' => isset($this->writeConnections[$name]),
+                'read_active' => !empty($this->readConnections[$name])
             ];
         }
 
         return $stats;
+    }
+
+    /**
+     * Get available connection names
+     */
+    public function getConnectionNames(): array
+    {
+        return array_keys($this->config['connections']);
+    }
+
+    /**
+     * Check if connection is configured
+     */
+    public function hasConnection(string $name): bool
+    {
+        return isset($this->config['connections'][$name]);
+    }
+
+    /**
+     * Get connection configuration
+     */
+    public function getConnectionConfig(string $name): array
+    {
+        if (!$this->hasConnection($name)) {
+            throw new InvalidArgumentException("Connection configuration [{$name}] not found");
+        }
+
+        return $this->config['connections'][$name];
+    }
+
+    /**
+     * Force reconnection for a specific connection
+     */
+    public function reconnect(string $name = 'mysql'): void
+    {
+        if (isset($this->writeConnections[$name])) {
+            unset($this->writeConnections[$name]);
+        }
+
+        if (isset($this->readConnections[$name])) {
+            unset($this->readConnections[$name]);
+            unset($this->readConnectionIndexes[$name]);
+        }
+    }
+
+    /**
+     * Execute raw SQL query on write connection
+     */
+    public function statement(string $query, array $bindings = [], string $connection = 'mysql'): bool
+    {
+        $pdo = $this->getWriteConnection($connection);
+        $stmt = $pdo->prepare($query);
+        return $stmt->execute($bindings);
+    }
+
+    /**
+     * Execute raw SQL query and return results
+     */
+    public function select(string $query, array $bindings = [], string $connection = 'mysql'): array
+    {
+        $pdo = $this->getReadConnection($connection);
+        $stmt = $pdo->prepare($query);
+        $stmt->execute($bindings);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Execute INSERT and return last insert ID
+     */
+    public function insert(string $query, array $bindings = [], string $connection = 'mysql'): int
+    {
+        $pdo = $this->getWriteConnection($connection);
+        $stmt = $pdo->prepare($query);
+        $stmt->execute($bindings);
+        return (int)$pdo->lastInsertId();
+    }
+
+    /**
+     * Execute UPDATE/DELETE and return affected rows
+     */
+    public function affectingStatement(string $query, array $bindings = [], string $connection = 'mysql'): int
+    {
+        $pdo = $this->getWriteConnection($connection);
+        $stmt = $pdo->prepare($query);
+        $stmt->execute($bindings);
+        return $stmt->rowCount();
+    }
+
+    /**
+     * Get the default connection name
+     */
+    public function getDefaultConnection(): string
+    {
+        return $this->config['default'] ?? 'mysql';
+    }
+
+    /**
+     * Set default connection
+     */
+    public function setDefaultConnection(string $name): void
+    {
+        if (!$this->hasConnection($name)) {
+            throw new InvalidArgumentException("Connection [{$name}] is not configured");
+        }
+
+        $this->config['default'] = $name;
     }
 }

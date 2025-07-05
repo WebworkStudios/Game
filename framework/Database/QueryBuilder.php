@@ -362,28 +362,36 @@ class QueryBuilder
 
             switch ($condition['type']) {
                 case 'where':
-                    $clauses[] = $boolean . "{$condition['column']} {$condition['operator']} ?";
+                    $clauses[] = $boolean . "`{$condition['column']}` {$condition['operator']} ?";
                     $bindings[] = $condition['value'];
                     break;
 
                 case 'whereIn':
                     $placeholders = implode(', ', array_fill(0, count($condition['values']), '?'));
-                    $clauses[] = $boolean . "{$condition['column']} IN ({$placeholders})";
+                    $clauses[] = $boolean . "`{$condition['column']}` IN ({$placeholders})";
                     $bindings = array_merge($bindings, $condition['values']);
                     break;
 
                 case 'whereNotIn':
                     $placeholders = implode(', ', array_fill(0, count($condition['values']), '?'));
-                    $clauses[] = $boolean . "{$condition['column']} NOT IN ({$placeholders})";
+                    $clauses[] = $boolean . "`{$condition['column']}` NOT IN ({$placeholders})";
                     $bindings = array_merge($bindings, $condition['values']);
                     break;
 
                 case 'whereNull':
-                    $clauses[] = $boolean . "{$condition['column']} IS NULL";
+                    $clauses[] = $boolean . "`{$condition['column']}` IS NULL";
                     break;
 
                 case 'whereNotNull':
-                    $clauses[] = $boolean . "{$condition['column']} IS NOT NULL";
+                    $clauses[] = $boolean . "`{$condition['column']}` IS NOT NULL";
+                    break;
+
+                case 'nested':
+                    $nestedClause = $condition['query']->buildWhereClause();
+                    if (!empty($nestedClause['sql'])) {
+                        $clauses[] = $boolean . '(' . ltrim($nestedClause['sql'], ' WHERE') . ')';
+                        $bindings = array_merge($bindings, $nestedClause['bindings']);
+                    }
                     break;
             }
         }
@@ -396,11 +404,33 @@ class QueryBuilder
     /**
      * Add WHERE condition
      */
-    public function where(string $column, string $operator, mixed $value = null): self
+    public function where(string|callable $column, string $operator = null, mixed $value = null): self
     {
-        if ($value === null) {
+        // Handle callable for nested conditions
+        if (is_callable($column)) {
+            $nestedQuery = new static($this->connection, $this->table);
+            $column($nestedQuery);
+
+            if (!empty($nestedQuery->where)) {
+                $this->where[] = [
+                    'type' => 'nested',
+                    'query' => $nestedQuery,
+                    'boolean' => 'AND'
+                ];
+            }
+
+            return $this;
+        }
+
+        // Handle two-parameter syntax: where('column', 'value')
+        if ($operator !== null && $value === null) {
             $value = $operator;
             $operator = '=';
+        }
+
+        // Handle three-parameter syntax: where('column', '>', 'value')
+        if ($value === null) {
+            throw new InvalidArgumentException('WHERE clause requires a value');
         }
 
         $this->where[] = [
