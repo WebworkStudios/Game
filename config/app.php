@@ -31,7 +31,7 @@ return [
                     'driver' => 'mysql',
                     'host' => $_ENV['DB_HOST'] ?? 'localhost',
                     'port' => (int)($_ENV['DB_PORT'] ?? 3306),
-                    'database' => $_ENV['DB_DATABASE'] ?? 'kickerscup',
+                    'database' => $_ENV['DB_DATABASE'] ?? 'football_manager',
                     'username' => $_ENV['DB_USERNAME'] ?? 'root',
                     'password' => $_ENV['DB_PASSWORD'] ?? '',
                     'charset' => 'utf8mb4',
@@ -135,11 +135,12 @@ return [
             'retry_attempts' => (int)($_ENV['MAIL_QUEUE_RETRY_ATTEMPTS'] ?? 3),
             'retry_delay' => (int)($_ENV['MAIL_QUEUE_RETRY_DELAY'] ?? 300), // 5 minutes
         ],
+        'log_path' => __DIR__ . '/../storage/logs/emails.log',
     ],
 
     // Caching configuration
     'cache' => [
-        'default' => 'redis',
+        'default' => 'file', // Changed from redis to file for simpler setup
         'stores' => [
             'redis' => [
                 'driver' => 'redis',
@@ -160,6 +161,7 @@ return [
             'team' => 1800, // 30 minutes
             'player' => 900, // 15 minutes
             'league' => 3600, // 1 hour
+            'routes' => 86400, // 24 hours
         ],
     ],
 
@@ -169,14 +171,14 @@ return [
         'channels' => [
             'daily' => [
                 'driver' => 'daily',
-                'path' => __DIR__ . '/../logs/application.log',
+                'path' => __DIR__ . '/../storage/logs/application.log',
                 'level' => $_ENV['LOG_LEVEL'] ?? 'info',
                 'days' => (int)($_ENV['LOG_RETENTION_DAYS'] ?? 14),
                 'permission' => 0644,
             ],
             'single' => [
                 'driver' => 'single',
-                'path' => __DIR__ . '/../logs/application.log',
+                'path' => __DIR__ . '/../storage/logs/application.log',
                 'level' => $_ENV['LOG_LEVEL'] ?? 'info',
             ],
             'syslog' => [
@@ -185,13 +187,13 @@ return [
             ],
             'error' => [
                 'driver' => 'daily',
-                'path' => __DIR__ . '/../logs/error.log',
+                'path' => __DIR__ . '/../storage/logs/error.log',
                 'level' => 'error',
                 'days' => 30,
             ],
             'security' => [
                 'driver' => 'daily',
-                'path' => __DIR__ . '/../logs/security.log',
+                'path' => __DIR__ . '/../storage/logs/security.log',
                 'level' => 'info',
                 'days' => 90,
             ],
@@ -212,8 +214,14 @@ return [
         'cache_ttl' => 3600, // 1 hour
     ],
 
-    // Performance configuration
+    // Performance configuration with route caching
     'performance' => [
+        'route_cache' => [
+            'enabled' => !filter_var($_ENV['APP_DEBUG'] ?? false, FILTER_VALIDATE_BOOLEAN),
+            'path' => __DIR__ . '/../storage/cache/routes.php',
+            'auto_invalidate' => true, // Check file modification times
+            'check_source_changes' => true, // Automatically rebuild if source files change
+        ],
         'lazy_loading' => [
             'enabled' => true,
             'batch_size' => 50,
@@ -222,11 +230,21 @@ return [
             'query_cache_enabled' => true,
             'slow_query_threshold' => 2.0, // seconds
             'batch_insert_size' => 1000,
+            'connection_pool_size' => 10,
         ],
         'response' => [
             'compression_enabled' => true,
             'compression_level' => 6,
             'etag_enabled' => true,
+            'cache_headers' => [
+                'static_assets' => 'max-age=31536000, public', // 1 year
+                'dynamic_content' => 'max-age=300, private', // 5 minutes
+            ],
+        ],
+        'memory' => [
+            'limit' => '256M',
+            'opcache_enabled' => true,
+            'preload_enabled' => false, // Can be enabled in production
         ],
     ],
 
@@ -238,11 +256,17 @@ return [
             'css' => true,
             'js' => true,
             'images' => true,
+            'fonts' => true,
         ],
         'cache_headers' => [
-            'css' => 'max-age=31536000', // 1 year
-            'js' => 'max-age=31536000', // 1 year
-            'images' => 'max-age=2592000', // 30 days
+            'css' => 'max-age=31536000, public', // 1 year
+            'js' => 'max-age=31536000, public', // 1 year
+            'images' => 'max-age=2592000, public', // 30 days
+            'fonts' => 'max-age=31536000, public', // 1 year
+        ],
+        'compression' => [
+            'gzip' => true,
+            'brotli' => true,
         ],
     ],
 
@@ -259,6 +283,7 @@ return [
                 'enabled' => true,
                 'interval' => 30, // seconds
                 'timeout' => 5, // seconds
+                'path' => '/health',
             ],
         ],
         'php_fpm' => [
@@ -301,7 +326,7 @@ return [
             'enabled' => true,
             'allowed_origins' => $_ENV['CORS_ALLOWED_ORIGINS'] ? explode(',', $_ENV['CORS_ALLOWED_ORIGINS']) : ['*'],
             'allowed_methods' => ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-            'allowed_headers' => ['Content-Type', 'Authorization', 'X-Requested-With'],
+            'allowed_headers' => ['Content-Type', 'Authorization', 'X-Requested-With', 'X-Correlation-ID'],
             'exposed_headers' => ['X-Correlation-ID'],
             'max_age' => 86400, // 24 hours
         ],
@@ -314,14 +339,65 @@ return [
             'endpoint' => '/health',
             'checks' => [
                 'database' => true,
-                'redis' => true,
+                'redis' => false, // Disabled by default since using file cache
                 'email' => false,
+                'storage' => true,
+                'route_cache' => true,
             ],
         ],
         'metrics' => [
             'enabled' => filter_var($_ENV['METRICS_ENABLED'] ?? false, FILTER_VALIDATE_BOOLEAN),
             'endpoint' => '/metrics',
             'authentication_required' => true,
+            'collect_route_stats' => true,
+            'collect_db_stats' => true,
+        ],
+        'profiling' => [
+            'enabled' => filter_var($_ENV['PROFILING_ENABLED'] ?? false, FILTER_VALIDATE_BOOLEAN),
+            'sample_rate' => 0.1, // 10% of requests
+            'storage_path' => __DIR__ . '/../storage/profiling/',
+        ],
+    ],
+
+    // Storage configuration
+    'storage' => [
+        'default' => 'local',
+        'disks' => [
+            'local' => [
+                'driver' => 'local',
+                'root' => __DIR__ . '/../storage/app/',
+                'url' => $_ENV['APP_URL'] . '/storage',
+                'visibility' => 'private',
+            ],
+            'public' => [
+                'driver' => 'local',
+                'root' => __DIR__ . '/../storage/app/public/',
+                'url' => $_ENV['APP_URL'] . '/storage',
+                'visibility' => 'public',
+            ],
+            'cache' => [
+                'driver' => 'local',
+                'root' => __DIR__ . '/../storage/cache/',
+                'visibility' => 'private',
+            ],
+            'logs' => [
+                'driver' => 'local',
+                'root' => __DIR__ . '/../storage/logs/',
+                'visibility' => 'private',
+            ],
+        ],
+    ],
+
+    // Templates configuration
+    'templates' => [
+        'path' => __DIR__ . '/../templates/',
+        'cache_path' => __DIR__ . '/../storage/cache/templates/',
+        'cache_enabled' => !filter_var($_ENV['APP_DEBUG'] ?? false, FILTER_VALIDATE_BOOLEAN),
+        'auto_reload' => filter_var($_ENV['APP_DEBUG'] ?? false, FILTER_VALIDATE_BOOLEAN),
+        'extensions' => ['.php'],
+        'globals' => [
+            'app_name' => 'Kickerscup',
+            'app_version' => '2.0.0',
         ],
     ],
 ];

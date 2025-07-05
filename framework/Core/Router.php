@@ -1,7 +1,7 @@
 <?php
 /**
- * Router with Attribute-based Routing - Complete Fixed Version
- * Automatic route discovery using PHP 8.4 attributes
+ * Router with Attribute-based Routing and Route Caching - Complete Version
+ * Automatic route discovery using PHP 8.4 attributes with performance optimizations
  *
  * File: framework/Core/Router.php
  * Directory: /framework/Core/
@@ -30,11 +30,19 @@ class Router
     private array $namedRoutes = [];
 
     private Container $container;
+    private bool $cacheEnabled;
+    private string $cacheFile;
 
     public function __construct(Container $container)
     {
         $this->container = $container;
-        $this->discoverRoutes();
+
+        // Cache configuration
+        $config = $container->get('config');
+        $this->cacheEnabled = !($config['app']['debug'] ?? false);
+        $this->cacheFile = __DIR__ . '/../../storage/cache/routes.php';
+
+        $this->loadRoutes();
     }
 
     /**
@@ -47,6 +55,168 @@ class Router
         } catch (Throwable) {
             return null;
         }
+    }
+
+    /**
+     * Load routes either from cache or discovery
+     */
+    private function loadRoutes(): void
+    {
+        if ($this->cacheEnabled && $this->hasCachedRoutes()) {
+            $this->loadCachedRoutes();
+        } else {
+            $this->discoverRoutes();
+            if ($this->cacheEnabled) {
+                $this->cacheRoutes();
+            }
+        }
+    }
+
+    /**
+     * Check if cached routes exist and are valid
+     */
+    private function hasCachedRoutes(): bool
+    {
+        if (!file_exists($this->cacheFile)) {
+            return false;
+        }
+
+        // Check if cache is newer than source files
+        $cacheTime = filemtime($this->cacheFile);
+        $srcPath = __DIR__ . '/../../src';
+
+        if (!is_dir($srcPath)) {
+            return true; // No source files to check
+        }
+
+        return $this->isCacheValid($srcPath, $cacheTime);
+    }
+
+    /**
+     * Check if cache is still valid compared to source files
+     */
+    private function isCacheValid(string $srcPath, int $cacheTime): bool
+    {
+        $iterator = new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator($srcPath, FilesystemIterator::SKIP_DOTS)
+        );
+
+        $files = new RegexIterator($iterator, '/^.+Action\.php$/i', RegexIterator::GET_MATCH);
+
+        foreach ($files as $file) {
+            if (filemtime($file[0]) > $cacheTime) {
+                return false; // Source file is newer than cache
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * Load routes from cache
+     */
+    private function loadCachedRoutes(): void
+    {
+        try {
+            $cached = require $this->cacheFile;
+
+            if (isset($cached['routes']) && isset($cached['named_routes'])) {
+                $this->routes = $cached['routes'];
+                $this->namedRoutes = $cached['named_routes'];
+
+                $this->getLogger()?->debug('Routes loaded from cache', [
+                    'route_count' => array_sum(array_map('count', $this->routes)),
+                    'named_route_count' => count($this->namedRoutes)
+                ]);
+            } else {
+                throw new \Exception('Invalid cache format');
+            }
+        } catch (\Throwable $e) {
+            $this->getLogger()?->warning('Failed to load cached routes, falling back to discovery', [
+                'error' => $e->getMessage()
+            ]);
+
+            // Fallback to discovery
+            $this->discoverRoutes();
+        }
+    }
+
+    /**
+     * Cache discovered routes
+     */
+    private function cacheRoutes(): void
+    {
+        try {
+            $cacheDir = dirname($this->cacheFile);
+            if (!is_dir($cacheDir)) {
+                mkdir($cacheDir, 0755, true);
+            }
+
+            $cacheData = [
+                'generated_at' => date('Y-m-d H:i:s'),
+                'routes' => $this->routes,
+                'named_routes' => $this->namedRoutes,
+                'metadata' => [
+                    'total_routes' => array_sum(array_map('count', $this->routes)),
+                    'named_routes' => count($this->namedRoutes),
+                    'php_version' => PHP_VERSION,
+                    'framework_version' => '2.0.0'
+                ]
+            ];
+
+            $cacheContent = "<?php\n\n/**\n * Generated Route Cache\n * Generated at: " . date('Y-m-d H:i:s') . "\n * Do not edit manually\n */\n\nreturn " . var_export($cacheData, true) . ";\n";
+
+            if (file_put_contents($this->cacheFile, $cacheContent, LOCK_EX) === false) {
+                throw new \Exception('Failed to write cache file');
+            }
+
+            // Set appropriate permissions
+            chmod($this->cacheFile, 0644);
+
+            $this->getLogger()?->info('Routes cached successfully', [
+                'cache_file' => $this->cacheFile,
+                'route_count' => $cacheData['metadata']['total_routes'],
+                'named_route_count' => $cacheData['metadata']['named_routes']
+            ]);
+
+        } catch (\Throwable $e) {
+            $this->getLogger()?->error('Failed to cache routes', [
+                'error' => $e->getMessage(),
+                'cache_file' => $this->cacheFile
+            ]);
+        }
+    }
+
+    /**
+     * Clear route cache
+     */
+    public function clearCache(): bool
+    {
+        if (file_exists($this->cacheFile)) {
+            $result = unlink($this->cacheFile);
+
+            if ($result) {
+                $this->getLogger()?->info('Route cache cleared', [
+                    'cache_file' => $this->cacheFile
+                ]);
+            }
+
+            return $result;
+        }
+
+        return true;
+    }
+
+    /**
+     * Rebuild cache
+     */
+    public function rebuildCache(): void
+    {
+        $this->clearCache();
+        $this->routes = [];
+        $this->namedRoutes = [];
+        $this->discoverRoutes();
+        $this->cacheRoutes();
     }
 
     /**
@@ -552,5 +722,28 @@ class Router
 
             $this->routes[$method] = array_merge($previousRoutes[$method], $newRoutes);
         }
+    }
+
+    /**
+     * Get cache status information
+     */
+    public function getCacheStatus(): array
+    {
+        $status = [
+            'enabled' => $this->cacheEnabled,
+            'cache_file' => $this->cacheFile,
+            'exists' => file_exists($this->cacheFile),
+            'size' => 0,
+            'created_at' => null,
+            'valid' => false
+        ];
+
+        if ($status['exists']) {
+            $status['size'] = filesize($this->cacheFile);
+            $status['created_at'] = date('Y-m-d H:i:s', filemtime($this->cacheFile));
+            $status['valid'] = $this->hasCachedRoutes();
+        }
+
+        return $status;
     }
 }

@@ -1,8 +1,12 @@
 <?php
 /**
  * Session Service Provider
- * Registers session management services
+ * Session management and authentication services
+ *
+ * File: framework/Providers/SessionServiceProvider.php
+ * Directory: /framework/Providers/
  */
+
 declare(strict_types=1);
 
 namespace Framework\Providers;
@@ -16,16 +20,14 @@ class SessionServiceProvider implements ServiceProvider
 {
     public function register(Container $container): void
     {
-        // Register SessionManager as singleton
+        // Session Manager
         $container->singleton(SessionManagerInterface::class, function ($container) {
             $config = $container->get('config');
-            return new SessionManager($config);
+            return new SessionManager($config['security']['session'] ?? []);
         });
 
         // Alias for easier access
-        $container->bind('session', function ($container) {
-            return $container->get(SessionManagerInterface::class);
-        });
+        $container->alias('session', SessionManagerInterface::class);
     }
 
     public function boot(Container $container): void
@@ -33,9 +35,24 @@ class SessionServiceProvider implements ServiceProvider
         $config = $container->get('config');
         $sessionConfig = $config['security']['session'] ?? [];
 
+        // Auto-start session if configured
         if ($sessionConfig['auto_start'] ?? false) {
             $session = $container->get(SessionManagerInterface::class);
             $session->start();
+
+            $container->get('logger')->debug('Session auto-started', [
+                'session_id' => $session->getId(),
+                'session_name' => $session->getName()
+            ]);
         }
+
+        // Log session configuration
+        $container->get('logger')->debug('Session service initialized', [
+            'auto_start' => $sessionConfig['auto_start'] ?? false,
+            'lifetime' => $sessionConfig['lifetime'] ?? 0,
+            'secure' => $sessionConfig['secure'] ?? false,
+            'httponly' => $sessionConfig['httponly'] ?? true,
+            'samesite' => $sessionConfig['samesite'] ?? 'Strict'
+        ]);
     }
 }

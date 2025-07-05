@@ -13,10 +13,13 @@ require_once __DIR__ . '/../vendor/autoload.php';
 
 use Framework\Core\Application;
 use Framework\Core\Container;
-use Framework\Core\Router;
 use Framework\Providers\ApplicationServiceProvider;
+use Framework\Providers\CoreServiceProvider;
 use Framework\Providers\DatabaseServiceProvider;
-use Framework\Providers\FrameworkServiceProvider;
+use Framework\Providers\EmailServiceProvider;
+use Framework\Providers\RoutingServiceProvider;
+use Framework\Providers\SecurityServiceProvider;
+use Framework\Providers\SessionServiceProvider;
 
 // Load environment variables
 if (file_exists(__DIR__ . '/../.env')) {
@@ -39,22 +42,26 @@ if (($_ENV['APP_ENV'] ?? 'production') === 'development') {
 // Set timezone
 date_default_timezone_set('Europe/Berlin');
 
-// Session is now managed by SessionManager - no manual session_start() needed
-
 try {
-    // Initialize dependency injection container
-    $container = new Container();
+    // Initialize optimized dependency injection container
+    $container = new Container(
+        enableCache: !filter_var($_ENV['APP_DEBUG'] ?? false, FILTER_VALIDATE_BOOLEAN)
+    );
 
-    // Register configuration
+    // Register configuration first
     $container->bind('config', function () {
         return require __DIR__ . '/../config/app.php';
     });
 
-    // Register service providers
+    // Register service providers in dependency order
     $providers = [
-        new FrameworkServiceProvider(),
-        new DatabaseServiceProvider(),
-        new ApplicationServiceProvider(),
+        new CoreServiceProvider(),           // Templates, Logger (foundation)
+        new SessionServiceProvider(),        // Session Management
+        new SecurityServiceProvider(),       // CSRF, Password, Rate Limiting
+        new DatabaseServiceProvider(),       // Database, Validator
+        new EmailServiceProvider(),          // Email Services
+        new RoutingServiceProvider(),        // Router
+        new ApplicationServiceProvider(),    // App-specific Services (last)
     ];
 
     // Register all services
@@ -62,21 +69,24 @@ try {
         try {
             $provider->register($container);
         } catch (ReflectionException $e) {
-            throw new RuntimeException('Service registration failed for ' . get_class($provider) . ': ' . $e->getMessage(), 0, $e);
+            throw new RuntimeException(
+                'Service registration failed for ' . get_class($provider) . ': ' . $e->getMessage(),
+                0,
+                $e
+            );
         }
     }
 
-    // Register router after all services
-    $container->bind('router', function ($container) {
-        return new Router($container);
-    });
-
-    // Boot all services
+    // Boot all services in order
     foreach ($providers as $provider) {
         try {
             $provider->boot($container);
         } catch (ReflectionException $e) {
-            throw new RuntimeException('Service boot failed for ' . get_class($provider) . ': ' . $e->getMessage(), 0, $e);
+            throw new RuntimeException(
+                'Service boot failed for ' . get_class($provider) . ': ' . $e->getMessage(),
+                0,
+                $e
+            );
         }
     }
 
