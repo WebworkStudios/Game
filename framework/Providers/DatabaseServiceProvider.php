@@ -14,6 +14,7 @@ namespace Framework\Providers;
 use Framework\Core\Container;
 use Framework\Core\ServiceProvider;
 use Framework\Database\ConnectionPool;
+use ReflectionException;
 
 
 class DatabaseServiceProvider implements ServiceProvider
@@ -28,6 +29,9 @@ class DatabaseServiceProvider implements ServiceProvider
 
     }
 
+    /**
+     * @throws ReflectionException
+     */
     public function boot(Container $container): void
     {
         // No automatic connection testing during boot

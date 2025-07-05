@@ -21,13 +21,14 @@ use Framework\Security\CsrfProtection;
 use Framework\Security\PasswordHasher;
 use Framework\Security\RateLimiter;
 use Framework\Validation\Validator;
+use ReflectionException;
 
 class FrameworkServiceProvider implements ServiceProvider
 {
     public function register(Container $container): void
     {
         // Template Engine
-        $container->singleton(TemplateEngine::class, function ($container) {
+        $container->singleton(TemplateEngine::class, function () {
             return new TemplateEngine(__DIR__ . '/../../templates/');
         });
 
@@ -75,6 +76,9 @@ class FrameworkServiceProvider implements ServiceProvider
         });
     }
 
+    /**
+     * @throws ReflectionException
+     */
     public function boot(Container $container): void
     {
         // Set logger correlation ID from request
