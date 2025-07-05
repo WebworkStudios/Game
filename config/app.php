@@ -78,6 +78,21 @@ return [
             'token_name' => 'csrf_token',
             'token_lifetime' => 3600, // 1 hour
         ],
+        'session' => [
+            'name' => 'fm_session',
+            'lifetime' => 0, // Session cookie expires when browser closes
+            'path' => '/',
+            'domain' => $_ENV['SESSION_DOMAIN'] ?? '',
+            'secure' => filter_var($_ENV['SESSION_SECURE'] ?? false, FILTER_VALIDATE_BOOLEAN),
+            'httponly' => true,
+            'samesite' => 'Strict',
+            'auto_start' => false, // Start session on first access, not during bootstrap
+            'gc_maxlifetime' => 1440, // 24 minutes garbage collection
+            'gc_probability' => 1,
+            'gc_divisor' => 100,
+            'regenerate_interval' => 1800, // Regenerate ID every 30 minutes
+            'max_inactive_time' => 3600, // 1 hour max inactive time
+        ],
         'rate_limiting' => [
             'registration' => [
                 'max_attempts' => 5,
@@ -91,15 +106,6 @@ return [
                 'max_attempts' => 3,
                 'window' => 3600, // 1 hour
             ],
-        ],
-        'session' => [
-            'name' => 'fm_session',
-            'lifetime' => 0,
-            'path' => '/',
-            'domain' => $_ENV['SESSION_DOMAIN'] ?? '',
-            'secure' => filter_var($_ENV['SESSION_SECURE'] ?? false, FILTER_VALIDATE_BOOLEAN),
-            'httponly' => true,
-            'samesite' => 'Strict',
         ],
     ],
 

@@ -39,15 +39,7 @@ if (($_ENV['APP_ENV'] ?? 'production') === 'development') {
 // Set timezone
 date_default_timezone_set('Europe/Berlin');
 
-// Start session with secure settings
-session_start([
-    'cookie_lifetime' => 0,
-    'cookie_path' => '/',
-    'cookie_domain' => $_ENV['SESSION_DOMAIN'] ?? '',
-    'cookie_secure' => filter_var($_ENV['SESSION_SECURE'] ?? false, FILTER_VALIDATE_BOOLEAN),
-    'cookie_httponly' => true,
-    'cookie_samesite' => 'Strict'
-]);
+// Session is now managed by SessionManager - no manual session_start() needed
 
 try {
     // Initialize dependency injection container

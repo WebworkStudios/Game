@@ -1,11 +1,7 @@
 <?php
-
 /**
  * Framework Service Provider
  * Registers core framework services
- *
- * File: framework/Providers/FrameworkServiceProvider.php
- * Directory: /framework/Providers/
  */
 
 declare(strict_types=1);
@@ -15,6 +11,8 @@ namespace Framework\Providers;
 use Framework\Core\Container;
 use Framework\Core\Logger;
 use Framework\Core\ServiceProvider;
+use Framework\Core\SessionManager;
+use Framework\Core\SessionManagerInterface;
 use Framework\Core\TemplateEngine;
 use Framework\Email\EmailService;
 use Framework\Security\CsrfProtection;
@@ -38,6 +36,16 @@ class FrameworkServiceProvider implements ServiceProvider
             return new Logger($config['logging']);
         });
 
+        // Session Manager
+        $container->singleton(SessionManagerInterface::class, function ($container) {
+            $config = $container->get('config');
+            return new SessionManager($config);
+        });
+
+        $container->bind('session', function ($container) {
+            return $container->get(SessionManagerInterface::class);
+        });
+
         // Password Hasher
         $container->singleton(PasswordHasher::class, function ($container) {
             $config = $container->get('config');
@@ -50,7 +58,10 @@ class FrameworkServiceProvider implements ServiceProvider
         // CSRF Protection
         $container->bind(CsrfProtection::class, function ($container) {
             $config = $container->get('config');
+            $session = $container->get(SessionManagerInterface::class);
+
             return new CsrfProtection(
+                $session,
                 $config['security']['csrf']['token_name'],
                 $config['security']['csrf']['token_lifetime']
             );
@@ -86,6 +97,14 @@ class FrameworkServiceProvider implements ServiceProvider
 
         if (isset($_SERVER['HTTP_X_CORRELATION_ID'])) {
             $logger->setCorrelationId($_SERVER['HTTP_X_CORRELATION_ID']);
+        }
+
+        $config = $container->get('config');
+        $sessionConfig = $config['security']['session'] ?? [];
+
+        if ($sessionConfig['auto_start'] ?? false) {
+            $session = $container->get(SessionManagerInterface::class);
+            $session->start();
         }
     }
 }
