@@ -1,9 +1,8 @@
 <?php
 
-
 /**
- * Session Manager
- * Secure session management with PHP 8.4 property hooks
+ * Optimized Session Manager
+ * Secure session management with enhanced PHP 8.4 property hooks
  *
  * File: framework/Core/SessionManager.php
  * Directory: /framework/Core/
@@ -16,7 +15,7 @@ namespace Framework\Core;
 class SessionManager implements SessionManagerInterface
 {
     private const FLASH_KEY = '_flash';
-    private const SYSTEM_KEYS = [self::FLASH_KEY, 'csrf_tokens'];
+    private const SYSTEM_KEYS = [self::FLASH_KEY, 'csrf_tokens', '_fingerprint', '_last_regenerate'];
 
     private array $config;
     private bool $started = false;
@@ -27,7 +26,7 @@ class SessionManager implements SessionManagerInterface
     }
 
     /**
-     * User ID property with type safety
+     * User ID property with validation and automatic session start
      */
     public ?int $userId {
         get {
@@ -39,13 +38,17 @@ class SessionManager implements SessionManagerInterface
             if ($value === null) {
                 unset($_SESSION['user_id']);
             } else {
+                if ($value <= 0) {
+                    throw new \InvalidArgumentException('User ID must be positive');
+                }
                 $_SESSION['user_id'] = $value;
+                $this->updateLastActivity();
             }
         }
     }
 
     /**
-     * Team ID property (for future use)
+     * Team ID property with validation
      */
     public ?int $teamId {
         get {
@@ -57,13 +60,38 @@ class SessionManager implements SessionManagerInterface
             if ($value === null) {
                 unset($_SESSION['team_id']);
             } else {
+                if ($value <= 0) {
+                    throw new \InvalidArgumentException('Team ID must be positive');
+                }
                 $_SESSION['team_id'] = $value;
             }
         }
     }
 
     /**
-     * Premium status property (for future use)
+     * Trainer name property with validation
+     */
+    public ?string $trainerName {
+        get {
+            $this->ensureStarted();
+            return $_SESSION['trainer_name'] ?? null;
+        }
+        set(?string $value) {
+            $this->ensureStarted();
+            if ($value === null) {
+                unset($_SESSION['trainer_name']);
+            } else {
+                $trimmed = trim($value);
+                if (strlen($trimmed) < 3) {
+                    throw new \InvalidArgumentException('Trainer name must be at least 3 characters');
+                }
+                $_SESSION['trainer_name'] = $trimmed;
+            }
+        }
+    }
+
+    /**
+     * Premium status property
      */
     public bool $isPremium {
         get {
@@ -77,7 +105,7 @@ class SessionManager implements SessionManagerInterface
     }
 
     /**
-     * Last activity timestamp
+     * Last activity timestamp with automatic updates
      */
     public int $lastActivity {
         get {
@@ -86,8 +114,64 @@ class SessionManager implements SessionManagerInterface
         }
         set(int $value) {
             $this->ensureStarted();
+            if ($value > time()) {
+                throw new \InvalidArgumentException('Last activity cannot be in the future');
+            }
             $_SESSION['last_activity'] = $value;
         }
+    }
+
+    /**
+     * Session fingerprint (read-only)
+     */
+    public string $fingerprint {
+        get {
+            $this->ensureStarted();
+            return $_SESSION['_fingerprint'] ?? $this->generateFingerprint();
+        }
+    }
+
+    /**
+     * Authentication status (computed property)
+     */
+    public bool $isAuthenticated {
+        get => $this->userId !== null;
+    }
+
+    /**
+     * Session age in seconds (computed property)
+     */
+    public int $sessionAge {
+        get => time() - $this->lastActivity;
+    }
+
+    /**
+     * Check if session is expired (computed property)
+     */
+    public bool $isExpired {
+        get {
+            if (!$this->isAuthenticated) {
+                return false;
+            }
+            $maxInactiveTime = $this->config['max_inactive_time'] ?? 3600;
+            return $this->sessionAge > $maxInactiveTime;
+        }
+    }
+
+    /**
+     * User data as array (computed property)
+     */
+    public array $userData {
+        get => [
+            'user_id' => $this->userId,
+            'team_id' => $this->teamId,
+            'trainer_name' => $this->trainerName,
+            'is_premium' => $this->isPremium,
+            'last_activity' => $this->lastActivity,
+            'is_authenticated' => $this->isAuthenticated,
+            'session_age' => $this->sessionAge,
+            'is_expired' => $this->isExpired
+        ];
     }
 
     /**
@@ -99,7 +183,6 @@ class SessionManager implements SessionManagerInterface
             return;
         }
 
-        // Configure session before starting
         $this->configureSession();
 
         if (!session_start()) {
@@ -107,17 +190,32 @@ class SessionManager implements SessionManagerInterface
         }
 
         $this->started = true;
+        $this->initializeSession();
+    }
 
+    /**
+     * Initialize session after start
+     */
+    private function initializeSession(): void
+    {
         // Initialize flash storage if not exists
         if (!isset($_SESSION[self::FLASH_KEY])) {
             $_SESSION[self::FLASH_KEY] = [];
         }
 
         // Update last activity
-        $this->lastActivity = time();
+        $this->updateLastActivity();
 
-        // Security: Regenerate ID periodically
+        // Security: Regenerate ID periodically and validate fingerprint
         $this->handleSessionSecurity();
+    }
+
+    /**
+     * Update last activity timestamp
+     */
+    private function updateLastActivity(): void
+    {
+        $_SESSION['last_activity'] = time();
     }
 
     /**
@@ -125,7 +223,7 @@ class SessionManager implements SessionManagerInterface
      */
     private function configureSession(): void
     {
-        $sessionConfig = $this->config['session'] ?? [];
+        $sessionConfig = $this->config;
 
         // Session name
         if (isset($sessionConfig['name'])) {
@@ -156,7 +254,7 @@ class SessionManager implements SessionManagerInterface
     private function handleSessionSecurity(): void
     {
         // Regenerate session ID periodically (every 30 minutes)
-        $regenerateInterval = 1800; // 30 minutes
+        $regenerateInterval = $this->config['regenerate_interval'] ?? 1800;
         $lastRegenerate = $_SESSION['_last_regenerate'] ?? 0;
 
         if (time() - $lastRegenerate > $regenerateInterval) {
@@ -164,7 +262,7 @@ class SessionManager implements SessionManagerInterface
             $_SESSION['_last_regenerate'] = time();
         }
 
-        // Check for session hijacking
+        // Validate session fingerprint
         $this->validateSessionFingerprint();
     }
 
@@ -190,11 +288,15 @@ class SessionManager implements SessionManagerInterface
      */
     private function generateFingerprint(): string
     {
-        $userAgent = $_SERVER['HTTP_USER_AGENT'] ?? '';
-        $acceptLanguage = $_SERVER['HTTP_ACCEPT_LANGUAGE'] ?? '';
-        $acceptEncoding = $_SERVER['HTTP_ACCEPT_ENCODING'] ?? '';
+        $components = [
+            $_SERVER['HTTP_USER_AGENT'] ?? '',
+            $_SERVER['HTTP_ACCEPT_LANGUAGE'] ?? '',
+            $_SERVER['HTTP_ACCEPT_ENCODING'] ?? '',
+            // Add remote address for additional security (be careful with proxies)
+            $_SERVER['REMOTE_ADDR'] ?? ''
+        ];
 
-        return hash('sha256', $userAgent . $acceptLanguage . $acceptEncoding);
+        return hash('sha256', implode('|', $components));
     }
 
     /**
@@ -331,11 +433,16 @@ class SessionManager implements SessionManagerInterface
     }
 
     /**
-     * Set session value
+     * Set session value with validation
      */
     public function set(string $key, mixed $value): void
     {
         $this->ensureStarted();
+
+        if (in_array($key, self::SYSTEM_KEYS)) {
+            throw new \InvalidArgumentException("Cannot set system key: {$key}");
+        }
+
         $_SESSION[$key] = $value;
     }
 
@@ -358,11 +465,16 @@ class SessionManager implements SessionManagerInterface
     }
 
     /**
-     * Remove session key
+     * Remove session key with validation
      */
     public function remove(string $key): void
     {
         $this->ensureStarted();
+
+        if (in_array($key, self::SYSTEM_KEYS)) {
+            throw new \InvalidArgumentException("Cannot remove system key: {$key}");
+        }
+
         unset($_SESSION[$key]);
     }
 
@@ -393,23 +505,24 @@ class SessionManager implements SessionManagerInterface
     }
 
     /**
-     * Check if user is authenticated
-     */
-    public function isAuthenticated(): bool
-    {
-        return $this->userId !== null;
-    }
-
-    /**
-     * Log in user
+     * Log in user with validation
      */
     public function loginUser(int $userId, string $trainerName, bool $isPremium = false): void
     {
+        if ($userId <= 0) {
+            throw new \InvalidArgumentException('User ID must be positive');
+        }
+
+        if (strlen(trim($trainerName)) < 3) {
+            throw new \InvalidArgumentException('Trainer name must be at least 3 characters');
+        }
+
         $this->regenerateId(); // Security: new session ID on login
 
         $this->userId = $userId;
+        $this->trainerName = $trainerName;
         $this->isPremium = $isPremium;
-        $this->lastActivity = time();
+        $this->updateLastActivity();
     }
 
     /**
@@ -419,35 +532,10 @@ class SessionManager implements SessionManagerInterface
     {
         $this->userId = null;
         $this->teamId = null;
+        $this->trainerName = null;
         $this->isPremium = false;
 
         $this->regenerateId(); // Security: new session ID on logout
-    }
-
-    /**
-     * Get user session data
-     */
-    public function getUserData(): array
-    {
-        return [
-            'user_id' => $this->userId,
-            'team_id' => $this->teamId,
-            'is_premium' => $this->isPremium,
-            'last_activity' => $this->lastActivity,
-            'is_authenticated' => $this->isAuthenticated()
-        ];
-    }
-
-    /**
-     * Check if session has expired
-     */
-    public function isExpired(int $maxInactiveTime = 3600): bool
-    {
-        if (!$this->isAuthenticated()) {
-            return false;
-        }
-
-        return (time() - $this->lastActivity) > $maxInactiveTime;
     }
 
     /**
@@ -455,6 +543,65 @@ class SessionManager implements SessionManagerInterface
      */
     public function touch(): void
     {
-        $this->lastActivity = time();
+        $this->updateLastActivity();
+    }
+
+    /**
+     * Check if session has expired with custom timeout
+     */
+    public function isExpiredWithTimeout(int $maxInactiveTime): bool
+    {
+        if (!$this->isAuthenticated) {
+            return false;
+        }
+
+        return $this->sessionAge > $maxInactiveTime;
+    }
+
+    /**
+     * Validate session integrity
+     */
+    public function validateIntegrity(): bool
+    {
+        try {
+            $this->ensureStarted();
+            $this->validateSessionFingerprint();
+
+            // Check if session is corrupted
+            if (!is_array($_SESSION)) {
+                return false;
+            }
+
+            // Validate required flash structure
+            if (isset($_SESSION[self::FLASH_KEY]) && !is_array($_SESSION[self::FLASH_KEY])) {
+                return false;
+            }
+
+            return true;
+        } catch (\Throwable) {
+            return false;
+        }
+    }
+
+    /**
+     * Clean expired flash messages (optional maintenance)
+     */
+    public function cleanExpiredFlash(): int
+    {
+        $this->ensureStarted();
+
+        $cleaned = 0;
+        $flash = $_SESSION[self::FLASH_KEY] ?? [];
+
+        // This is a simple implementation - in a real app you might store timestamps
+        // For now, we'll just clean empty values
+        foreach ($flash as $key => $value) {
+            if ($value === null || $value === '') {
+                unset($_SESSION[self::FLASH_KEY][$key]);
+                $cleaned++;
+            }
+        }
+
+        return $cleaned;
     }
 }

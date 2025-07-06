@@ -1,13 +1,8 @@
 <?php
-
 /**
- * Query Builder with Scope Support
- * Fluent query builder with support for multiple database connections and scopes
- *
- * File: framework/Database/QueryBuilder.php
- * Directory: /framework/Database/
+ * Optimized Query Builder with Scope Support
+ * Fluent query builder with consolidated methods and reduced duplication
  */
-
 declare(strict_types=1);
 
 namespace Framework\Database;
@@ -30,6 +25,19 @@ class QueryBuilder
     private array $bindings = [];
     private array $scopes = [];
 
+    // WHERE clause type constants
+    private const WHERE_BASIC = 'where';
+    private const WHERE_IN = 'whereIn';
+    private const WHERE_NOT_IN = 'whereNotIn';
+    private const WHERE_NULL = 'whereNull';
+    private const WHERE_NOT_NULL = 'whereNotNull';
+    private const WHERE_NESTED = 'nested';
+
+    // JOIN type constants
+    private const JOIN_INNER = 'INNER';
+    private const JOIN_LEFT = 'LEFT';
+    private const JOIN_RIGHT = 'RIGHT';
+
     public function __construct(PDO $connection, string $table)
     {
         $this->connection = $connection;
@@ -41,12 +49,16 @@ class QueryBuilder
      */
     public function select(string|array $fields): self
     {
-        if (is_string($fields)) {
-            $fields = [$fields];
-        }
-
-        $this->select = $fields;
+        $this->select = is_string($fields) ? [$fields] : $fields;
         return $this;
+    }
+
+    /**
+     * Add WHERE condition
+     */
+    public function where(string|callable $column, string|int|float|null $operator = null, mixed $value = null): self
+    {
+        return $this->addWhereCondition(self::WHERE_BASIC, $column, $operator, $value, 'AND');
     }
 
     /**
@@ -54,20 +66,7 @@ class QueryBuilder
      */
     public function orWhere(string $column, string $operator, mixed $value = null): self
     {
-        if ($value === null) {
-            $value = $operator;
-            $operator = '=';
-        }
-
-        $this->where[] = [
-            'type' => 'where',
-            'column' => $column,
-            'operator' => $operator,
-            'value' => $value,
-            'boolean' => 'OR'
-        ];
-
-        return $this;
+        return $this->addWhereCondition(self::WHERE_BASIC, $column, $operator, $value, 'OR');
     }
 
     /**
@@ -75,14 +74,7 @@ class QueryBuilder
      */
     public function whereIn(string $column, array $values): self
     {
-        $this->where[] = [
-            'type' => 'whereIn',
-            'column' => $column,
-            'values' => $values,
-            'boolean' => 'AND'
-        ];
-
-        return $this;
+        return $this->addWhereCondition(self::WHERE_IN, $column, null, $values, 'AND');
     }
 
     /**
@@ -90,14 +82,7 @@ class QueryBuilder
      */
     public function whereNotIn(string $column, array $values): self
     {
-        $this->where[] = [
-            'type' => 'whereNotIn',
-            'column' => $column,
-            'values' => $values,
-            'boolean' => 'AND'
-        ];
-
-        return $this;
+        return $this->addWhereCondition(self::WHERE_NOT_IN, $column, null, $values, 'AND');
     }
 
     /**
@@ -105,13 +90,7 @@ class QueryBuilder
      */
     public function whereNull(string $column): self
     {
-        $this->where[] = [
-            'type' => 'whereNull',
-            'column' => $column,
-            'boolean' => 'AND'
-        ];
-
-        return $this;
+        return $this->addWhereCondition(self::WHERE_NULL, $column, null, null, 'AND');
     }
 
     /**
@@ -119,29 +98,67 @@ class QueryBuilder
      */
     public function whereNotNull(string $column): self
     {
-        $this->where[] = [
-            'type' => 'whereNotNull',
-            'column' => $column,
-            'boolean' => 'AND'
-        ];
+        return $this->addWhereCondition(self::WHERE_NOT_NULL, $column, null, null, 'AND');
+    }
+
+    /**
+     * Consolidated method for adding WHERE conditions
+     */
+    private function addWhereCondition(string $type, string|callable $column, mixed $operator = null, mixed $value = null, string $boolean = 'AND'): self
+    {
+        // Handle callable for nested conditions
+        if (is_callable($column)) {
+            $nestedQuery = new static($this->connection, $this->table);
+            $column($nestedQuery);
+
+            if (!empty($nestedQuery->where)) {
+                $this->where[] = [
+                    'type' => self::WHERE_NESTED,
+                    'query' => $nestedQuery,
+                    'boolean' => $boolean
+                ];
+            }
+            return $this;
+        }
+
+        // Handle basic WHERE conditions
+        if ($type === self::WHERE_BASIC) {
+            // Handle two-parameter syntax: where('column', 'value')
+            if ($operator !== null && $value === null) {
+                $value = $operator;
+                $operator = '=';
+            }
+
+            if ($value === null) {
+                throw new InvalidArgumentException('WHERE clause requires a value');
+            }
+
+            $this->where[] = [
+                'type' => $type,
+                'column' => $column,
+                'operator' => (string)$operator,
+                'value' => $value,
+                'boolean' => $boolean
+            ];
+        } else {
+            // Handle special WHERE conditions (IN, NOT IN, NULL, NOT NULL)
+            $this->where[] = [
+                'type' => $type,
+                'column' => $column,
+                'values' => $value, // For IN/NOT IN operations
+                'boolean' => $boolean
+            ];
+        }
 
         return $this;
     }
 
     /**
-     * Add JOIN clause
+     * Add INNER JOIN clause
      */
     public function join(string $table, string $first, string $operator, string $second): self
     {
-        $this->joins[] = [
-            'type' => 'INNER',
-            'table' => $table,
-            'first' => $first,
-            'operator' => $operator,
-            'second' => $second
-        ];
-
-        return $this;
+        return $this->addJoin(self::JOIN_INNER, $table, $first, $operator, $second);
     }
 
     /**
@@ -149,15 +166,7 @@ class QueryBuilder
      */
     public function leftJoin(string $table, string $first, string $operator, string $second): self
     {
-        $this->joins[] = [
-            'type' => 'LEFT',
-            'table' => $table,
-            'first' => $first,
-            'operator' => $operator,
-            'second' => $second
-        ];
-
-        return $this;
+        return $this->addJoin(self::JOIN_LEFT, $table, $first, $operator, $second);
     }
 
     /**
@@ -165,8 +174,16 @@ class QueryBuilder
      */
     public function rightJoin(string $table, string $first, string $operator, string $second): self
     {
+        return $this->addJoin(self::JOIN_RIGHT, $table, $first, $operator, $second);
+    }
+
+    /**
+     * Consolidated method for adding JOIN clauses
+     */
+    private function addJoin(string $type, string $table, string $first, string $operator, string $second): self
+    {
         $this->joins[] = [
-            'type' => 'RIGHT',
+            'type' => $type,
             'table' => $table,
             'first' => $first,
             'operator' => $operator,
@@ -194,10 +211,7 @@ class QueryBuilder
      */
     public function groupBy(string|array $columns): self
     {
-        if (is_string($columns)) {
-            $columns = [$columns];
-        }
-
+        $columns = is_string($columns) ? [$columns] : $columns;
         $this->groupBy = array_merge($this->groupBy, $columns);
         return $this;
     }
@@ -276,7 +290,6 @@ class QueryBuilder
         $this->limit = 1;
 
         $result = $this->get();
-
         $this->limit = $originalLimit;
 
         return $result[0] ?? null;
@@ -295,23 +308,39 @@ class QueryBuilder
     }
 
     /**
+     * Count records
+     */
+    public function count(): int
+    {
+        $originalSelect = $this->select;
+        $this->select = ['COUNT(*) as count'];
+
+        $sql = $this->buildSelectQuery();
+        $stmt = $this->connection->prepare($sql);
+        $stmt->execute($this->bindings);
+
+        $result = $stmt->fetch(PDO::FETCH_ASSOC);
+        $this->select = $originalSelect;
+
+        return (int)$result['count'];
+    }
+
+    /**
      * Build SELECT query
      */
     private function buildSelectQuery(): string
     {
+        $this->bindings = []; // Reset bindings
+
         $sql = "SELECT " . implode(', ', $this->select) . " FROM {$this->table}";
 
         // Add JOINs
-        foreach ($this->joins as $join) {
-            $sql .= " {$join['type']} JOIN {$join['table']} ON {$join['first']} {$join['operator']} {$join['second']}";
-        }
+        $sql .= $this->buildJoinClause();
 
         // Add WHERE
-        if (!empty($this->where)) {
-            $whereClause = $this->buildWhereClause();
-            $sql .= $whereClause['sql'];
-            $this->bindings = array_merge($this->bindings, $whereClause['bindings']);
-        }
+        $whereClause = $this->buildWhereClause();
+        $sql .= $whereClause['sql'];
+        $this->bindings = array_merge($this->bindings, $whereClause['bindings']);
 
         // Add GROUP BY
         if (!empty($this->groupBy)) {
@@ -320,21 +349,12 @@ class QueryBuilder
 
         // Add HAVING
         if (!empty($this->having)) {
-            $havingClauses = [];
-            foreach ($this->having as $having) {
-                $havingClauses[] = "{$having['column']} {$having['operator']} ?";
-                $this->bindings[] = $having['value'];
-            }
-            $sql .= " HAVING " . implode(' AND ', $havingClauses);
+            $sql .= $this->buildHavingClause();
         }
 
         // Add ORDER BY
         if (!empty($this->orderBy)) {
-            $orderClauses = [];
-            foreach ($this->orderBy as $order) {
-                $orderClauses[] = "{$order['column']} {$order['direction']}";
-            }
-            $sql .= " ORDER BY " . implode(', ', $orderClauses);
+            $sql .= $this->buildOrderByClause();
         }
 
         // Add LIMIT and OFFSET
@@ -350,10 +370,31 @@ class QueryBuilder
     }
 
     /**
-     * Build WHERE clause
+     * Build JOIN clause
+     */
+    private function buildJoinClause(): string
+    {
+        if (empty($this->joins)) {
+            return '';
+        }
+
+        $joinClauses = [];
+        foreach ($this->joins as $join) {
+            $joinClauses[] = " {$join['type']} JOIN {$join['table']} ON {$join['first']} {$join['operator']} {$join['second']}";
+        }
+
+        return implode('', $joinClauses);
+    }
+
+    /**
+     * Build WHERE clause - Optimized version
      */
     private function buildWhereClause(): array
     {
+        if (empty($this->where)) {
+            return ['sql' => '', 'bindings' => []];
+        }
+
         $clauses = [];
         $bindings = [];
 
@@ -361,32 +402,32 @@ class QueryBuilder
             $boolean = $index === 0 ? '' : " {$condition['boolean']} ";
 
             switch ($condition['type']) {
-                case 'where':
+                case self::WHERE_BASIC:
                     $clauses[] = $boolean . "`{$condition['column']}` {$condition['operator']} ?";
                     $bindings[] = $condition['value'];
                     break;
 
-                case 'whereIn':
-                    $placeholders = implode(', ', array_fill(0, count($condition['values']), '?'));
+                case self::WHERE_IN:
+                    $placeholders = $this->createPlaceholders(count($condition['values']));
                     $clauses[] = $boolean . "`{$condition['column']}` IN ({$placeholders})";
                     $bindings = array_merge($bindings, $condition['values']);
                     break;
 
-                case 'whereNotIn':
-                    $placeholders = implode(', ', array_fill(0, count($condition['values']), '?'));
+                case self::WHERE_NOT_IN:
+                    $placeholders = $this->createPlaceholders(count($condition['values']));
                     $clauses[] = $boolean . "`{$condition['column']}` NOT IN ({$placeholders})";
                     $bindings = array_merge($bindings, $condition['values']);
                     break;
 
-                case 'whereNull':
+                case self::WHERE_NULL:
                     $clauses[] = $boolean . "`{$condition['column']}` IS NULL";
                     break;
 
-                case 'whereNotNull':
+                case self::WHERE_NOT_NULL:
                     $clauses[] = $boolean . "`{$condition['column']}` IS NOT NULL";
                     break;
 
-                case 'nested':
+                case self::WHERE_NESTED:
                     $nestedClause = $condition['query']->buildWhereClause();
                     if (!empty($nestedClause['sql'])) {
                         $nestedSql = $nestedClause['sql'];
@@ -406,65 +447,36 @@ class QueryBuilder
     }
 
     /**
-     * Add WHERE condition
+     * Build HAVING clause
      */
-    public function where(string|callable $column, string|int|float|null $operator = null, mixed $value = null): self
+    private function buildHavingClause(): string
     {
-        // Handle callable for nested conditions
-        if (is_callable($column)) {
-            $nestedQuery = new static($this->connection, $this->table);
-            $column($nestedQuery);
-
-            if (!empty($nestedQuery->where)) {
-                $this->where[] = [
-                    'type' => 'nested',
-                    'query' => $nestedQuery,
-                    'boolean' => 'AND'
-                ];
-            }
-
-            return $this;
+        $havingClauses = [];
+        foreach ($this->having as $having) {
+            $havingClauses[] = "{$having['column']} {$having['operator']} ?";
+            $this->bindings[] = $having['value'];
         }
-
-        // Handle two-parameter syntax: where('column', 'value')
-        if ($operator !== null && $value === null) {
-            $value = $operator;
-            $operator = '=';
-        }
-
-        // Handle three-parameter syntax: where('column', '>', 'value')
-        if ($value === null) {
-            throw new InvalidArgumentException('WHERE clause requires a value');
-        }
-
-        $this->where[] = [
-            'type' => 'where',
-            'column' => $column,
-            'operator' => (string)$operator, // Cast operator to string
-            'value' => $value,
-            'boolean' => 'AND'
-        ];
-
-        return $this;
+        return " HAVING " . implode(' AND ', $havingClauses);
     }
 
     /**
-     * Count records
+     * Build ORDER BY clause
      */
-    public function count(): int
+    private function buildOrderByClause(): string
     {
-        $originalSelect = $this->select;
-        $this->select = ['COUNT(*) as count'];
+        $orderClauses = [];
+        foreach ($this->orderBy as $order) {
+            $orderClauses[] = "{$order['column']} {$order['direction']}";
+        }
+        return " ORDER BY " . implode(', ', $orderClauses);
+    }
 
-        $sql = $this->buildSelectQuery();
-        $stmt = $this->connection->prepare($sql);
-        $stmt->execute($this->bindings);
-
-        $result = $stmt->fetch(PDO::FETCH_ASSOC);
-
-        $this->select = $originalSelect;
-
-        return (int)$result['count'];
+    /**
+     * Create placeholders for IN clauses
+     */
+    private function createPlaceholders(int $count): string
+    {
+        return implode(', ', array_fill(0, $count, '?'));
     }
 
     /**
@@ -473,9 +485,9 @@ class QueryBuilder
     public function insert(array $data): int
     {
         $columns = array_keys($data);
-        $placeholders = array_fill(0, count($columns), '?');
+        $placeholders = $this->createPlaceholders(count($columns));
 
-        $sql = "INSERT INTO {$this->table} (" . implode(', ', $columns) . ") VALUES (" . implode(', ', $placeholders) . ")";
+        $sql = "INSERT INTO {$this->table} (" . implode(', ', $columns) . ") VALUES ({$placeholders})";
 
         $stmt = $this->connection->prepare($sql);
         $stmt->execute(array_values($data));
@@ -493,8 +505,8 @@ class QueryBuilder
         }
 
         $columns = array_keys($data[0]);
-        $placeholders = '(' . implode(', ', array_fill(0, count($columns), '?')) . ')';
-        $allPlaceholders = array_fill(0, count($data), $placeholders);
+        $singlePlaceholder = '(' . $this->createPlaceholders(count($columns)) . ')';
+        $allPlaceholders = array_fill(0, count($data), $singlePlaceholder);
 
         $sql = "INSERT INTO {$this->table} (" . implode(', ', $columns) . ") VALUES " . implode(', ', $allPlaceholders);
 
