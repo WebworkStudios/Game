@@ -2,11 +2,7 @@
 /**
  * Application Bootstrap
  * Entry point for the football manager application
- *
- * File: public/index.php
- * Directory: /public/
  */
-
 declare(strict_types=1);
 
 require_once __DIR__ . '/../vendor/autoload.php';
@@ -17,6 +13,7 @@ use Framework\Providers\ApplicationServiceProvider;
 use Framework\Providers\CoreServiceProvider;
 use Framework\Providers\DatabaseServiceProvider;
 use Framework\Providers\EmailServiceProvider;
+use Framework\Providers\LocalizationServiceProvider;
 use Framework\Providers\RoutingServiceProvider;
 use Framework\Providers\SecurityServiceProvider;
 use Framework\Providers\SessionServiceProvider;
@@ -60,6 +57,7 @@ try {
         new SecurityServiceProvider(),       // CSRF, Password, Rate Limiting
         new DatabaseServiceProvider(),       // Database, Validator
         new EmailServiceProvider(),          // Email Services
+        new LocalizationServiceProvider(),   // Localization Services (NEW)
         new RoutingServiceProvider(),        // Router
         new ApplicationServiceProvider(),    // App-specific Services (last)
     ];
@@ -87,6 +85,42 @@ try {
                 0,
                 $e
             );
+        }
+    }
+
+    // Initialize helper functions for localization
+    if (!function_exists('__')) {
+        function __(string $key, array $params = []): string
+        {
+            static $localization = null;
+
+            if ($localization === null) {
+                global $container;
+                $localization = $container->get('localization');
+            }
+
+            return $localization->get($key, $params);
+        }
+    }
+
+    if (!function_exists('trans')) {
+        function trans(string $key, array $params = []): string
+        {
+            return __($key, $params);
+        }
+    }
+
+    if (!function_exists('setLocale')) {
+        function setLocale(string $locale): void
+        {
+            static $localization = null;
+
+            if ($localization === null) {
+                global $container;
+                $localization = $container->get('localization');
+            }
+
+            $localization->currentLocale = $locale;
         }
     }
 
@@ -133,7 +167,8 @@ try {
             $container->get('logger')->error('Application error: ' . $e->getMessage(), [
                 'exception' => $e,
                 'request_uri' => $_SERVER['REQUEST_URI'] ?? '',
-                'user_ip' => $_SERVER['REMOTE_ADDR'] ?? ''
+                'user_ip' => $_SERVER['REMOTE_ADDR'] ?? '',
+                'localization_enabled' => isset($container) && $container->has('localization')
             ]);
         } catch (Throwable $logError) {
             error_log('Bootstrap error: ' . $e->getMessage());
@@ -147,6 +182,16 @@ try {
     if (($_ENV['APP_DEBUG'] ?? false)) {
         echo '<pre>' . $e . '</pre>';
     } else {
-        echo "An error occurred. Please try again later.";
+        // Try to show localized error message if possible
+        try {
+            if (isset($container) && $container->has('localization')) {
+                $localization = $container->get('localization');
+                echo $localization->get('errors.general_error', [], 'en');
+            } else {
+                echo "An error occurred. Please try again later.";
+            }
+        } catch (Throwable) {
+            echo "An error occurred. Please try again later.";
+        }
     }
 }

@@ -7,6 +7,8 @@ declare(strict_types=1);
 
 namespace Framework\Core;
 
+use Framework\Localization\LocalizationService;
+
 class TemplateEngine
 {
     private string $templatePath;
@@ -54,5 +56,15 @@ class TemplateEngine
 
         // Include template
         include $templateFile;
+    }
+
+    /**
+     * Set localization service
+     */
+    public function setLocalizationService(LocalizationService $localization): void
+    {
+        $this->addGlobal('localization', $localization);
+        $this->addGlobal('__', fn(string $key, array $params = []) => $localization->get($key, $params));
+        $this->addGlobal('trans', fn(string $key, array $params = []) => $localization->get($key, $params));
     }
 }

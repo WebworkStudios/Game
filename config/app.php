@@ -60,7 +60,8 @@ return [
                     ],
                 ]
             ]
-        ]
+        ],
+        'test_on_boot' => filter_var($_ENV['DB_TEST_ON_BOOT'] ?? false, FILTER_VALIDATE_BOOLEAN),
     ],
 
     // Security configuration
@@ -162,6 +163,7 @@ return [
             'player' => 900, // 15 minutes
             'league' => 3600, // 1 hour
             'routes' => 86400, // 24 hours
+            'translations' => 3600, // 1 hour
         ],
     ],
 
@@ -205,13 +207,19 @@ return [
         ],
     ],
 
-    // Localization configuration
+    // Localization configuration - NEW
     'localization' => [
-        'storage' => 'database', // 'files' or 'database'
+        'storage' => 'database',
         'supported_locales' => ['de', 'en', 'es', 'fr'],
         'fallback_locale' => 'en',
-        'cache_enabled' => true,
+        'cache_enabled' => !filter_var($_ENV['APP_DEBUG'] ?? false, FILTER_VALIDATE_BOOLEAN),
         'cache_ttl' => 3600, // 1 hour
+        'auto_detect' => true,
+        'preload_categories' => ['general', 'validation', 'auth', 'game', 'registration'],
+        'memory_limit' => 1000, // Max translations in memory per category
+        'file_fallback_path' => __DIR__ . '/../resources/lang/',
+        'development_mode' => filter_var($_ENV['APP_DEBUG'] ?? false, FILTER_VALIDATE_BOOLEAN),
+        'auto_register_missing' => filter_var($_ENV['APP_DEBUG'] ?? false, FILTER_VALIDATE_BOOLEAN),
     ],
 
     // Performance configuration with route caching
@@ -343,6 +351,7 @@ return [
                 'email' => false,
                 'storage' => true,
                 'route_cache' => true,
+                'translations' => true, // NEW
             ],
         ],
         'metrics' => [
@@ -351,6 +360,7 @@ return [
             'authentication_required' => true,
             'collect_route_stats' => true,
             'collect_db_stats' => true,
+            'collect_translation_stats' => true, // NEW
         ],
         'profiling' => [
             'enabled' => filter_var($_ENV['PROFILING_ENABLED'] ?? false, FILTER_VALIDATE_BOOLEAN),
@@ -385,6 +395,11 @@ return [
                 'root' => __DIR__ . '/../storage/logs/',
                 'visibility' => 'private',
             ],
+            'translations' => [
+                'driver' => 'local',
+                'root' => __DIR__ . '/../storage/translations/',
+                'visibility' => 'private',
+            ],
         ],
     ],
 
@@ -400,4 +415,5 @@ return [
             'app_version' => '2.0.0',
         ],
     ],
+
 ];
