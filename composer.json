@@ -18,7 +18,8 @@
       "User\\": "src/User/",
       "Team\\": "src/Team/",
       "Player\\": "src/Player/",
-      "League\\": "src/League/"
+      "League\\": "src/League/",
+      "Homepage\\": "src/Homepage/"
     }
   },
   "config": {
