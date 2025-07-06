@@ -5,11 +5,13 @@ namespace Framework\Localization;
 
 use Framework\Database\ConnectionPool;
 use Framework\Core\Logger;
+use Framework\Core\SessionManagerInterface;
 
 class LocalizationService
 {
     private ConnectionPool $db;
     private Logger $logger;
+    private SessionManagerInterface $session;
     private array $config;
 
     // Memory cache for loaded translations
@@ -54,11 +56,12 @@ class LocalizationService
         ];
     }
 
-    public function __construct(ConnectionPool $db, Logger $logger, array $config)
+    public function __construct(ConnectionPool $db, Logger $logger, array $config, SessionManagerInterface $session)
     {
         $this->db = $db;
         $this->logger = $logger;
         $this->config = $config;
+        $this->session = $session;
     }
 
     /**
@@ -122,7 +125,7 @@ class LocalizationService
                     'locale' => $locale,
                     'value' => $value,
                     'category' => $category,
-                    'is_active' => true
+                    'is_active' => 1
                 ]);
             }
 
@@ -179,7 +182,7 @@ class LocalizationService
                 ->select(['key', 'value'])
                 ->where('locale', $locale)
                 ->where('category', $category)
-                ->where('is_active', true)
+                ->where('is_active', '=', 1)
                 ->get();
 
             $translations = [];
@@ -263,11 +266,10 @@ class LocalizationService
             return $_GET['lang'];
         }
 
-        // 2. Session
-        if (session_status() === PHP_SESSION_ACTIVE && isset($_SESSION['locale'])) {
-            if (in_array($_SESSION['locale'], $this->supportedLocales)) {
-                return $_SESSION['locale'];
-            }
+        // 2. Session - using our SessionManager
+        $sessionLocale = $this->session->get('locale');
+        if ($sessionLocale && in_array($sessionLocale, $this->supportedLocales)) {
+            return $sessionLocale;
         }
 
         // 3. Accept-Language header

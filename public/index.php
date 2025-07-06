@@ -57,7 +57,7 @@ try {
         new SecurityServiceProvider(),       // CSRF, Password, Rate Limiting
         new DatabaseServiceProvider(),       // Database, Validator
         new EmailServiceProvider(),          // Email Services
-        new LocalizationServiceProvider(),   // Localization Services (NEW)
+        new LocalizationServiceProvider(),   // Localization Services
         new RoutingServiceProvider(),        // Router
         new ApplicationServiceProvider(),    // App-specific Services (last)
     ];

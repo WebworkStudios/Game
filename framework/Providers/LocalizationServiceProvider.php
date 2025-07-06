@@ -5,6 +5,7 @@ namespace Framework\Providers;
 
 use Framework\Core\Container;
 use Framework\Core\ServiceProvider;
+use Framework\Core\SessionManagerInterface;
 use Framework\Core\TemplateEngine;
 use Framework\Localization\LocalizationService;
 
@@ -17,7 +18,8 @@ class LocalizationServiceProvider implements ServiceProvider
             return new LocalizationService(
                 $container->get('db'),
                 $container->get('logger'),
-                $config['localization']
+                $config['localization'],
+                $container->get(SessionManagerInterface::class) // Add session dependency
             );
         });
 
