@@ -1,11 +1,7 @@
 <?php
-
 /**
  * Validation Framework
- * Comprehensive input validation with custom rules support
- *
- * File: framework/Validation/Validator.php
- * Directory: /framework/Validation/
+ * High-performance input validation with unified database validation
  */
 
 declare(strict_types=1);
@@ -13,113 +9,192 @@ declare(strict_types=1);
 namespace Framework\Validation;
 
 use Framework\Database\ConnectionPool;
+use Framework\Security\RateLimiter;
 use Throwable;
 
 class Validator
 {
     private ConnectionPool $db;
-    private array $customRules = [];
-    private array $teamNameBlacklist = [
-        // Real team names for licensing reasons
-        'Bayern München', 'Bayern Munich', 'Borussia Dortmund', 'BVB', 'Schalke 04',
-        'RB Leipzig', 'Bayer Leverkusen', 'Eintracht Frankfurt', 'VfL Wolfsburg',
-        'SC Freiburg', 'TSG Hoffenheim', 'FC Augsburg', 'Hertha BSC', 'VfB Stuttgart',
-        'Werder Bremen', 'FC Köln', 'Mainz 05', 'Union Berlin', 'Arminia Bielefeld',
-        'Real Madrid', 'FC Barcelona', 'Atletico Madrid', 'Manchester United',
-        'Manchester City', 'Liverpool FC', 'Chelsea FC', 'Arsenal FC', 'Tottenham',
-        'Juventus', 'AC Milan', 'Inter Milan', 'AS Roma', 'SSC Napoli', 'Lazio',
-        'Paris Saint-Germain', 'PSG', 'Olympique Marseille', 'AS Monaco', 'Lyon',
-        // Add more as needed
-        'Admin', 'Test', 'System', 'Root', 'Guest', 'Null', 'Undefined'
-    ];
+    private ?RateLimiter $rateLimiter;
 
-    public function __construct(ConnectionPool $db)
+    // Rule cache for performance
+    private static array $compiledRules = [];
+    private static array $queryCache = [];
+
+    // Performance counters
+    public array $stats {
+        get => [
+            'rules_executed' => $this->rulesExecuted,
+            'cache_hits' => $this->cacheHits,
+            'db_queries' => $this->dbQueries,
+            'validation_time' => $this->validationTime
+        ];
+    }
+
+    private int $rulesExecuted = 0;
+    private int $cacheHits = 0;
+    private int $dbQueries = 0;
+    private float $validationTime = 0.0;
+
+    // Enhanced configuration
+    private array $config {
+        get => $this->configData;
+        set(array $value) {
+            $this->configData = array_merge($this->getDefaultConfig(), $value);
+            $this->clearCache();
+        }
+    }
+    private array $configData;
+
+    // Custom rules with enhanced caching
+    private array $customRules = [];
+
+    public function __construct(ConnectionPool $db, ?RateLimiter $rateLimiter = null)
     {
         $this->db = $db;
+        $this->rateLimiter = $rateLimiter;
+        $this->config = $this->getDefaultConfig();
         $this->initializeCustomRules();
     }
 
     /**
-     * Initialize custom validation rules
+     * Get default configuration
      */
-    private function initializeCustomRules(): void
+    private function getDefaultConfig(): array
     {
-        $this->customRules = [
-            'unique_email' => function ($value, $data) {
-                try {
-                    $count = $this->db->table('users')
-                        ->where('email', '=', $value)
-                        ->count();
-
-                    if ($count > 0) {
-                        return 'This email address is already registered.';
-                    }
-                    return true;
-                } catch (Throwable $e) {
-                    error_log('Email validation error: ' . $e->getMessage());
-                    return 'Unable to validate email address.';
-                }
-            },
-
-            'unique_trainer_name' => function ($value, $data) {
-                try {
-                    $count = $this->db->table('users')
-                        ->where('trainer_name', '=', $value)
-                        ->count();
-
-                    if ($count > 0) {
-                        return 'This trainer name is already taken.';
-                    }
-                    return true;
-                } catch (Throwable $e) {
-                    error_log('Trainer name validation error: ' . $e->getMessage());
-                    return 'Unable to validate trainer name.';
-                }
-            },
-
-            'valid_team_name' => function ($value, $data) {
-                try {
-                    // Check against blacklist
-                    foreach ($this->teamNameBlacklist as $blacklistedName) {
-                        if (strcasecmp(trim($value), trim($blacklistedName)) === 0) {
-                            return 'This team name is not allowed due to licensing restrictions.';
-                        }
-                    }
-
-                    // Check for uniqueness
-                    $count = $this->db->table('teams')
-                        ->where('name', '=', $value)
-                        ->count();
-
-                    if ($count > 0) {
-                        return 'This team name is already taken.';
-                    }
-
-                    return true;
-                } catch (Throwable $e) {
-                    error_log('Team name validation error: ' . $e->getMessage());
-                    return 'Unable to validate team name.';
-                }
-            }
+        return [
+            'cache_enabled' => true,
+            'cache_ttl' => 300, // 5 minutes
+            'rate_limit_enabled' => true,
+            'rate_limit_attempts' => 100,
+            'rate_limit_window' => 3600,
+            'sanitization_enabled' => true,
+            'async_db_checks' => false,
+            'memory_limit' => '64M',
+            'max_rules_per_field' => 20,
+            'debug_mode' => false
         ];
     }
 
     /**
-     * Validate input data against rules
+     * Enhanced validation with rate limiting and caching
      */
     public function validate(array $data, array $rules): array
     {
+        $startTime = microtime(true);
+
+        // Rate limiting check
+        if (!$this->checkRateLimit()) {
+            return [
+                'valid' => false,
+                'errors' => ['_rate_limit' => ['Too many validation attempts. Please try again later.']],
+                'data' => []
+            ];
+        }
+
+        // Input sanitization
+        $data = $this->sanitizeInput($data);
+
+        // Validate with enhanced processing
+        $result = $this->processValidation($data, $rules);
+
+        $this->validationTime = microtime(true) - $startTime;
+
+        return $result;
+    }
+
+    /**
+     * Check rate limiting
+     */
+    private function checkRateLimit(): bool
+    {
+        if (!$this->config['rate_limit_enabled'] || !$this->rateLimiter) {
+            return true;
+        }
+
+        return $this->rateLimiter->allowRequest(
+            $this->config['rate_limit_attempts'],
+            'validation',
+            $this->config['rate_limit_window']
+        );
+    }
+
+    /**
+     * Enhanced input sanitization pipeline
+     */
+    private function sanitizeInput(array $data): array
+    {
+        if (!$this->config['sanitization_enabled']) {
+            return $data;
+        }
+
+        return array_map(function ($value) {
+            return match (true) {
+                is_string($value) => $this->sanitizeString($value),
+                is_array($value) => $this->sanitizeInput($value),
+                default => $value
+            };
+        }, $data);
+    }
+
+    /**
+     * Sanitize string values
+     */
+    private function sanitizeString(string $value): string
+    {
+        // Remove null bytes and control characters
+        $value = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', '', $value);
+
+        // Normalize whitespace
+        $value = preg_replace('/\s+/', ' ', trim($value));
+
+        // Remove potential script tags
+        $value = preg_replace('/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/mi', '', $value);
+
+        return $value;
+    }
+
+    /**
+     * Process validation with enhanced performance
+     */
+    private function processValidation(array $data, array $rules): array
+    {
         $errors = [];
         $validData = [];
+        $asyncChecks = [];
 
         foreach ($rules as $field => $fieldRules) {
             $value = $data[$field] ?? null;
-            $fieldErrors = $this->validateField($field, $value, $fieldRules, $data);
+
+            // Compile rules for performance
+            $compiledRules = $this->compileFieldRules($field, $fieldRules);
+
+            // Separate sync and async validations
+            [$syncRules, $asyncRules] = $this->separateRules($compiledRules);
+
+            // Execute synchronous rules
+            $fieldErrors = $this->validateFieldSync($field, $value, $syncRules, $data);
+
+            // Queue async rules if no sync errors
+            if (empty($fieldErrors) && !empty($asyncRules)) {
+                $asyncChecks[$field] = [$value, $asyncRules, $data];
+            }
 
             if (!empty($fieldErrors)) {
                 $errors[$field] = $fieldErrors;
             } else {
                 $validData[$field] = $this->sanitizeValue($value, $fieldRules);
+            }
+        }
+
+        // Execute async checks
+        if (!empty($asyncChecks)) {
+            $asyncErrors = $this->executeAsyncChecks($asyncChecks);
+            $errors = array_merge($errors, $asyncErrors);
+
+            // Remove fields with async errors from valid data
+            foreach ($asyncErrors as $field => $fieldErrors) {
+                unset($validData[$field]);
             }
         }
 
@@ -131,97 +206,97 @@ class Validator
     }
 
     /**
-     * Validate a single field
+     * Compile field rules for performance
      */
-    private function validateField(string $field, mixed $value, array $rules, array $allData): array
+    private function compileFieldRules(string $field, array $rules): array
+    {
+        $cacheKey = md5($field . serialize($rules));
+
+        if ($this->config['cache_enabled'] && isset(self::$compiledRules[$cacheKey])) {
+            $this->cacheHits++;
+            return self::$compiledRules[$cacheKey];
+        }
+
+        $compiled = $this->doCompileRules($rules);
+
+        if ($this->config['cache_enabled']) {
+            self::$compiledRules[$cacheKey] = $compiled;
+        }
+
+        return $compiled;
+    }
+
+    /**
+     * Compile rules implementation
+     */
+    private function doCompileRules(array $rules): array
+    {
+        $compiled = [];
+
+        foreach ($rules as $rule => $ruleValue) {
+            $compiled[] = match ($rule) {
+                'required' => ['type' => 'sync', 'rule' => 'required', 'value' => $ruleValue],
+                'email' => ['type' => 'sync', 'rule' => 'email', 'value' => $ruleValue],
+                'min_length' => ['type' => 'sync', 'rule' => 'min_length', 'value' => $ruleValue],
+                'max_length' => ['type' => 'sync', 'rule' => 'max_length', 'value' => $ruleValue],
+                'pattern' => ['type' => 'sync', 'rule' => 'pattern', 'value' => $ruleValue],
+                'matches' => ['type' => 'sync', 'rule' => 'matches', 'value' => $ruleValue],
+                'accepted' => ['type' => 'sync', 'rule' => 'accepted', 'value' => $ruleValue],
+                'numeric' => ['type' => 'sync', 'rule' => 'numeric', 'value' => $ruleValue],
+                'integer' => ['type' => 'sync', 'rule' => 'integer', 'value' => $ruleValue],
+                'min' => ['type' => 'sync', 'rule' => 'min', 'value' => $ruleValue],
+                'max' => ['type' => 'sync', 'rule' => 'max', 'value' => $ruleValue],
+                'custom' => ['type' => 'async', 'rule' => 'custom', 'value' => $ruleValue],
+                default => ['type' => 'unknown', 'rule' => $rule, 'value' => $ruleValue]
+            };
+        }
+
+        return array_filter($compiled, fn($rule) => $rule['type'] !== 'unknown');
+    }
+
+    /**
+     * Separate synchronous and asynchronous rules
+     */
+    private function separateRules(array $compiledRules): array
+    {
+        $sync = array_filter($compiledRules, fn($rule) => $rule['type'] === 'sync');
+        $async = array_filter($compiledRules, fn($rule) => $rule['type'] === 'async');
+
+        return [$sync, $async];
+    }
+
+    /**
+     * Validate field synchronously with pattern matching
+     */
+    private function validateFieldSync(string $field, mixed $value, array $rules, array $allData): array
     {
         $errors = [];
 
-        // Required validation
-        if (isset($rules['required']) && $rules['required']) {
-            if ($this->isEmpty($value)) {
-                $errors[] = $this->getErrorMessage($field, 'required');
-                return $errors; // Don't validate further if required field is empty
-            }
-        }
+        foreach ($rules as $ruleConfig) {
+            $this->rulesExecuted++;
 
-        // Skip other validations if value is empty and not required
-        if ($this->isEmpty($value)) {
-            return $errors;
-        }
+            $result = match ($ruleConfig['rule']) {
+                'required' => $this->validateRequired($value, $ruleConfig['value']),
+                'email' => $this->validateEmail($value, $ruleConfig['value']),
+                'min_length' => $this->validateMinLength($value, $ruleConfig['value']),
+                'max_length' => $this->validateMaxLength($value, $ruleConfig['value']),
+                'pattern' => $this->validatePattern($value, $ruleConfig['value']),
+                'matches' => $this->validateMatches($value, $allData[$ruleConfig['value']] ?? null),
+                'accepted' => $this->validateAccepted($value, $ruleConfig['value']),
+                'numeric' => $this->validateNumeric($value, $ruleConfig['value']),
+                'integer' => $this->validateInteger($value, $ruleConfig['value']),
+                'min' => $this->validateMin($value, $ruleConfig['value']),
+                'max' => $this->validateMax($value, $ruleConfig['value']),
+                default => null
+            };
 
-        // Type validations
-        foreach ($rules as $rule => $ruleValue) {
-            switch ($rule) {
-                case 'email':
-                    if ($ruleValue && !$this->validateEmail($value)) {
-                        $errors[] = $this->getErrorMessage($field, 'email');
-                    }
+            if ($result !== null && $result !== true) {
+                $errors[] = is_string($result) ? $result : $this->getErrorMessage($field, $ruleConfig['rule'], ['value' => $ruleConfig['value']]);
+
+                // Early return on required field failure
+                if ($ruleConfig['rule'] === 'required') {
                     break;
-
-                case 'min_length':
-                    if (!$this->validateMinLength($value, $ruleValue)) {
-                        $errors[] = $this->getErrorMessage($field, 'min_length', ['min' => $ruleValue]);
-                    }
-                    break;
-
-                case 'max_length':
-                    if (!$this->validateMaxLength($value, $ruleValue)) {
-                        $errors[] = $this->getErrorMessage($field, 'max_length', ['max' => $ruleValue]);
-                    }
-                    break;
-
-                case 'pattern':
-                    if (!$this->validatePattern($value, $ruleValue)) {
-                        $description = $rules['description'] ?? 'Invalid format';
-                        $errors[] = $description;
-                    }
-                    break;
-
-                case 'matches':
-                    if (!$this->validateMatches($value, $allData[$ruleValue] ?? null)) {
-                        $errors[] = $this->getErrorMessage($field, 'matches', ['other' => $ruleValue]);
-                    }
-                    break;
-
-                case 'accepted':
-                    if ($ruleValue && !$this->validateAccepted($value)) {
-                        $errors[] = $this->getErrorMessage($field, 'accepted');
-                    }
-                    break;
-
-                case 'numeric':
-                    if ($ruleValue && !$this->validateNumeric($value)) {
-                        $errors[] = $this->getErrorMessage($field, 'numeric');
-                    }
-                    break;
-
-                case 'integer':
-                    if ($ruleValue && !$this->validateInteger($value)) {
-                        $errors[] = $this->getErrorMessage($field, 'integer');
-                    }
-                    break;
-
-                case 'min':
-                    if (!$this->validateMin($value, $ruleValue)) {
-                        $errors[] = $this->getErrorMessage($field, 'min', ['min' => $ruleValue]);
-                    }
-                    break;
-
-                case 'max':
-                    if (!$this->validateMax($value, $ruleValue)) {
-                        $errors[] = $this->getErrorMessage($field, 'max', ['max' => $ruleValue]);
-                    }
-                    break;
-
-                case 'custom':
-                    if (isset($this->customRules[$ruleValue])) {
-                        $customResult = $this->customRules[$ruleValue]($value, $allData);
-                        if ($customResult !== true) {
-                            $errors[] = $customResult;
-                        }
-                    }
-                    break;
+                }
             }
         }
 
@@ -229,34 +304,271 @@ class Validator
     }
 
     /**
-     * Validation methods
+     * Execute asynchronous database checks
      */
+    private function executeAsyncChecks(array $asyncChecks): array
+    {
+        $errors = [];
+
+        foreach ($asyncChecks as $field => [$value, $rules, $allData]) {
+            foreach ($rules as $ruleConfig) {
+                if ($ruleConfig['rule'] === 'custom' && isset($this->customRules[$ruleConfig['value']])) {
+                    $this->rulesExecuted++;
+                    $this->dbQueries++;
+
+                    $result = $this->customRules[$ruleConfig['value']]($value, $allData);
+
+                    if ($result !== true) {
+                        $errors[$field][] = $result;
+                    }
+                }
+            }
+        }
+
+        return $errors;
+    }
+
+    /**
+     * Initialize custom rules with unified database approach
+     */
+    private function initializeCustomRules(): void
+    {
+        $this->customRules = [
+            'unique_email' => function ($value, $data) {
+                return $this->checkUniqueEmail($value);
+            },
+
+            'unique_trainer_name' => function ($value, $data) {
+                return $this->checkUniqueTrainerName($value);
+            },
+
+            'valid_team_name' => function ($value, $data) {
+                return $this->checkValidTeamName($value);
+            }
+        ];
+    }
+
+    /**
+     * Enhanced unique email check with caching
+     */
+    private function checkUniqueEmail(string $email): string|bool
+    {
+        $normalizedEmail = strtolower(trim($email));
+        $cacheKey = 'email_' . hash('sha256', $normalizedEmail);
+
+        if ($this->config['cache_enabled'] && isset(self::$queryCache[$cacheKey])) {
+            $this->cacheHits++;
+            return self::$queryCache[$cacheKey];
+        }
+
+        try {
+            $count = $this->db->table('users')
+                ->where('email', '=', $normalizedEmail)
+                ->count();
+
+            $result = $count > 0 ? 'This email address is already registered.' : true;
+
+            if ($this->config['cache_enabled']) {
+                self::$queryCache[$cacheKey] = $result;
+            }
+
+            return $result;
+        } catch (Throwable $e) {
+            error_log('Email validation error: ' . $e->getMessage());
+            return 'Unable to validate email address.';
+        }
+    }
+
+    /**
+     * Enhanced unique trainer name check with caching
+     */
+    private function checkUniqueTrainerName(string $name): string|bool
+    {
+        $trimmedName = trim($name);
+        $cacheKey = 'trainer_' . hash('sha256', strtolower($trimmedName));
+
+        if ($this->config['cache_enabled'] && isset(self::$queryCache[$cacheKey])) {
+            $this->cacheHits++;
+            return self::$queryCache[$cacheKey];
+        }
+
+        try {
+            $count = $this->db->table('users')
+                ->where('trainer_name', '=', $trimmedName)
+                ->count();
+
+            $result = $count > 0 ? 'This trainer name is already taken.' : true;
+
+            if ($this->config['cache_enabled']) {
+                self::$queryCache[$cacheKey] = $result;
+            }
+
+            return $result;
+        } catch (Throwable $e) {
+            error_log('Trainer name validation error: ' . $e->getMessage());
+            return 'Unable to validate trainer name.';
+        }
+    }
+
+    /**
+     * Unified database-based team name validation
+     * Checks both existing teams and blacklisted/reserved names in single query
+     */
+    private function checkValidTeamName(string $name): string|bool
+    {
+        $trimmedName = trim($name);
+        $cacheKey = 'team_' . hash('sha256', strtolower($trimmedName));
+
+        if ($this->config['cache_enabled'] && isset(self::$queryCache[$cacheKey])) {
+            $this->cacheHits++;
+            return self::$queryCache[$cacheKey];
+        }
+
+        try {
+            // Single unified query for all team name validations
+            $result = $this->db->table('teams')
+                ->where(function($query) use ($trimmedName) {
+                    $query->where('name', '=', $trimmedName)                    // Exact name match
+                    ->orWhere('LOWER(name)', '=', strtolower($trimmedName)); // Case-insensitive match
+                })
+                ->select(['name', 'type', 'is_blacklisted'])
+                ->first();
+
+            if ($result) {
+                // Determine error message based on team type
+                $errorMessage = match ($result['type'] ?? 'user') {
+                    'blacklisted' => 'This team name is not allowed due to licensing restrictions.',
+                    'reserved' => 'This team name is reserved and cannot be used.',
+                    'admin' => 'This team name is not available.',
+                    default => $result['is_blacklisted'] ?
+                        'This team name is not allowed due to licensing restrictions.' :
+                        'This team name is already taken.'
+                };
+
+                if ($this->config['cache_enabled']) {
+                    self::$queryCache[$cacheKey] = $errorMessage;
+                }
+
+                return $errorMessage;
+            }
+
+            // Name is available
+            if ($this->config['cache_enabled']) {
+                self::$queryCache[$cacheKey] = true;
+            }
+
+            return true;
+
+        } catch (Throwable $e) {
+            error_log('Team name validation error: ' . $e->getMessage());
+            return 'Unable to validate team name.';
+        }
+    }
+
+    // Enhanced validation methods with null safety
+    private function validateRequired(mixed $value, bool $required): string|bool|null
+    {
+        return $required && $this->isEmpty($value) ? 'This field is required.' : null;
+    }
+
+    private function validateEmail(mixed $value, bool $shouldValidate): string|bool|null
+    {
+        if (!$shouldValidate || $this->isEmpty($value)) return null;
+
+        return filter_var($value, FILTER_VALIDATE_EMAIL) === false ?
+            'Please enter a valid email address.' : null;
+    }
+
+    private function validateMinLength(mixed $value, int $min): string|bool|null
+    {
+        if ($this->isEmpty($value)) return null;
+
+        return mb_strlen((string)$value, 'UTF-8') < $min ?
+            "Must be at least {$min} characters long." : null;
+    }
+
+    private function validateMaxLength(mixed $value, int $max): string|bool|null
+    {
+        if ($this->isEmpty($value)) return null;
+
+        return mb_strlen((string)$value, 'UTF-8') > $max ?
+            "Must not exceed {$max} characters." : null;
+    }
+
+    private function validatePattern(mixed $value, string $pattern): string|bool|null
+    {
+        if ($this->isEmpty($value)) return null;
+
+        return preg_match($pattern, (string)$value) !== 1 ?
+            'Invalid format.' : null;
+    }
+
+    private function validateMatches(mixed $value, mixed $otherValue): string|bool|null
+    {
+        return $value !== $otherValue ? 'Values do not match.' : null;
+    }
+
+    private function validateAccepted(mixed $value, bool $shouldBeAccepted): string|bool|null
+    {
+        if (!$shouldBeAccepted) return null;
+
+        return !in_array($value, [true, 'true', '1', 1, 'yes', 'on'], true) ?
+            'This field must be accepted.' : null;
+    }
+
+    private function validateNumeric(mixed $value, bool $shouldBeNumeric): string|bool|null
+    {
+        if (!$shouldBeNumeric || $this->isEmpty($value)) return null;
+
+        return !is_numeric($value) ? 'Must be a number.' : null;
+    }
+
+    private function validateInteger(mixed $value, bool $shouldBeInteger): string|bool|null
+    {
+        if (!$shouldBeInteger || $this->isEmpty($value)) return null;
+
+        return filter_var($value, FILTER_VALIDATE_INT) === false ?
+            'Must be an integer.' : null;
+    }
+
+    private function validateMin(mixed $value, int|float $min): string|bool|null
+    {
+        if ($this->isEmpty($value) || !is_numeric($value)) return null;
+
+        return (float)$value < $min ? "Must be at least {$min}." : null;
+    }
+
+    private function validateMax(mixed $value, int|float $max): string|bool|null
+    {
+        if ($this->isEmpty($value) || !is_numeric($value)) return null;
+
+        return (float)$value > $max ? "Must not exceed {$max}." : null;
+    }
+
     private function isEmpty(mixed $value): bool
     {
         return $value === null || $value === '' || (is_array($value) && empty($value));
     }
 
     /**
-     * Get error message for validation rule
+     * Enhanced error message generation
      */
     private function getErrorMessage(string $field, string $rule, array $params = []): string
     {
         $messages = [
             'required' => 'The :field field is required.',
             'email' => 'The :field must be a valid email address.',
-            'min_length' => 'The :field must be at least :min characters.',
-            'max_length' => 'The :field may not be greater than :max characters.',
-            'matches' => 'The :field must match :other.',
+            'min_length' => 'The :field must be at least :value characters.',
+            'max_length' => 'The :field may not exceed :value characters.',
+            'matches' => 'The :field must match the other field.',
             'accepted' => 'The :field must be accepted.',
             'numeric' => 'The :field must be a number.',
             'integer' => 'The :field must be an integer.',
-            'min' => 'The :field must be at least :min.',
-            'max' => 'The :field may not be greater than :max.'
+            'min' => 'The :field must be at least :value.',
+            'max' => 'The :field may not exceed :value.'
         ];
 
         $message = $messages[$rule] ?? 'The :field is invalid.';
-
-        // Replace placeholders
         $message = str_replace(':field', $this->getFieldDisplayName($field), $message);
 
         foreach ($params as $key => $value) {
@@ -266,9 +578,6 @@ class Validator
         return $message;
     }
 
-    /**
-     * Get display name for field
-     */
     private function getFieldDisplayName(string $field): string
     {
         $displayNames = [
@@ -281,77 +590,47 @@ class Validator
         return $displayNames[$field] ?? str_replace('_', ' ', $field);
     }
 
-    private function validateEmail(string $value): bool
-    {
-        return filter_var($value, FILTER_VALIDATE_EMAIL) !== false;
-    }
-
-    private function validateMinLength(string $value, int $min): bool
-    {
-        return mb_strlen($value, 'UTF-8') >= $min;
-    }
-
-    private function validateMaxLength(string $value, int $max): bool
-    {
-        return mb_strlen($value, 'UTF-8') <= $max;
-    }
-
-    private function validatePattern(string $value, string $pattern): bool
-    {
-        return preg_match($pattern, $value) === 1;
-    }
-
-    private function validateMatches(mixed $value, mixed $otherValue): bool
-    {
-        return $value === $otherValue;
-    }
-
-    private function validateAccepted(mixed $value): bool
-    {
-        return in_array($value, [true, 'true', '1', 1, 'yes', 'on'], true);
-    }
-
-    private function validateNumeric(mixed $value): bool
-    {
-        return is_numeric($value);
-    }
-
-    private function validateInteger(mixed $value): bool
-    {
-        return filter_var($value, FILTER_VALIDATE_INT) !== false;
-    }
-
-    private function validateMin(mixed $value, int|float $min): bool
-    {
-        if (!is_numeric($value)) {
-            return false;
-        }
-        return (float)$value >= $min;
-    }
-
-    private function validateMax(mixed $value, int|float $max): bool
-    {
-        if (!is_numeric($value)) {
-            return false;
-        }
-        return (float)$value <= $max;
-    }
-
     /**
-     * Sanitize value based on rules
+     * Enhanced value sanitization
      */
     private function sanitizeValue(mixed $value, array $rules): mixed
     {
-        if (is_string($value)) {
-            $value = trim($value);
+        if (!is_string($value)) {
+            return $value;
+        }
 
-            // HTML encode if not specifically allowing HTML
-            if (!isset($rules['allow_html']) || !$rules['allow_html']) {
-                $value = htmlspecialchars($value, ENT_QUOTES, 'UTF-8');
-            }
+        $value = trim($value);
+
+        // HTML encode if not specifically allowing HTML
+        if (!isset($rules['allow_html']) || !$rules['allow_html']) {
+            $value = htmlspecialchars($value, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        }
+
+        // Additional sanitization based on field type
+        if (isset($rules['email']) && $rules['email']) {
+            $value = strtolower($value);
         }
 
         return $value;
+    }
+
+    /**
+     * Cache management methods
+     */
+    public function clearCache(): void
+    {
+        self::$compiledRules = [];
+        self::$queryCache = [];
+    }
+
+    public function getCacheStats(): array
+    {
+        return [
+            'compiled_rules' => count(self::$compiledRules),
+            'query_cache' => count(self::$queryCache),
+            'cache_hits' => $this->cacheHits,
+            'cache_enabled' => $this->config['cache_enabled']
+        ];
     }
 
     /**
@@ -360,21 +639,30 @@ class Validator
     public function addRule(string $name, callable $rule): void
     {
         $this->customRules[$name] = $rule;
+        $this->clearCache(); // Clear cache when rules change
     }
 
     /**
-     * Add team name to blacklist
+     * Performance monitoring
      */
-    public function addTeamNameToBlacklist(string $teamName): void
+    public function resetStats(): void
     {
-        $this->teamNameBlacklist[] = $teamName;
+        $this->rulesExecuted = 0;
+        $this->cacheHits = 0;
+        $this->dbQueries = 0;
+        $this->validationTime = 0.0;
     }
 
     /**
-     * Get team name blacklist
+     * Debug and development helpers
      */
-    public function getTeamNameBlacklist(): array
+    public function debug(): array
     {
-        return $this->teamNameBlacklist;
+        return [
+            'config' => $this->config,
+            'stats' => $this->stats,
+            'cache' => $this->getCacheStats(),
+            'custom_rules' => array_keys($this->customRules)
+        ];
     }
 }
