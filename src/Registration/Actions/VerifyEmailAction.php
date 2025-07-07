@@ -6,8 +6,8 @@ declare(strict_types=1);
 namespace Registration\Actions;
 
 use Framework\Core\Attributes\Route;
-use Registration\Domain\Services\RegistrationService;
 use Registration\Domain\Services\InvalidVerificationTokenException;
+use Registration\Domain\Services\RegistrationService;
 use Registration\Responder\RegistrationResponder;
 
 #[Route('/verify-email', 'GET', 'email.verification')]

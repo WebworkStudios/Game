@@ -14,30 +14,32 @@ namespace Framework\Security;
 
 class PasswordHasher
 {
-    private int $algorithm;
+    private string $algorithm;
     private array $options;
 
-    public function __construct(int|string $algorithm = PASSWORD_ARGON2ID, array $options = [])
+    public function __construct(string|int $algorithm = PASSWORD_ARGON2ID, array $options = [])
     {
-        // String to string conversion for consistency
-        if (is_string($algorithm)) {
-            $convertedAlgorithm = match($algorithm) {
-                'argon2id' => PASSWORD_ARGON2ID,
-                'argon2i' => PASSWORD_ARGON2I,
-                'bcrypt' => PASSWORD_BCRYPT,
+        // Handle both string and int inputs for backward compatibility
+        if (is_int($algorithm)) {
+            // Legacy integer constants (pre PHP 8.4)
+            $this->algorithm = match($algorithm) {
+                1 => PASSWORD_ARGON2I,
+                2 => PASSWORD_ARGON2ID,
+                PASSWORD_BCRYPT => PASSWORD_BCRYPT,
                 default => PASSWORD_ARGON2ID
             };
         } else {
-            // If somehow an int is passed, convert to appropriate string
-            $convertedAlgorithm = match($algorithm) {
-                2 => PASSWORD_ARGON2ID, // PASSWORD_ARGON2ID
-                1 => PASSWORD_ARGON2I,  // PASSWORD_ARGON2I
-                0 => PASSWORD_BCRYPT,   // PASSWORD_BCRYPT
+            // String constants (PHP 8.4+) or direct string input
+            $this->algorithm = match($algorithm) {
+                'argon2i' => PASSWORD_ARGON2I,
+                'argon2id' => PASSWORD_ARGON2ID,
+                'bcrypt' => PASSWORD_BCRYPT,
+                PASSWORD_ARGON2I => PASSWORD_ARGON2I,
+                PASSWORD_ARGON2ID => PASSWORD_ARGON2ID,
+                PASSWORD_BCRYPT => PASSWORD_BCRYPT,
                 default => PASSWORD_ARGON2ID
             };
         }
-
-        $this->algorithm = $convertedAlgorithm;
 
         $this->options = array_merge([
             'memory_cost' => 65536, // 64MB

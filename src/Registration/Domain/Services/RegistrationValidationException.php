@@ -19,4 +19,3 @@ class RegistrationValidationException extends \Exception
     }
 }
 
-class InvalidVerificationTokenException extends \Exception {}

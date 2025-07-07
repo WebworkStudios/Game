@@ -23,14 +23,8 @@ class SecurityServiceProvider implements ServiceProvider
             $config = $container->get('config');
             $passwordConfig = $config['security']['password'];
 
-            // Debug: Let's see what's in the config
-            error_log("SecurityServiceProvider Debug - Password config: " . var_export($passwordConfig, true));
-            error_log("SecurityServiceProvider Debug - Algorithm value: " . var_export($passwordConfig['algorithm'], true));
-            error_log("SecurityServiceProvider Debug - Algorithm type: " . gettype($passwordConfig['algorithm']));
-            error_log("SecurityServiceProvider Debug - PASSWORD_ARGON2ID constant: " . var_export(PASSWORD_ARGON2ID, true));
-
             return new PasswordHasher(
-                $passwordConfig['algorithm'],
+                $passwordConfig['algorithm'], // Direkt als String übergeben
                 $passwordConfig['options']
             );
         });
@@ -96,9 +90,9 @@ class SecurityServiceProvider implements ServiceProvider
     private function getAlgorithmName(string $algorithm): string
     {
         return match ($algorithm) {
-            PASSWORD_ARGON2ID, 'argon2id' => 'Argon2ID',
-            PASSWORD_ARGON2I, 'argon2i' => 'Argon2I',
-            PASSWORD_BCRYPT, 'bcrypt' => 'BCrypt',
+            'argon2id', PASSWORD_ARGON2ID => 'Argon2ID',
+            'argon2i', PASSWORD_ARGON2I => 'Argon2I',
+            'bcrypt', PASSWORD_BCRYPT => 'BCrypt',
             default => 'Unknown'
         };
     }
