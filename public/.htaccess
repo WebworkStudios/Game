@@ -1,0 +1,15 @@
+# public/.htaccess
+RewriteEngine On
+
+# Handle static files
+RewriteCond %{REQUEST_FILENAME} -f
+RewriteRule ^.*$ - [L]
+
+# Handle directories
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteRule ^.*$ - [L]
+
+# Send all other requests to index.php
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^(.*)$ index.php [QSA,L]

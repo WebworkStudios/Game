@@ -1,0 +1,235 @@
+/**
+ * Legal Pages CSS
+ * Styles for legal pages (Impressum, Privacy, Terms)
+ */
+
+.legal-header {
+    margin-bottom: var(--spacing-xl);
+    padding: var(--spacing-lg) 0;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.breadcrumb {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    color: var(--text-secondary);
+    font-size: var(--font-size-small);
+}
+
+.breadcrumb a {
+    color: var(--primary-color);
+    text-decoration: none;
+    font-weight: 500;
+}
+
+.breadcrumb a:hover {
+    text-decoration: underline;
+}
+
+.breadcrumb .separator {
+    color: var(--text-secondary);
+    font-weight: 300;
+}
+
+.breadcrumb .current {
+    font-weight: 500;
+}
+
+.legal-content {
+    margin-bottom: var(--spacing-xxl);
+}
+
+.legal-title {
+    font-size: var(--font-size-xxl);
+    color: var(--primary-color);
+    margin-bottom: var(--spacing-xl);
+    text-align: center;
+    border-bottom: 3px solid var(--accent-color);
+    padding-bottom: var(--spacing-md);
+}
+
+.legal-section {
+    margin-bottom: var(--spacing-xl);
+    background: var(--card-background);
+    border-radius: var(--border-radius);
+    padding: var(--spacing-lg);
+    box-shadow: var(--shadow);
+    border-left: 4px solid var(--primary-color);
+}
+
+.legal-section h2 {
+    color: var(--primary-color);
+    font-size: var(--font-size-large);
+    margin-bottom: var(--spacing-md);
+    font-weight: 600;
+}
+
+.info-block {
+    line-height: 1.7;
+}
+
+.info-block p {
+    margin-bottom: var(--spacing-md);
+}
+
+.info-block p:last-child {
+    margin-bottom: 0;
+}
+
+.company-name {
+    font-size: var(--font-size-large);
+    font-weight: 600;
+    color: var(--primary-color);
+    margin-bottom: var(--spacing-sm) !important;
+}
+
+.address {
+    color: var(--text-secondary);
+    font-style: normal;
+}
+
+.contact-grid {
+    display: grid;
+    gap: var(--spacing-sm);
+}
+
+.contact-item {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    padding: var(--spacing-sm);
+    background: var(--background-color);
+    border-radius: calc(var(--border-radius) / 2);
+}
+
+.contact-label {
+    min-width: 80px;
+    font-weight: 500;
+    color: var(--text-secondary);
+}
+
+.contact-value {
+    color: var(--text-primary);
+    font-weight: 500;
+}
+
+.contact-value a {
+    color: var(--primary-color);
+    text-decoration: none;
+}
+
+.contact-value a:hover {
+    text-decoration: underline;
+}
+
+.external-link {
+    color: var(--primary-color);
+    text-decoration: none;
+    word-break: break-all;
+}
+
+.external-link:hover {
+    text-decoration: underline;
+}
+
+.external-link::after {
+    content: " ↗";
+    font-size: 0.8em;
+    opacity: 0.7;
+}
+
+.legal-footer {
+    padding: var(--spacing-xl) 0;
+    border-top: 1px solid var(--border-color);
+    background: var(--background-color);
+    border-radius: var(--border-radius);
+}
+
+.footer-nav {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: var(--spacing-lg);
+    flex-wrap: wrap;
+}
+
+.footer-link {
+    color: var(--primary-color);
+    text-decoration: none;
+    font-weight: 500;
+    padding: var(--spacing-sm) var(--spacing-md);
+    border-radius: calc(var(--border-radius) / 2);
+    transition: var(--transition);
+}
+
+.footer-link:hover {
+    background: var(--primary-color);
+    color: white;
+    text-decoration: none;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .legal-title {
+        font-size: var(--font-size-xl);
+    }
+
+    .legal-section {
+        padding: var(--spacing-md);
+        margin-bottom: var(--spacing-lg);
+    }
+
+    .contact-item {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: var(--spacing-xs);
+    }
+
+    .contact-label {
+        min-width: auto;
+    }
+
+    .footer-nav {
+        flex-direction: column;
+        gap: var(--spacing-md);
+    }
+
+    .breadcrumb {
+        flex-wrap: wrap;
+    }
+}
+
+/* Print Styles */
+@media print {
+    .legal-header,
+    .legal-footer {
+        display: none;
+    }
+
+    .legal-section {
+        box-shadow: none;
+        border: 1px solid var(--border-color);
+        break-inside: avoid;
+    }
+
+    .external-link::after {
+        content: none;
+    }
+
+    .contact-value a {
+        color: var(--text-primary);
+    }
+}
+
+/* High Contrast Mode */
+@media (prefers-contrast: high) {
+    .legal-section {
+        border-left-width: 6px;
+        border: 2px solid var(--primary-color);
+    }
+
+    .contact-item {
+        border: 1px solid var(--border-color);
+    }
+}
