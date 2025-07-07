@@ -1,13 +1,9 @@
 <?php
-
 /**
  * Security Service Provider
  * Security-related services - CSRF, Password Hashing, Rate Limiting
- *
- * File: framework/Providers/SecurityServiceProvider.php
- * Directory: /framework/Providers/
- */
 
+ */
 declare(strict_types=1);
 
 namespace Framework\Providers;
@@ -71,9 +67,12 @@ class SecurityServiceProvider implements ServiceProvider
             ]);
         }
 
-        // Log password security settings
+        // Log password security settings - FIX: Handle both int and string algorithm values
+        $algorithm = $securityConfig['password']['algorithm'];
+        $algorithmName = is_int($algorithm) ? $this->getAlgorithmName($algorithm) : (string)$algorithm;
+
         $container->get('logger')->debug('Password security initialized', [
-            'algorithm' => $this->getAlgorithmName($securityConfig['password']['algorithm']),
+            'algorithm' => $algorithmName,
             'memory_cost' => $securityConfig['password']['options']['memory_cost'] ?? 'default',
             'time_cost' => $securityConfig['password']['options']['time_cost'] ?? 'default'
         ]);

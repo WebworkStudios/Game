@@ -1,0 +1,712 @@
+/**
+ * Homepage CSS
+ * Styles for the homepage
+ *
+ * File: public/css/homepage.css
+ * Directory: /public/css/
+ */
+
+:root {
+    --hero-gradient: linear-gradient(135deg, #1B5E20 0%, #2E7D32 50%, #4CAF50 100%);
+    --hero-overlay: rgba(0, 0, 0, 0.3);
+    --card-hover-transform: translateY(-8px);
+    --section-spacing: 80px;
+}
+
+/* Typography Enhancement */
+body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    line-height: 1.7;
+}
+
+/* Header */
+.header {
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--border-color);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    transition: var(--transition);
+}
+
+.header-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem 0;
+}
+
+.logo h1 {
+    margin: 0;
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: var(--primary-color);
+    text-shadow: 0 2px 4px rgba(46, 125, 50, 0.1);
+}
+
+.nav {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.welcome-text {
+    color: var(--text-secondary);
+    font-weight: 500;
+    margin-right: 0.5rem;
+}
+
+/* Hero Section */
+.hero {
+    position: relative;
+    min-height: 70vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    color: white;
+    overflow: hidden;
+}
+
+.hero-background {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: var(--hero-gradient);
+    background-size: 200vw 100vh;
+    background-position: left center;
+}
+
+.hero-background::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background:
+            radial-gradient(circle at 20vw 80vh, rgba(255, 255, 255, 0.1) 0px, transparent 50vw),
+            radial-gradient(circle at 80vw 20vh, rgba(255, 255, 255, 0.1) 0px, transparent 50vw);
+}
+
+.hero-content {
+    position: relative;
+    z-index: 2;
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 2rem;
+}
+
+.hero-title {
+    font-size: clamp(2.5rem, 5vw, 4rem);
+    font-weight: 700;
+    margin-bottom: 1.5rem;
+    text-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+    line-height: 1.2;
+}
+
+.hero-subtitle {
+    font-size: clamp(1.1rem, 2vw, 1.3rem);
+    margin-bottom: 2.5rem;
+    opacity: 0.95;
+    line-height: 1.6;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.hero-actions {
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+/* Features Section */
+.features {
+    padding: var(--section-spacing) 0;
+    background: linear-gradient(180deg, #FAFAFA 0%, #FFFFFF 100%);
+}
+
+.section-title {
+    text-align: center;
+    font-size: 2.5rem;
+    font-weight: 700;
+    color: var(--primary-color);
+    margin-bottom: 3rem;
+    position: relative;
+}
+
+.section-title::after {
+    content: '';
+    position: absolute;
+    bottom: -10px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 60px;
+    height: 4px;
+    background: var(--accent-color);
+    border-radius: 2px;
+}
+
+.features-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 2rem;
+    margin-top: 4rem;
+}
+
+.feature-card {
+    background: white;
+    padding: 2.5rem 2rem;
+    border-radius: 16px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+    text-align: center;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    border: 1px solid rgba(46, 125, 50, 0.1);
+    position: relative;
+    overflow: hidden;
+    opacity: 1;
+    transform: none;
+}
+
+.feature-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: linear-gradient(90deg, var(--primary-color), var(--secondary-color));
+    transform: scaleX(0);
+    transition: transform 0.3s ease;
+}
+
+.feature-card:hover {
+    transform: var(--card-hover-transform);
+    box-shadow: 0 8px 40px rgba(46, 125, 50, 0.15);
+}
+
+.feature-card:hover::before {
+    transform: scaleX(1);
+}
+
+.feature-icon {
+    font-size: 3rem;
+    margin-bottom: 1.5rem;
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
+}
+
+.feature-card h4 {
+    font-size: 1.4rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 1rem;
+}
+
+.feature-card p {
+    color: var(--text-secondary);
+    line-height: 1.6;
+    margin-bottom: 0;
+}
+
+/* Getting Started Section */
+.getting-started {
+    padding: var(--section-spacing) 0;
+    background: var(--hero-gradient);
+    color: white;
+    text-align: center;
+    position: relative;
+}
+
+.getting-started::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background:
+            radial-gradient(circle at 30vw 70vh, rgba(255, 255, 255, 0.1) 0px, transparent 60vw),
+            radial-gradient(circle at 70vw 30vh, rgba(255, 255, 255, 0.05) 0px, transparent 60vw);
+}
+
+.getting-started-content {
+    position: relative;
+    z-index: 2;
+}
+
+.getting-started h3 {
+    font-size: 2.5rem;
+    font-weight: 700;
+    margin-bottom: 1rem;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.getting-started p {
+    font-size: 1.2rem;
+    margin-bottom: 3rem;
+    opacity: 0.95;
+}
+
+.stats {
+    display: flex;
+    justify-content: center;
+    gap: 4rem;
+    margin: 3rem 0;
+    flex-wrap: wrap;
+}
+
+.stat {
+    text-align: center;
+}
+
+.stat-number {
+    display: block;
+    font-size: 2.5rem;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.stat-label {
+    font-size: 1rem;
+    opacity: 0.9;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* Footer */
+.footer {
+    background: var(--text-primary);
+    color: white;
+    padding: 3rem 0 1rem;
+}
+
+.footer-content {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 2rem;
+    margin-bottom: 2rem;
+}
+
+.footer-section h4,
+.footer-section h5 {
+    margin-bottom: 1rem;
+    color: white;
+}
+
+.footer-section h4 {
+    font-size: 1.5rem;
+    color: var(--secondary-color);
+}
+
+.footer-section ul {
+    list-style: none;
+    padding: 0;
+}
+
+.footer-section ul li {
+    margin-bottom: 0.5rem;
+}
+
+.footer-section ul li a {
+    color: rgba(255, 255, 255, 0.8);
+    text-decoration: none;
+    transition: var(--transition);
+}
+
+.footer-section ul li a:hover {
+    color: var(--secondary-color);
+}
+
+.footer-bottom {
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    padding-top: 1rem;
+    text-align: center;
+    color: rgba(255, 255, 255, 0.7);
+}
+
+/* ============================================================================
+   ANIMATIONS - Korrigiert für Media Groups
+   ============================================================================ */
+
+/* Gradient Animation */
+@keyframes gradientShift {
+    0%, 100% {
+        background-position: left center;
+    }
+    50% {
+        background-position: right center;
+    }
+}
+
+/* Fade Up Animation */
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(30px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Individuelle Animationen ohne animation-delay */
+@keyframes fadeInUp1 {
+    0% { opacity: 0; transform: translateY(30px); }
+    16.7% { opacity: 0; transform: translateY(30px); }
+    100% { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fadeInUp2 {
+    0% { opacity: 0; transform: translateY(30px); }
+    33.3% { opacity: 0; transform: translateY(30px); }
+    100% { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fadeInUp3 {
+    0% { opacity: 0; transform: translateY(30px); }
+    50% { opacity: 0; transform: translateY(30px); }
+    100% { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fadeInUp4 {
+    0% { opacity: 0; transform: translateY(30px); }
+    66.7% { opacity: 0; transform: translateY(30px); }
+    100% { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fadeInUp5 {
+    0% { opacity: 0; transform: translateY(30px); }
+    83.3% { opacity: 0; transform: translateY(30px); }
+    100% { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fadeInUp6 {
+    0% { opacity: 0; transform: translateY(30px); }
+    90% { opacity: 0; transform: translateY(30px); }
+    100% { opacity: 1; transform: translateY(0); }
+}
+
+/* Enhanced Animations - nur wenn nicht reduziert */
+@media screen and (prefers-reduced-motion: no-preference) {
+    .hero-background {
+        animation: gradientShift 8s ease-in-out infinite;
+    }
+
+    .feature-card {
+        opacity: 0;
+        animation: fadeInUp 0.6s ease-out forwards;
+    }
+
+    /* CSS Custom Properties für Delays */
+    .feature-card:nth-child(1) {
+        animation: fadeInUp1 1.2s ease-out forwards;
+    }
+    .feature-card:nth-child(2) {
+        animation: fadeInUp2 1.4s ease-out forwards;
+    }
+    .feature-card:nth-child(3) {
+        animation: fadeInUp3 1.6s ease-out forwards;
+    }
+    .feature-card:nth-child(4) {
+        animation: fadeInUp4 1.8s ease-out forwards;
+    }
+    .feature-card:nth-child(5) {
+        animation: fadeInUp5 2.0s ease-out forwards;
+    }
+    .feature-card:nth-child(6) {
+        animation: fadeInUp6 2.2s ease-out forwards;
+    }
+}
+
+/* Reduzierte Animation für Accessibility */
+@media screen and (prefers-reduced-motion: reduce) {
+    * {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+
+    .hero-background {
+        animation: none !important;
+        background-position: center center;
+    }
+
+    .feature-card {
+        opacity: 1 !important;
+        animation: none !important;
+        transform: none !important;
+    }
+}
+
+/* Progressive Enhancement mit @supports */
+@supports (animation: fadeInUp 0.6s ease-out) {
+    @media screen and (prefers-reduced-motion: no-preference) {
+        .feature-card {
+            opacity: 0;
+            animation: fadeInUp 0.6s ease-out forwards;
+        }
+    }
+}
+
+@supports (background-size: 200vw 100vh) {
+    .hero-background {
+        background-size: 200vw 100vh;
+    }
+
+    @media screen and (prefers-reduced-motion: no-preference) {
+        .hero-background {
+            animation: gradientShift 8s ease-in-out infinite;
+        }
+    }
+}
+
+/* ============================================================================
+   HIGH CONTRAST MODE - Korrigiert
+   ============================================================================ */
+
+/* Korrektur: Verwende prefers-contrast: more statt high */
+@media screen and (prefers-contrast: more) {
+    .feature-card {
+        border: 2px solid var(--primary-color);
+        background: white;
+    }
+
+    .hero-background {
+        background: var(--primary-color);
+    }
+
+    .hero-background::after {
+        background: none;
+    }
+
+    .getting-started::before {
+        background: none;
+    }
+
+    /* Zusätzliche Kontrast-Verbesserungen */
+    .hero-title,
+    .hero-subtitle {
+        text-shadow: none;
+        color: white;
+    }
+
+    .feature-card h4,
+    .feature-card p {
+        color: var(--text-primary);
+    }
+
+    .section-title::after {
+        background: var(--primary-color);
+    }
+}
+
+/* Alternative: Verwende forced-colors für Windows High Contrast Mode */
+@media screen and (forced-colors: active) {
+    .feature-card {
+        border: 2px solid ButtonText;
+        background: ButtonFace;
+        color: ButtonText;
+    }
+
+    .hero-background {
+        background: Canvas;
+    }
+
+    .hero-background::after {
+        background: none;
+    }
+
+    .getting-started::before {
+        background: none;
+    }
+
+    .hero-title,
+    .hero-subtitle {
+        color: CanvasText;
+        text-shadow: none;
+    }
+
+    .section-title {
+        color: ButtonText;
+    }
+
+    .section-title::after {
+        background: ButtonText;
+    }
+
+    .btn {
+        border: 1px solid ButtonText;
+        background: ButtonFace;
+        color: ButtonText;
+    }
+
+    .btn:hover {
+        background: Highlight;
+        color: HighlightText;
+    }
+}
+
+/* ============================================================================
+   RESPONSIVE DESIGN
+   ============================================================================ */
+
+@media screen and (max-width: 768px) {
+    .hero {
+        min-height: 60vh;
+    }
+
+    .hero-actions {
+        flex-direction: column;
+        align-items: center;
+    }
+
+    .hero-actions .btn {
+        width: 100%;
+        max-width: 300px;
+    }
+
+    .features-grid {
+        grid-template-columns: 1fr;
+        gap: 1.5rem;
+    }
+
+    .feature-card {
+        padding: 2rem 1.5rem;
+    }
+
+    .stats {
+        gap: 2rem;
+    }
+
+    .nav {
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .welcome-text {
+        margin-right: 0;
+        text-align: center;
+    }
+
+    .hero-background::after {
+        background:
+                radial-gradient(circle at 20vw 80vh, rgba(255, 255, 255, 0.1) 0px, transparent 30vw),
+                radial-gradient(circle at 80vw 20vh, rgba(255, 255, 255, 0.1) 0px, transparent 30vw);
+    }
+
+    .getting-started::before {
+        background:
+                radial-gradient(circle at 30vw 70vh, rgba(255, 255, 255, 0.1) 0px, transparent 40vw),
+                radial-gradient(circle at 70vw 30vh, rgba(255, 255, 255, 0.05) 0px, transparent 40vw);
+    }
+}
+
+@media screen and (max-width: 480px) {
+    .header-content {
+        flex-direction: column;
+        gap: 1rem;
+        text-align: center;
+    }
+
+    .hero-content {
+        padding: 1rem;
+    }
+
+    .section-title {
+        font-size: 2rem;
+    }
+
+    .stats {
+        flex-direction: column;
+        gap: 1.5rem;
+    }
+
+    .hero-background {
+        background-size: 300vw 100vh;
+    }
+
+    .hero-background::after {
+        background:
+                radial-gradient(circle at 50vw 80vh, rgba(255, 255, 255, 0.1) 0px, transparent 40vw);
+    }
+
+    .getting-started::before {
+        background:
+                radial-gradient(circle at 50vw 70vh, rgba(255, 255, 255, 0.1) 0px, transparent 50vw);
+    }
+}
+
+/* ============================================================================
+   PRINT STYLES
+   ============================================================================ */
+
+@media print {
+    .hero-background,
+    .getting-started::before,
+    .hero-background::after {
+        background: none !important;
+        animation: none !important;
+    }
+
+    .hero {
+        background: var(--primary-color);
+        color: white;
+    }
+
+    .feature-card {
+        box-shadow: none;
+        border: 1px solid var(--border-color);
+    }
+
+    .header {
+        position: static;
+        backdrop-filter: none;
+    }
+}
+
+/* ============================================================================
+   PERFORMANCE OPTIMIZATIONS
+   ============================================================================ */
+
+/* GPU-Beschleunigung für Animationen */
+.feature-card,
+.hero-background {
+    will-change: transform;
+}
+
+/* Smooth scrolling für interne Links */
+@media screen {
+    html {
+        scroll-behavior: smooth;
+    }
+}
+
+@media screen and (prefers-reduced-motion: reduce) {
+    html {
+        scroll-behavior: auto;
+    }
+}
+
+/* Optimierte Transformationen */
+.feature-card:hover {
+    transform: var(--card-hover-transform);
+    will-change: transform, box-shadow;
+}
+
+/* Containment für bessere Performance */
+.feature-card {
+    contain: layout style paint;
+}
+
+.hero {
+    contain: layout style;
+}
+
+.footer {
+    contain: layout style;
+}
