@@ -21,11 +21,18 @@
                 </div>
             <?php endif; ?>
 
-            <?php if ($flash_error = $session->getFlash('error')): ?>
+            <?php if ($flash_error): ?>
                 <div class="alert alert-error">
                     <?= htmlspecialchars($flash_error) ?>
                 </div>
             <?php endif; ?>
+
+            <?php if ($flash_success): ?>
+                <div class="alert alert-success">
+                    <?= htmlspecialchars($flash_success) ?>
+                </div>
+            <?php endif; ?>
+
 
             <form id="registrationForm" method="POST" action="/register" class="registration-form">
                 <?= $csrf_field ?>

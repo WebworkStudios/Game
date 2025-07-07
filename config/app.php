@@ -67,7 +67,7 @@ return [
     // Security configuration
     'security' => [
         'password' => [
-            'algorithm' => PASSWORD_ARGON2ID,
+            'algorithm' => PASSWORD_ARGON2ID, // Verwende die PHP-Konstante statt String
             'options' => [
                 'memory_cost' => 65536, // 64MB
                 'time_cost' => 4,

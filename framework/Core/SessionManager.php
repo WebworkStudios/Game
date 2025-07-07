@@ -439,7 +439,10 @@ class SessionManager implements SessionManagerInterface
     {
         $this->ensureStarted();
 
-        if (in_array($key, self::SYSTEM_KEYS)) {
+        // Remove csrf_tokens from protected system keys since CSRF protection needs to set it
+        $protectedKeys = array_diff(self::SYSTEM_KEYS, ['csrf_tokens']);
+
+        if (in_array($key, $protectedKeys)) {
             throw new \InvalidArgumentException("Cannot set system key: {$key}");
         }
 
@@ -471,7 +474,10 @@ class SessionManager implements SessionManagerInterface
     {
         $this->ensureStarted();
 
-        if (in_array($key, self::SYSTEM_KEYS)) {
+        // Remove csrf_tokens from protected system keys since CSRF protection needs to manage it
+        $protectedKeys = array_diff(self::SYSTEM_KEYS, ['csrf_tokens']);
+
+        if (in_array($key, $protectedKeys)) {
             throw new \InvalidArgumentException("Cannot remove system key: {$key}");
         }
 
@@ -494,7 +500,6 @@ class SessionManager implements SessionManagerInterface
 
         $_SESSION = $systemData;
     }
-
     /**
      * Get all session data
      */

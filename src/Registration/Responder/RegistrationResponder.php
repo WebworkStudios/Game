@@ -33,7 +33,9 @@ class RegistrationResponder
             'csrf_field' => $this->csrf->getTokenField(),
             'form_data' => $formData,
             'errors' => $errors,
-            'registration_enabled' => true
+            'registration_enabled' => true,
+            'flash_error' => $this->session->getFlash('error'),  // Flash-Nachricht direkt abrufen
+            'flash_success' => $this->session->getFlash('success')  // Auch Erfolgs-Nachrichten hinzufügen
         ];
 
         $this->templates->render('registration/register', $data);
