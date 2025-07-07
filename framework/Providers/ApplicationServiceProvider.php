@@ -59,22 +59,26 @@ class ApplicationServiceProvider implements ServiceProvider
      */
     private function registerUserServices(Container $container): void
     {
-        // Future: User management services
-        // $container->singleton(UserRepository::class, function($container) {
-        //     return new UserRepository($container->get('db'));
-        // });
+        // User Repository
+        $container->singleton(
+            \Registration\Domain\UserRepository::class,
+            \Registration\Domain\Infrastructure\DatabaseUserRepository::class
+        );
 
-        // $container->singleton(AuthService::class, function($container) {
-        //     return new AuthService(
-        //         $container->get(UserRepository::class),
-        //         $container->get('session'),
-        //         $container->get('hasher')
-        //     );
-        // });
+        // Registration Services
+        $container->singleton(\Registration\Domain\Services\RegistrationService::class);
 
-        // $container->alias('auth', AuthService::class);
+        $container->singleton(\Registration\Domain\Services\EmailVerificationService::class, function($container) {
+            $config = $container->get('config');
+            return new \Registration\Domain\Services\EmailVerificationService(
+                $container->get('email'),
+                $config['app']['url']
+            );
+        });
+
+        // Registration Responder
+        $container->bind(\Registration\Responder\RegistrationResponder::class);
     }
-
     /**
      * Register business logic services
      */
