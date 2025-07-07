@@ -19,13 +19,25 @@ class PasswordHasher
 
     public function __construct(int|string $algorithm = PASSWORD_ARGON2ID, array $options = [])
     {
-        // String zu Int konvertieren falls nötig
-        $this->algorithm = match($algorithm) {
-            'argon2id', PASSWORD_ARGON2ID => PASSWORD_ARGON2ID,
-            'argon2i', PASSWORD_ARGON2I => PASSWORD_ARGON2I,
-            'bcrypt', PASSWORD_BCRYPT => PASSWORD_BCRYPT,
-            default => is_int($algorithm) ? $algorithm : PASSWORD_ARGON2ID
-        };
+        // String to string conversion for consistency
+        if (is_string($algorithm)) {
+            $convertedAlgorithm = match($algorithm) {
+                'argon2id' => PASSWORD_ARGON2ID,
+                'argon2i' => PASSWORD_ARGON2I,
+                'bcrypt' => PASSWORD_BCRYPT,
+                default => PASSWORD_ARGON2ID
+            };
+        } else {
+            // If somehow an int is passed, convert to appropriate string
+            $convertedAlgorithm = match($algorithm) {
+                2 => PASSWORD_ARGON2ID, // PASSWORD_ARGON2ID
+                1 => PASSWORD_ARGON2I,  // PASSWORD_ARGON2I
+                0 => PASSWORD_BCRYPT,   // PASSWORD_BCRYPT
+                default => PASSWORD_ARGON2ID
+            };
+        }
+
+        $this->algorithm = $convertedAlgorithm;
 
         $this->options = array_merge([
             'memory_cost' => 65536, // 64MB
@@ -33,6 +45,7 @@ class PasswordHasher
             'threads' => 3,
         ], $options);
     }
+
     /**
      * Hash a password
      */

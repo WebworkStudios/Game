@@ -2,7 +2,6 @@
 /**
  * Security Service Provider
  * Security-related services - CSRF, Password Hashing, Rate Limiting
-
  */
 declare(strict_types=1);
 
@@ -23,6 +22,12 @@ class SecurityServiceProvider implements ServiceProvider
         $container->singleton(PasswordHasher::class, function ($container) {
             $config = $container->get('config');
             $passwordConfig = $config['security']['password'];
+
+            // Debug: Let's see what's in the config
+            error_log("SecurityServiceProvider Debug - Password config: " . var_export($passwordConfig, true));
+            error_log("SecurityServiceProvider Debug - Algorithm value: " . var_export($passwordConfig['algorithm'], true));
+            error_log("SecurityServiceProvider Debug - Algorithm type: " . gettype($passwordConfig['algorithm']));
+            error_log("SecurityServiceProvider Debug - PASSWORD_ARGON2ID constant: " . var_export(PASSWORD_ARGON2ID, true));
 
             return new PasswordHasher(
                 $passwordConfig['algorithm'],
@@ -67,9 +72,9 @@ class SecurityServiceProvider implements ServiceProvider
             ]);
         }
 
-        // Log password security settings - FIX: Handle both int and string algorithm values
+        // Log password security settings
         $algorithm = $securityConfig['password']['algorithm'];
-        $algorithmName = is_int($algorithm) ? $this->getAlgorithmName($algorithm) : (string)$algorithm;
+        $algorithmName = $this->getAlgorithmName($algorithm);
 
         $container->get('logger')->debug('Password security initialized', [
             'algorithm' => $algorithmName,
@@ -88,12 +93,12 @@ class SecurityServiceProvider implements ServiceProvider
     /**
      * Get human-readable algorithm name
      */
-    private function getAlgorithmName(int $algorithm): string
+    private function getAlgorithmName(string $algorithm): string
     {
         return match ($algorithm) {
-            PASSWORD_ARGON2ID => 'Argon2ID',
-            PASSWORD_ARGON2I => 'Argon2I',
-            PASSWORD_BCRYPT => 'BCrypt',
+            PASSWORD_ARGON2ID, 'argon2id' => 'Argon2ID',
+            PASSWORD_ARGON2I, 'argon2i' => 'Argon2I',
+            PASSWORD_BCRYPT, 'bcrypt' => 'BCrypt',
             default => 'Unknown'
         };
     }
