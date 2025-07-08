@@ -12,10 +12,10 @@ use PDOStatement;
 /**
  * Query Result - Wrapper für Datenbankabfrage-Ergebnisse
  */
-readonly class QueryResult implements Iterator, Countable
+class QueryResult implements Iterator, Countable
 {
     private array $data;
-    private int $position;
+    private int $position = 0;
 
     public function __construct(
         private PDOStatement $statement,
@@ -25,7 +25,6 @@ readonly class QueryResult implements Iterator, Countable
     )
     {
         $this->data = $this->statement->fetchAll();
-        $this->position = 0;
     }
 
     /**

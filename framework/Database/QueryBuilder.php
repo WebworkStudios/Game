@@ -5,6 +5,10 @@ declare(strict_types=1);
 
 namespace Framework\Database;
 
+use Framework\Database\Enums\ConnectionType;
+use Framework\Database\Enums\JoinType;
+use Framework\Database\Enums\OrderDirection;
+use Framework\Database\Enums\ParameterType;
 use InvalidArgumentException;
 use PDOStatement;
 

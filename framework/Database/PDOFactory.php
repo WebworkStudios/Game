@@ -5,6 +5,7 @@ declare(strict_types=1);
 
 namespace Framework\Database;
 
+use Framework\Database\Enums\DatabaseDriver;
 use PDO;
 use PDOException;
 use RuntimeException;

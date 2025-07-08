@@ -5,6 +5,8 @@ declare(strict_types=1);
 
 namespace Framework\Database;
 
+use Framework\Database\Enums\DatabaseDriver;
+
 /**
  * SQL Grammar - Generiert SQL-Statements für verschiedene Datenbanken
  */

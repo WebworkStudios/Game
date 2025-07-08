@@ -6,6 +6,7 @@ declare(strict_types=1);
 namespace Framework\Database;
 
 use Framework\Database\Enums\ConnectionType;
+use Framework\Database\Enums\DatabaseDriver;
 use InvalidArgumentException;
 
 /**
@@ -13,6 +14,7 @@ use InvalidArgumentException;
  */
 readonly class DatabaseConfig
 {
+    public readonly int $port;
     private const array DEFAULT_OPTIONS = [
         \PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION,
         \PDO::ATTR_DEFAULT_FETCH_MODE => \PDO::FETCH_ASSOC,
@@ -34,20 +36,18 @@ readonly class DatabaseConfig
      */
     public function __construct(
         public DatabaseDriver $driver,
-        public string         $host = 'localhost',
-        public int            $port = 0,
-        public string         $database = '',
-        public string         $username = '',
-        public string         $password = '',
-        public string         $charset = 'utf8mb4',
-        public array          $options = [],
+        public string $host = 'localhost',
+        int $port = 0, // Kein public hier!
+        public string $database = '',
+        public string $username = '',
+        public string $password = '',
+        public string $charset = 'utf8mb4',
+        public array $options = [],
         public ConnectionType $type = ConnectionType::WRITE,
-        public int            $weight = 1,
-    )
-    {
-        if ($this->port === 0) {
-            $this->port = $this->driver->getDefaultPort();
-        }
+        public int $weight = 1,
+    ) {
+        // Port wird hier einmalig gesetzt
+        $this->port = $port === 0 ? $this->driver->getDefaultPort() : $port;
 
         if ($this->driver->requiresHost() && empty($this->host)) {
             throw new InvalidArgumentException("Host is required for {$this->driver->value} driver");
