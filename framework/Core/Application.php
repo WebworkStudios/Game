@@ -1,0 +1,370 @@
+<?php
+
+
+declare(strict_types=1);
+
+namespace Framework\Core;
+
+use Framework\Http\Request;
+use Framework\Http\Response;
+use Framework\Http\HttpStatus;
+use Framework\Routing\Router;
+use Framework\Routing\RouterCache;
+use RuntimeException;
+use Throwable;
+
+/**
+ * Application - Bootstrap und Orchestrierung des Frameworks
+ */
+class Application
+{
+    private const string DEFAULT_TIMEZONE = 'UTC';
+    private const string DEFAULT_CHARSET = 'UTF-8';
+
+    private ServiceContainer $container;
+    private Router $router;
+    private bool $debug = false;
+    private string $basePath;
+
+    /** @var callable|null */
+    private $errorHandler = null;
+
+    public function __construct(string $basePath)
+    {
+        $this->basePath = rtrim($basePath, '/');
+        $this->container = new ServiceContainer();
+
+        $this->bootstrap();
+    }
+
+    /**
+     * Startet die Anwendung und verarbeitet Request
+     */
+    public function run(): void
+    {
+        try {
+            $request = Request::fromGlobals();
+            $response = $this->handle($request);
+            $response->send();
+        } catch (Throwable $e) {
+            $this->handleException($e)->send();
+        }
+    }
+
+    /**
+     * Verarbeitet HTTP-Request und gibt Response zurück
+     */
+    public function handle(Request $request): Response
+    {
+        try {
+            return $this->router->handle($request);
+        } catch (Throwable $e) {
+            return $this->handleException($e);
+        }
+    }
+
+    /**
+     * Setzt Debug-Modus
+     */
+    public function setDebug(bool $debug): self
+    {
+        $this->debug = $debug;
+        return $this;
+    }
+
+    /**
+     * Setzt Custom Error Handler
+     */
+    public function setErrorHandler(callable $handler): self
+    {
+        $this->errorHandler = $handler;
+        return $this;
+    }
+
+    /**
+     * Setzt 404-Handler
+     */
+    public function setNotFoundHandler(callable $handler): self
+    {
+        $this->router->setNotFoundHandler($handler);
+        return $this;
+    }
+
+    /**
+     * Holt Service Container
+     */
+    public function getContainer(): ServiceContainer
+    {
+        return $this->container;
+    }
+
+    /**
+     * Holt Router
+     */
+    public function getRouter(): Router
+    {
+        return $this->router;
+    }
+
+    /**
+     * Holt Base Path
+     */
+    public function getBasePath(): string
+    {
+        return $this->basePath;
+    }
+
+    /**
+     * Registriert einen Service
+     */
+    public function singleton(string $abstract, string|callable|null $concrete = null): self
+    {
+        $this->container->singleton($abstract, $concrete);
+        return $this;
+    }
+
+    /**
+     * Registriert Transient Service
+     */
+    public function transient(string $abstract, string|callable|null $concrete = null): self
+    {
+        $this->container->transient($abstract, $concrete);
+        return $this;
+    }
+
+    /**
+     * Bindet Interface an Implementierung
+     */
+    public function bind(string $interface, string $implementation): self
+    {
+        $this->container->bind($interface, $implementation);
+        return $this;
+    }
+
+    /**
+     * Lädt Konfiguration aus Datei
+     */
+    public function loadConfig(string $configFile): array
+    {
+        $fullPath = $this->basePath . '/' . ltrim($configFile, '/');
+
+        if (!file_exists($fullPath)) {
+            throw new RuntimeException("Config file not found: {$fullPath}");
+        }
+
+        $config = require $fullPath;
+
+        if (!is_array($config)) {
+            throw new RuntimeException("Config file must return array: {$fullPath}");
+        }
+
+        return $config;
+    }
+
+    /**
+     * Bootstrap der Anwendung
+     */
+    private function bootstrap(): void
+    {
+        $this->setupEnvironment();
+        $this->registerCoreServices();
+        $this->setupRouter();
+    }
+
+    /**
+     * Setup der PHP-Umgebung
+     */
+    private function setupEnvironment(): void
+    {
+        // Error Reporting
+        error_reporting(E_ALL);
+        ini_set('display_errors', '0');
+        ini_set('log_errors', '1');
+
+        // Timezone
+        date_default_timezone_set(self::DEFAULT_TIMEZONE);
+
+        // Charset
+        ini_set('default_charset', self::DEFAULT_CHARSET);
+        mb_internal_encoding(self::DEFAULT_CHARSET);
+
+        // Session (falls benötigt)
+        if (session_status() === PHP_SESSION_NONE) {
+            session_start();
+        }
+    }
+
+    /**
+     * Registriert Core-Services im Container
+     */
+    private function registerCoreServices(): void
+    {
+        // Container sich selbst registrieren
+        $this->container->instance(ServiceContainer::class, $this->container);
+
+        // Application sich selbst registrieren
+        $this->container->instance(Application::class, $this);
+        $this->container->instance(static::class, $this);
+
+        // RouterCache registrieren
+        $this->container->singleton(RouterCache::class, function () {
+            return new RouterCache(
+                cacheFile: $this->basePath . '/storage/cache/routes.php',
+                actionsPath: $this->basePath . '/app/Actions'
+            );
+        });
+
+        // Router registrieren
+        $this->container->singleton(Router::class, function (ServiceContainer $container) {
+            return new Router(
+                container: $container,
+                cache: $container->get(RouterCache::class)
+            );
+        });
+    }
+
+    /**
+     * Setup des Routers
+     */
+    private function setupRouter(): void
+    {
+        $this->router = $this->container->get(Router::class);
+
+        // Standard 404 Handler
+        $this->router->setNotFoundHandler(function (Request $request) {
+            return $this->render404Page($request);
+        });
+
+        // Standard 405 Handler
+        $this->router->setMethodNotAllowedHandler(function (Request $request) {
+            return Response::methodNotAllowed('Method Not Allowed');
+        });
+    }
+
+    /**
+     * Behandelt Exceptions
+     */
+    private function handleException(Throwable $e): Response
+    {
+        // Custom Error Handler
+        if ($this->errorHandler !== null) {
+            try {
+                $response = ($this->errorHandler)($e);
+                if ($response instanceof Response) {
+                    return $response;
+                }
+            } catch (Throwable) {
+                // Fallback zu Standard-Handler
+            }
+        }
+
+        // Debug-Modus: Detaillierte Fehlerausgabe
+        if ($this->debug) {
+            return $this->renderDebugError($e);
+        }
+
+        // Production: Generische Fehlerseite
+        return $this->renderProductionError($e);
+    }
+
+    /**
+     * Rendert 404-Seite
+     */
+    private function render404Page(Request $request): Response
+    {
+        $html = "
+        <!DOCTYPE html>
+        <html lang=de>
+        <head>
+            <title>404 - Page Not Found</title>
+            <meta charset='utf-8'>
+            <style>
+                body { font-family: Arial, sans-serif; text-align: center; margin-top: 100px; }
+                .error { color: #666; }
+                .code { font-size: 4em; font-weight: bold; color: #333; }
+                .message { font-size: 1.2em; margin: 20px 0; }
+                .path { background: #f5f5f5; padding: 10px; border-radius: 5px; margin: 20px auto; max-width: 600px; }
+            </style>
+        </head>
+        <body>
+            <div class='error'>
+                <div class='code'>404</div>
+                <div class='message'>Page Not Found</div>
+                <div class='path'>Path: {$request->getPath()}</div>
+                <a href='/'>← Back to Home</a>
+            </div>
+        </body>
+        </html>";
+
+        return Response::notFound($html);
+    }
+
+    /**
+     * Rendert Debug-Fehlerseite
+     */
+    private function renderDebugError(Throwable $e): Response
+    {
+        $html = "
+        <!DOCTYPE html>
+        <html lang=de>
+        <head>
+            <title>Error - {$e->getMessage()}</title>
+            <meta charset='utf-8'>
+            <style>
+                body { font-family: monospace; margin: 20px; background: #f8f8f8; }
+                .error { background: white; padding: 20px; border-left: 5px solid #e74c3c; }
+                .message { font-size: 1.2em; font-weight: bold; color: #e74c3c; margin-bottom: 10px; }
+                .file { color: #666; margin-bottom: 20px; }
+                .trace { background: #f5f5f5; padding: 15px; border-radius: 5px; overflow-x: auto; }
+                pre { margin: 0; white-space: pre-wrap; }
+            </style>
+        </head>
+        <body>
+            <div class='error'>
+                <div class='message'>" . get_class($e) . ": {$e->getMessage()}</div>
+                <div class='file'>File: {$e->getFile()}:{$e->getLine()}</div>
+                <div class='trace'>
+                    <strong>Stack Trace:</strong>
+                    <pre>{$e->getTraceAsString()}</pre>
+                </div>
+            </div>
+        </body>
+        </html>";
+
+        return Response::serverError($html);
+    }
+
+    /**
+     * Rendert Production-Fehlerseite
+     */
+    private function renderProductionError(Throwable $e): Response
+    {
+        // Log error
+        error_log("Application Error: " . $e->getMessage() . " in " . $e->getFile() . ":" . $e->getLine());
+
+        $html = "
+        <!DOCTYPE html>
+        <html lang=de>
+        <head>
+            <title>500 - Internal Server Error</title>
+            <meta charset='utf-8'>
+            <style>
+                body { font-family: Arial, sans-serif; text-align: center; margin-top: 100px; }
+                .error { color: #666; }
+                .code { font-size: 4em; font-weight: bold; color: #e74c3c; }
+                .message { font-size: 1.2em; margin: 20px 0; }
+            </style>
+        </head>
+        <body>
+            <div class='error'>
+                <div class='code'>500</div>
+                <div class='message'>Internal Server Error</div>
+                <p>Something went wrong. Please try again later.</p>
+                <a href='/'>← Back to Home</a>
+            </div>
+        </body>
+        </html>";
+
+        return Response::serverError($html);
+    }
+}

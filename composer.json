@@ -1,0 +1,35 @@
+{
+  "name": "custom/php-framework",
+  "description": "Modern PHP 8.4 Framework with Attribute-based Routing",
+  "type": "project",
+  "license": "MIT",
+  "minimum-stability": "stable",
+  "prefer-stable": true,
+  "require": {
+    "php": ">=8.4",
+    "ext-json": "*",
+    "ext-mbstring": "*",
+    "ext-fileinfo": "*",
+    "ext-pdo": "*"
+  },
+  "autoload": {
+    "psr-4": {
+      "Framework\\": "framework/",
+      "App\\": "app/"
+    }
+  },
+  "scripts": {
+    "serve": "php -S localhost:8000 -t public",
+    "cache:clear": "php -r \"array_map('unlink', glob('storage/cache/*.php'));\"",
+    "post-create-project-cmd": [
+      "@php -r \"if (!file_exists('storage/cache')) mkdir('storage/cache', 0755, true);\"",
+      "@php -r \"if (!file_exists('storage/logs')) mkdir('storage/logs', 0755, true);\"",
+      "@php -r \"if (!file_exists('storage/sessions')) mkdir('storage/sessions', 0755, true);\"",
+      "@php -r \"if (!file_exists('storage/uploads')) mkdir('storage/uploads', 0755, true);\""
+    ]
+  },
+  "config": {
+    "optimize-autoloader": true,
+    "sort-packages": true
+  }
+}

@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Framework\Routing;
@@ -21,9 +22,9 @@ class RouterCache
     ) {}
 
     /**
-     * Lädt Routes aus Cache oder erstellt neuen Cache
+     * Lädt RouteEntry-Objekte (Hauptmethode für Router)
      */
-    public function getRoutes(): array
+    public function loadRouteEntries(): array
     {
         if ($this->isCacheValid()) {
             return $this->loadFromCache();
@@ -60,15 +61,27 @@ class RouterCache
     }
 
     /**
-     * Lädt Routes aus Cache-Datei
+     * Lädt RouteEntry-Objekte aus Cache-Datei
      */
     private function loadFromCache(): array
     {
-        return require $this->cacheFile;
+        $cacheData = require $this->cacheFile;
+
+        // Konvertiere Arrays zurück zu RouteEntry-Objekten
+        return array_map(function (array $data) {
+            return new RouteEntry(
+                pattern: $data['pattern'],
+                methods: array_map(fn(string $method) => HttpMethod::from($method), $data['methods']),
+                action: $data['action'],
+                middlewares: $data['middlewares'],
+                name: $data['name'],
+                parameters: $data['parameters'],
+            );
+        }, $cacheData);
     }
 
     /**
-     * Scannt Action-Verzeichnis nach Routes
+     * Scannt Action-Verzeichnis und gibt RouteEntry-Objekte zurück
      */
     private function scanRoutes(): array
     {
@@ -102,7 +115,7 @@ class RouterCache
     }
 
     /**
-     * Speichert Routes in Cache-Datei
+     * Speichert RouteEntry-Objekte als Arrays in Cache-Datei
      */
     private function saveToCache(array $routes): void
     {
@@ -111,7 +124,7 @@ class RouterCache
             throw new RuntimeException("Cannot create cache directory: {$cacheDir}");
         }
 
-        // Serialisierbare Daten für Cache
+        // Konvertiere RouteEntry-Objekte zu serialisierbaren Arrays
         $cacheData = array_map(function (RouteEntry $route) {
             return [
                 'pattern' => $route->pattern,
@@ -195,24 +208,5 @@ class RouterCache
         }
 
         return true;
-    }
-
-    /**
-     * Lädt cached RouteEntry-Objekte
-     */
-    public function loadRouteEntries(): array
-    {
-        $cacheData = $this->getRoutes();
-
-        return array_map(function (array $data) {
-            return new RouteEntry(
-                pattern: $data['pattern'],
-                methods: array_map(fn(string $method) => HttpMethod::from($method), $data['methods']),
-                action: $data['action'],
-                middlewares: $data['middlewares'],
-                name: $data['name'],
-                parameters: $data['parameters'],
-            );
-        }, $cacheData);
     }
 }
