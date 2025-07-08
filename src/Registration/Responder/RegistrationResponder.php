@@ -44,7 +44,7 @@ class RegistrationResponder
     public function registrationSuccess(): void
     {
         $this->session->flash('success', 'Registration successful! Please check your email to activate your account.');
-        $this->redirect('/login');
+        $this->redirect('/register');
     }
 
     public function registrationFailed(array $errors, array $formData = []): void
