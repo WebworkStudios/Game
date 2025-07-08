@@ -42,7 +42,7 @@ class SqlGrammar
             $sql .= $this->compileWheres($components['wheres']);
         }
 
-        if (isset($components['groups'])) {
+        if (isset($components['groups']) && !empty($components['groups'])) {
             $sql .= ' GROUP BY ' . implode(', ', array_map([$this, 'wrapColumn'], $components['groups']));
         }
 

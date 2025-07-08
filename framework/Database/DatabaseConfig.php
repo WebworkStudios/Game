@@ -75,7 +75,7 @@ readonly class DatabaseConfig
                 $this->database,
                 $this->charset
             ),
-            DatabaseDriver::POSTGRESQL => sprintf(
+            DatabaseDriver::POSTGRESQL, DatabaseDriver::PGSQL => sprintf(
                 'pgsql:host=%s;port=%d;dbname=%s',
                 $this->host,
                 $this->port,

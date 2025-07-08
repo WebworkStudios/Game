@@ -1,16 +1,15 @@
 <?php
 
-
 declare(strict_types=1);
 
 namespace Framework\Database;
 
+use Exception;
 use Framework\Database\Enums\ConnectionType;
 use Framework\Database\Enums\JoinType;
 use Framework\Database\Enums\OrderDirection;
 use Framework\Database\Enums\ParameterType;
 use InvalidArgumentException;
-use PDOStatement;
 
 /**
  * QueryBuilder - Fluent SQL Query Builder
@@ -60,10 +59,10 @@ class QueryBuilder
     /**
      * Fügt WHERE Condition hinzu
      */
-    public function where(string $column, string $operator, mixed $value = null): self
+    public function where(string $column, mixed $operator, mixed $value = null): self
     {
-        // where($column, $value) syntax
-        if ($value === null) {
+        // where($column, $value) syntax - nur 2 Parameter
+        if ($value === null && func_num_args() === 2) {
             $value = $operator;
             $operator = '=';
         }
@@ -73,13 +72,22 @@ class QueryBuilder
         $this->wheres[] = [
             'type' => 'basic',
             'column' => $column,
-            'operator' => $operator,
+            'operator' => (string) $operator, // Cast zu string
             'binding' => $binding,
         ];
 
         $this->bindings[$binding] = $value;
 
         return $this;
+    }
+
+    /**
+     * Erstellt eindeutigen Binding-Namen
+     */
+    private function createBinding(string $column): string
+    {
+        $base = preg_replace('/[^a-zA-Z0-9_]/', '_', $column);
+        return $base . '_' . (++$this->bindingCounter);
     }
 
     /**
@@ -234,6 +242,22 @@ class QueryBuilder
     }
 
     /**
+     * Fügt JOIN hinzu
+     */
+    private function addJoin(JoinType $type, string $table, string $first, string $operator, string $second): self
+    {
+        $this->joins[] = [
+            'type' => $type,
+            'table' => $table,
+            'first' => $first,
+            'operator' => $operator,
+            'second' => $second,
+        ];
+
+        return $this;
+    }
+
+    /**
      * LEFT JOIN
      */
     public function leftJoin(string $table, string $first, string $operator, string $second): self
@@ -285,6 +309,14 @@ class QueryBuilder
     }
 
     /**
+     * ORDER BY DESC
+     */
+    public function orderByDesc(string $column): self
+    {
+        return $this->orderBy($column, OrderDirection::DESC);
+    }
+
+    /**
      * ORDER BY
      */
     public function orderBy(string $column, OrderDirection $direction = OrderDirection::ASC): self
@@ -294,23 +326,6 @@ class QueryBuilder
             'direction' => $direction,
         ];
 
-        return $this;
-    }
-
-    /**
-     * ORDER BY DESC
-     */
-    public function orderByDesc(string $column): self
-    {
-        return $this->orderBy($column, OrderDirection::DESC);
-    }
-
-    /**
-     * LIMIT
-     */
-    public function limit(int $limit): self
-    {
-        $this->limit = $limit;
         return $this;
     }
 
@@ -331,6 +346,14 @@ class QueryBuilder
         $this->limit = $perPage;
         $this->offset = ($page - 1) * $perPage;
         return $this;
+    }
+
+    /**
+     * Holt erste Zeile oder Exception
+     */
+    public function firstOrFail(): array
+    {
+        return $this->limit(1)->get()->firstOrFail();
     }
 
     /**
@@ -356,33 +379,68 @@ class QueryBuilder
     }
 
     /**
-     * Holt erste Zeile
+     * Führt Query aus
      */
-    public function first(): ?array
+    private function executeQuery(string $sql, ConnectionType $type, ?array $bindings = null): QueryResult
     {
-        return $this->limit(1)->get()->first();
+        $bindings ??= $this->bindings;
+
+        $connection = $this->connectionManager->getConnection($this->connectionName, $type);
+
+        $startTime = microtime(true);
+
+        try {
+            $statement = $connection->prepare($sql);
+
+            // Bind parameters mit Typ-Erkennung
+            foreach ($bindings as $key => $value) {
+                $paramType = ParameterType::fromValue($value);
+                $statement->bindValue(":{$key}", $value, $paramType->value);
+            }
+
+            $statement->execute();
+
+            $executionTime = microtime(true) - $startTime;
+
+            if ($this->debugMode) {
+                $this->debugQuery($sql, $bindings, $executionTime);
+            }
+
+            return new QueryResult($statement, $sql, $bindings, $executionTime);
+
+        } catch (Exception $e) {
+            if ($this->debugMode) {
+                $this->debugQuery($sql, $bindings, microtime(true) - $startTime, $e);
+            }
+
+            throw $e;
+        }
     }
 
     /**
-     * Holt erste Zeile oder Exception
+     * Debug Query Output
      */
-    public function firstOrFail(): array
+    private function debugQuery(string $sql, array $bindings, float $time, ?Exception $error = null): void
     {
-        return $this->limit(1)->get()->firstOrFail();
+        echo "\n=== QUERY DEBUG ===\n";
+        echo "SQL: {$sql}\n";
+        echo "Bindings: " . json_encode($bindings) . "\n";
+        echo "Time: " . round($time * 1000, 2) . "ms\n";
+
+        if ($error) {
+            echo "Error: " . $error->getMessage() . "\n";
+        }
+
+        echo "===================\n\n";
     }
 
     /**
-     * Zählt Ergebnisse
+     * LIMIT
      */
-    public function count(): int
+    public function limit(int $limit): self
     {
-        $original = $this->select;
-        $this->select = ['COUNT(*) as count'];
-
-        $result = $this->get()->first();
-        $this->select = $original;
-
-        return (int)($result['count'] ?? 0);
+        $this->limit = $limit;
+        return $this;
     }
 
     /**
@@ -400,6 +458,48 @@ class QueryBuilder
         $result = $this->executeQuery($sql, ConnectionType::WRITE, $bindings);
 
         return $result->count() > 0;
+    }
+
+    /**
+     * Bereitet Insert-Bindings vor
+     */
+    private function prepareInsertBindings(array $values): array
+    {
+        // Multiple rows
+        if (isset($values[0]) && is_array($values[0])) {
+            $bindings = [];
+            foreach ($values as $index => $row) {
+                foreach ($row as $column => $value) {
+                    $bindings["{$column}_{$index}"] = $value;
+                }
+            }
+            return $bindings;
+        }
+
+        // Single row
+        return $values;
+    }
+
+    /**
+     * Zählt Ergebnisse
+     */
+    public function count(): int
+    {
+        $original = $this->select;
+        $this->select = ['COUNT(*) as count'];
+
+        $result = $this->get()->first();
+        $this->select = $original;
+
+        return (int)($result['count'] ?? 0);
+    }
+
+    /**
+     * Holt erste Zeile
+     */
+    public function first(): ?array
+    {
+        return $this->limit(1)->get()->first();
     }
 
     /**
@@ -458,106 +558,5 @@ class QueryBuilder
         ];
 
         return $this->grammar->compileSelect($components);
-    }
-
-    /**
-     * Fügt JOIN hinzu
-     */
-    private function addJoin(JoinType $type, string $table, string $first, string $operator, string $second): self
-    {
-        $this->joins[] = [
-            'type' => $type,
-            'table' => $table,
-            'first' => $first,
-            'operator' => $operator,
-            'second' => $second,
-        ];
-
-        return $this;
-    }
-
-    /**
-     * Erstellt eindeutigen Binding-Namen
-     */
-    private function createBinding(string $column): string
-    {
-        $base = preg_replace('/[^a-zA-Z0-9_]/', '_', $column);
-        return $base . '_' . (++$this->bindingCounter);
-    }
-
-    /**
-     * Bereitet Insert-Bindings vor
-     */
-    private function prepareInsertBindings(array $values): array
-    {
-        // Multiple rows
-        if (isset($values[0]) && is_array($values[0])) {
-            $bindings = [];
-            foreach ($values as $index => $row) {
-                foreach ($row as $column => $value) {
-                    $bindings["{$column}_{$index}"] = $value;
-                }
-            }
-            return $bindings;
-        }
-
-        // Single row
-        return $values;
-    }
-
-    /**
-     * Führt Query aus
-     */
-    private function executeQuery(string $sql, ConnectionType $type, ?array $bindings = null): QueryResult
-    {
-        $bindings ??= $this->bindings;
-
-        $connection = $this->connectionManager->getConnection($this->connectionName, $type);
-
-        $startTime = microtime(true);
-
-        try {
-            $statement = $connection->prepare($sql);
-
-            // Bind parameters mit Typ-Erkennung
-            foreach ($bindings as $key => $value) {
-                $paramType = ParameterType::fromValue($value);
-                $statement->bindValue(":{$key}", $value, $paramType->value);
-            }
-
-            $statement->execute();
-
-            $executionTime = microtime(true) - $startTime;
-
-            if ($this->debugMode) {
-                $this->debugQuery($sql, $bindings, $executionTime);
-            }
-
-            return new QueryResult($statement, $sql, $bindings, $executionTime);
-
-        } catch (\Exception $e) {
-            if ($this->debugMode) {
-                $this->debugQuery($sql, $bindings, microtime(true) - $startTime, $e);
-            }
-
-            throw $e;
-        }
-    }
-
-    /**
-     * Debug Query Output
-     */
-    private function debugQuery(string $sql, array $bindings, float $time, ?\Exception $error = null): void
-    {
-        echo "\n=== QUERY DEBUG ===\n";
-        echo "SQL: {$sql}\n";
-        echo "Bindings: " . json_encode($bindings) . "\n";
-        echo "Time: " . round($time * 1000, 2) . "ms\n";
-
-        if ($error) {
-            echo "Error: " . $error->getMessage() . "\n";
-        }
-
-        echo "===================\n\n";
     }
 }

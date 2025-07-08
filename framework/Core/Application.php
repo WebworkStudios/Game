@@ -1,20 +1,21 @@
 <?php
 
-
 declare(strict_types=1);
 
 namespace Framework\Core;
 
+use Framework\Database\DatabaseServiceProvider;
+use Framework\Database\ConnectionManager;
+use Framework\Database\QueryBuilder;
 use Framework\Http\Request;
 use Framework\Http\Response;
-use Framework\Http\HttpStatus;
 use Framework\Routing\Router;
 use Framework\Routing\RouterCache;
 use RuntimeException;
 use Throwable;
 
 /**
- * Application - Bootstrap und Orchestrierung des Frameworks
+ * Application - Bootstrap und Orchestrierung des Frameworks (Database-erweitert)
  */
 class Application
 {
@@ -73,6 +74,14 @@ class Application
     }
 
     /**
+     * Prüft Debug-Modus
+     */
+    public function isDebug(): bool
+    {
+        return $this->debug;
+    }
+
+    /**
      * Setzt Custom Error Handler
      */
     public function setErrorHandler(callable $handler): self
@@ -112,6 +121,32 @@ class Application
     public function getBasePath(): string
     {
         return $this->basePath;
+    }
+
+    /**
+     * Holt Database Connection Manager
+     */
+    public function getDatabase(): ConnectionManager
+    {
+        return $this->container->get(ConnectionManager::class);
+    }
+
+    /**
+     * Erstellt neuen QueryBuilder
+     */
+    public function query(string $connectionName = 'default'): QueryBuilder
+    {
+        /** @var callable $factory */
+        $factory = $this->container->get('query_builder_factory');
+        return $factory($connectionName);
+    }
+
+    /**
+     * Führt Database-Transaktion aus
+     */
+    public function transaction(callable $callback, string $connectionName = 'default'): mixed
+    {
+        return $this->getDatabase()->transaction($callback, $connectionName);
     }
 
     /**
@@ -162,12 +197,47 @@ class Application
     }
 
     /**
+     * Installiert Framework (erstellt Verzeichnisse und Konfigurationen)
+     */
+    public function install(): bool
+    {
+        $success = true;
+
+        // Erstelle Verzeichnisse
+        $directories = [
+            'storage/cache',
+            'storage/logs',
+            'storage/sessions',
+            'storage/uploads',
+            'app/Config',
+            'app/Actions',
+        ];
+
+        foreach ($directories as $dir) {
+            $fullPath = $this->basePath . '/' . $dir;
+            if (!is_dir($fullPath) && !mkdir($fullPath, 0755, true)) {
+                echo "Failed to create directory: {$fullPath}\n";
+                $success = false;
+            }
+        }
+
+        // Erstelle Database-Konfiguration
+        if (!DatabaseServiceProvider::publishConfig($this->basePath)) {
+            echo "Failed to create database config\n";
+            $success = false;
+        }
+
+        return $success;
+    }
+
+    /**
      * Bootstrap der Anwendung
      */
     private function bootstrap(): void
     {
         $this->setupEnvironment();
         $this->registerCoreServices();
+        $this->registerDatabaseServices();
         $this->setupRouter();
     }
 
@@ -224,6 +294,15 @@ class Application
     }
 
     /**
+     * Registriert Database-Services
+     */
+    private function registerDatabaseServices(): void
+    {
+        $provider = new DatabaseServiceProvider($this->container, $this);
+        $provider->register();
+    }
+
+    /**
      * Setup des Routers
      */
     private function setupRouter(): void
@@ -274,7 +353,7 @@ class Application
     {
         $html = "
         <!DOCTYPE html>
-        <html lang=de>
+        <html>
         <head>
             <title>404 - Page Not Found</title>
             <meta charset='utf-8'>
@@ -306,7 +385,7 @@ class Application
     {
         $html = "
         <!DOCTYPE html>
-        <html lang=de>
+        <html>
         <head>
             <title>Error - {$e->getMessage()}</title>
             <meta charset='utf-8'>
@@ -344,7 +423,7 @@ class Application
 
         $html = "
         <!DOCTYPE html>
-        <html lang=de>
+        <html>
         <head>
             <title>500 - Internal Server Error</title>
             <meta charset='utf-8'>
