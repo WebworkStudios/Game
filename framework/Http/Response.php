@@ -153,6 +153,35 @@ class Response
     }
 
     /**
+     * Template Response Factory
+     */
+    public static function view(
+        string $template,
+        array $data = [],
+        HttpStatus $status = HttpStatus::OK,
+        array $headers = []
+    ): self {
+        $viewRenderer = \Framework\Core\ServiceRegistry::get(\Framework\Templating\ViewRenderer::class);
+        return $viewRenderer->render($template, $data, $status, $headers);
+    }
+
+    /**
+     * Template Response mit JSON-Fallback
+     */
+    public static function viewOrJson(
+        string $template,
+        array $data = [],
+        bool $wantsJson = false,
+        HttpStatus $status = HttpStatus::OK
+    ): self {
+        if ($wantsJson) {
+            return self::json($data, $status);
+        }
+
+        return self::view($template, $data, $status);
+    }
+
+    /**
      * XML Response Factory
      */
     public static function xml(string $xml, HttpStatus $status = HttpStatus::OK, array $headers = []): self
@@ -169,9 +198,6 @@ class Response
         $headers['Content-Type'] = 'text/plain; charset=UTF-8';
         return new self($status, $headers, $text);
     }
-
-
-    // Fluent Interface
 
     /**
      * File Download Response Factory
@@ -211,6 +237,8 @@ class Response
 
         return new self(HttpStatus::OK, (array)$headers, $content);
     }
+
+    // Fluent Interface
 
     public function withStatus(HttpStatus $status): self
     {
@@ -252,8 +280,6 @@ class Response
         return $this->withCookie($name, '', time() - 3600, $path, $domain);
     }
 
-    // Getters
-
     public function withCookie(
         string $name,
         string $value,
@@ -280,6 +306,8 @@ class Response
 
         return $this;
     }
+
+    // Getters
 
     public function getStatus(): HttpStatus
     {

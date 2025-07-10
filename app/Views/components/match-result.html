@@ -1,0 +1,15 @@
+<!-- app/Views/components/match-result.html -->
+<div class="match-result">
+    <div class="teams">
+        <span class="home-team">{{ match.home_team }}</span>
+        <span class="score">{{ match.home_score }} : {{ match.away_score }}</span>
+        <span class="away-team">{{ match.away_team }}</span>
+    </div>
+    <div class="match-info">
+        <p><strong>Date:</strong> {{ match.date }}</p>
+        <p><strong>Stadium:</strong> {{ match.stadium }}</p>
+        {% if match.attendance %}
+        <p><strong>Attendance:</strong> {{ match.attendance }}</p>
+        {% endif %}
+    </div>
+</div>

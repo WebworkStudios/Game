@@ -1,0 +1,128 @@
+<!-- app/Views/pages/test/templates.html -->
+{% extends "layouts/base.html" %}
+
+{% block title %}Template Engine Demo - {{ app_name }}{% endblock %}
+
+{% block content %}
+<h2>🎨 Template Engine Demo</h2>
+
+<div class="alert alert-success">
+    <h4>Template Engine Features</h4>
+    <p>This page demonstrates all template engine features: variables, conditionals, loops, and includes.</p>
+</div>
+
+<!-- Variables Demo -->
+<section>
+    <h3>1. Variables {{ "{{ }}" }}</h3>
+    <ul>
+        <li><strong>App Name:</strong> {{ app_name }}</li>
+        <li><strong>Version:</strong> {{ app_version }}</li>
+        <li><strong>Current User:</strong> {{ user.name }}</li>
+        <li><strong>Demo String:</strong> {{ demo.message }}</li>
+        <li><strong>Number:</strong> {{ demo.number }}</li>
+    </ul>
+</section>
+
+<!-- Conditionals Demo -->
+<section>
+    <h3>2. Conditionals {% if %}</h3>
+
+    {% if user.is_admin %}
+    <div class="alert alert-success">
+        ✅ You are an admin! You can see this message.
+    </div>
+    {% else %}
+    <div class="alert alert-error">
+        ❌ You are not an admin.
+    </div>
+    {% endif %}
+
+    {% if demo.show_secret %}
+    <p>🔓 Secret content is visible!</p>
+    {% else %}
+    <p>🔒 Secret content is hidden.</p>
+    {% endif %}
+</section>
+
+<!-- Loops Demo -->
+<section>
+    <h3>3. Loops {% for %}</h3>
+
+    <h4>Demo Items:</h4>
+    {% if demo.items %}
+    <ul>
+        {% for demo.items as item %}
+        <li>
+            <strong>{{ item.name }}</strong>
+            {% if item.active %}
+            <span style="color: green;">✅ Active</span>
+            {% else %}
+            <span style="color: red;">❌ Inactive</span>
+            {% endif %}
+            - {{ item.description }}
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p><em>No items to display</em></p>
+    {% endif %}
+
+    <h4>Numbers 1-5:</h4>
+    {% if demo.numbers %}
+    <div>
+        {% for demo.numbers as number %}
+        <span style="display: inline-block; margin: 5px; padding: 10px; background: #667eea; color: white; border-radius: 5px;">
+                {{ number }}
+            </span>
+        {% endfor %}
+    </div>
+    {% endif %}
+</section>
+
+<!-- Nested Data Demo -->
+<section>
+    <h3>4. Nested Data Access</h3>
+    {% if demo.nested %}
+    <ul>
+        <li><strong>Level 1:</strong> {{ demo.nested.level1 }}</li>
+        <li><strong>Level 2:</strong> {{ demo.nested.level2.value }}</li>
+        <li><strong>Level 3:</strong> {{ demo.nested.level2.deep.message }}</li>
+    </ul>
+    {% endif %}
+</section>
+
+<!-- Includes Demo -->
+<section>
+    <h3>5. Template Includes</h3>
+    <p>The player card below is included from <code>components/player-card.html</code>:</p>
+
+    {% if demo.sample_player %}
+    {% include "components/player-card.html" with demo.sample_player as player %}
+    {% endif %}
+</section>
+
+<!-- Complex Example -->
+<section>
+    <h3>6. Complex Example: Team List</h3>
+    {% if demo.teams %}
+    {% for demo.teams as team %}
+    <div class="team-info" style="border: 1px solid #ddd; padding: 15px; margin: 10px 0; border-radius: 8px;">
+        <h4>{{ team.name }}</h4>
+        <p><strong>Players:</strong> {{ team.players|length }}</p>
+
+        {% if team.players %}
+        <div style="margin-top: 10px;">
+            {% for team.players as player %}
+            <span style="display: inline-block; margin: 2px; padding: 5px 10px; background: #f0f0f0; border-radius: 3px; font-size: 0.9em;">
+                            {{ player.name }} ({{ player.position }})
+                        </span>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p><em>No players</em></p>
+        {% endif %}
+    </div>
+    {% endfor %}
+    {% endif %}
+</section>
+{% endblock %}

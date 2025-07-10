@@ -1,0 +1,78 @@
+<!-- app/Views/pages/team/overview.html -->
+{% extends "layouts/base.html" %}
+
+{% block title %}Team Overview - {{ app_name }}{% endblock %}
+
+{% block content %}
+<h2>{{ team.name }} - Team Overview</h2>
+
+<!-- Team Statistics -->
+<div class="team-stats">
+    <div class="stat-box">
+        <div class="stat-number">{{ team.stats.players_count }}</div>
+        <div class="stat-label">Players</div>
+    </div>
+    <div class="stat-box">
+        <div class="stat-number">{{ team.stats.average_age }}</div>
+        <div class="stat-label">Average Age</div>
+    </div>
+    <div class="stat-box">
+        <div class="stat-number">{{ team.stats.total_goals }}</div>
+        <div class="stat-label">Goals Scored</div>
+    </div>
+    <div class="stat-box">
+        <div class="stat-number">{{ team.stats.wins }}</div>
+        <div class="stat-label">Wins</div>
+    </div>
+</div>
+
+<!-- Players List -->
+<h3>Squad ({{ team.players|length }} players)</h3>
+
+{% if team.players %}
+<!-- Injured Players Alert -->
+{% if team.injured_count %}
+<div class="alert alert-error">
+    ⚠️ {{ team.injured_count }} player{% if team.injured_count > 1 %}s{% endif %} currently injured
+</div>
+{% endif %}
+
+<!-- Players by Position -->
+{% for position in team.positions %}
+<h4>{{ position.name }} ({{ position.players|length }})</h4>
+
+{% for position.players as player %}
+{% include "components/player-card.html" %}
+{% endfor %}
+
+{% if position.players|length == 0 %}
+<p><em>No players in this position</em></p>
+{% endif %}
+{% endfor %}
+
+{% else %}
+<div class="alert alert-error">
+    <h4>No Players Found</h4>
+    <p>Your team doesn't have any players yet. Sign some players to get started!</p>
+</div>
+{% endif %}
+
+<!-- Recent Matches -->
+{% if team.recent_matches %}
+<h3>Recent Matches</h3>
+{% for team.recent_matches as match %}
+{% include "components/match-result.html" %}
+{% endfor %}
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Example JavaScript for interactivity
+    document.querySelectorAll('.player-card').forEach(card => {
+        card.addEventListener('click', () => {
+            card.style.transform = card.style.transform ? '' : 'scale(1.02)';
+        });
+    });
+</script>
+{% endblock %}

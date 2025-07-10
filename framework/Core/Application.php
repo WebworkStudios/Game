@@ -10,6 +10,9 @@ use Framework\Database\QueryBuilder;
 use Framework\Security\SecurityServiceProvider;
 use Framework\Security\Session;
 use Framework\Security\Csrf;
+use Framework\Templating\TemplatingServiceProvider;
+use Framework\Templating\TemplateEngine;
+use Framework\Templating\ViewRenderer;
 use Framework\Validation\ValidationServiceProvider;
 use Framework\Validation\Validator;
 use Framework\Validation\ValidatorFactory;
@@ -21,7 +24,7 @@ use RuntimeException;
 use Throwable;
 
 /**
- * Application - Bootstrap und Orchestrierung des Frameworks (Database, Security & Validation)
+ * Application - Bootstrap und Orchestrierung des Frameworks (Database, Security, Validation & Templating)
  */
 class Application
 {
@@ -198,6 +201,38 @@ class Application
     }
 
     /**
+     * Holt Template Engine
+     */
+    public function getTemplateEngine(): TemplateEngine
+    {
+        return $this->container->get(TemplateEngine::class);
+    }
+
+    /**
+     * Render template
+     */
+    public function render(string $template, array $data = []): string
+    {
+        return $this->getTemplateEngine()->render($template, $data);
+    }
+
+    /**
+     * Holt View Renderer
+     */
+    public function getViewRenderer(): ViewRenderer
+    {
+        return $this->container->get(ViewRenderer::class);
+    }
+
+    /**
+     * Render template to Response
+     */
+    public function view(string $template, array $data = []): Response
+    {
+        return $this->getViewRenderer()->render($template, $data);
+    }
+
+    /**
      * Registriert einen Service
      */
     public function singleton(string $abstract, string|callable|null $concrete = null): self
@@ -254,12 +289,17 @@ class Application
         // Erstelle Verzeichnisse
         $directories = [
             'storage/cache',
+            'storage/cache/views',
             'storage/logs',
             'storage/sessions',
             'storage/uploads',
             'app/Config',
             'app/Actions',
             'app/Middleware',
+            'app/Views',
+            'app/Views/layouts',
+            'app/Views/components',
+            'app/Views/pages',
         ];
 
         foreach ($directories as $dir) {
@@ -282,6 +322,12 @@ class Application
             $success = false;
         }
 
+        // Erstelle Templating-Konfiguration
+        if (!TemplatingServiceProvider::publishConfig($this->basePath)) {
+            echo "Failed to create templating config\n";
+            $success = false;
+        }
+
         return $success;
     }
 
@@ -295,6 +341,7 @@ class Application
         $this->registerDatabaseServices();
         $this->registerSecurityServices();
         $this->registerValidationServices();
+        $this->registerTemplatingServices();
         $this->setupRouter();
     }
 
@@ -330,6 +377,8 @@ class Application
         // Application sich selbst registrieren
         $this->container->instance(Application::class, $this);
         $this->container->instance(static::class, $this);
+
+        ServiceRegistry::setContainer($this->container);
 
         // RouterCache registrieren
         $this->container->singleton(RouterCache::class, function () {
@@ -373,6 +422,22 @@ class Application
     {
         $provider = new ValidationServiceProvider($this->container, $this);
         $provider->register();
+    }
+
+    /**
+     * Registriert Templating-Services
+     */
+    private function registerTemplatingServices(): void
+    {
+        $provider = new TemplatingServiceProvider($this->container, $this);
+        $provider->register();
+
+        // ViewRenderer registrieren
+        $this->container->singleton(ViewRenderer::class, function (ServiceContainer $container) {
+            return new ViewRenderer(
+                engine: $container->get(TemplateEngine::class)
+            );
+        });
     }
 
     /**
@@ -428,31 +493,40 @@ class Application
      */
     private function render404Page(Request $request): Response
     {
-        $html = "
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <title>404 - Page Not Found</title>
-            <meta charset='utf-8'>
-            <style>
-                body { font-family: Arial, sans-serif; text-align: center; margin-top: 100px; }
-                .error { color: #666; }
-                .code { font-size: 4em; font-weight: bold; color: #333; }
-                .message { font-size: 1.2em; margin: 20px 0; }
-                .path { background: #f5f5f5; padding: 10px; border-radius: 5px; margin: 20px auto; max-width: 600px; }
-            </style>
-        </head>
-        <body>
-            <div class='error'>
-                <div class='code'>404</div>
-                <div class='message'>Page Not Found</div>
-                <div class='path'>Path: {$request->getPath()}</div>
-                <a href='/'>← Back to Home</a>
-            </div>
-        </body>
-        </html>";
+        // Versuche Template zu laden, falls verfügbar
+        try {
+            return $this->view('errors/404', [
+                'path' => $request->getPath(),
+                'method' => $request->getMethod()->value,
+            ]);
+        } catch (Throwable) {
+            // Fallback zu HTML
+            $html = "
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>404 - Page Not Found</title>
+                <meta charset='utf-8'>
+                <style>
+                    body { font-family: Arial, sans-serif; text-align: center; margin-top: 100px; }
+                    .error { color: #666; }
+                    .code { font-size: 4em; font-weight: bold; color: #333; }
+                    .message { font-size: 1.2em; margin: 20px 0; }
+                    .path { background: #f5f5f5; padding: 10px; border-radius: 5px; margin: 20px auto; max-width: 600px; }
+                </style>
+            </head>
+            <body>
+                <div class='error'>
+                    <div class='code'>404</div>
+                    <div class='message'>Page Not Found</div>
+                    <div class='path'>Path: {$request->getPath()}</div>
+                    <a href='/'>← Back to Home</a>
+                </div>
+            </body>
+            </html>";
 
-        return Response::notFound($html);
+            return Response::notFound($html);
+        }
     }
 
     /**
@@ -498,29 +572,37 @@ class Application
         // Log error
         error_log("Application Error: " . $e->getMessage() . " in " . $e->getFile() . ":" . $e->getLine());
 
-        $html = "
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <title>500 - Internal Server Error</title>
-            <meta charset='utf-8'>
-            <style>
-                body { font-family: Arial, sans-serif; text-align: center; margin-top: 100px; }
-                .error { color: #666; }
-                .code { font-size: 4em; font-weight: bold; color: #e74c3c; }
-                .message { font-size: 1.2em; margin: 20px 0; }
-            </style>
-        </head>
-        <body>
-            <div class='error'>
-                <div class='code'>500</div>
-                <div class='message'>Internal Server Error</div>
-                <p>Something went wrong. Please try again later.</p>
-                <a href='/'>← Back to Home</a>
-            </div>
-        </body>
-        </html>";
+        // Versuche Template zu laden
+        try {
+            return $this->view('errors/500', [
+                'message' => 'Something went wrong. Please try again later.',
+            ]);
+        } catch (Throwable) {
+            // Fallback zu HTML
+            $html = "
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>500 - Internal Server Error</title>
+                <meta charset='utf-8'>
+                <style>
+                    body { font-family: Arial, sans-serif; text-align: center; margin-top: 100px; }
+                    .error { color: #666; }
+                    .code { font-size: 4em; font-weight: bold; color: #e74c3c; }
+                    .message { font-size: 1.2em; margin: 20px 0; }
+                </style>
+            </head>
+            <body>
+                <div class='error'>
+                    <div class='code'>500</div>
+                    <div class='message'>Internal Server Error</div>
+                    <p>Something went wrong. Please try again later.</p>
+                    <a href='/'>← Back to Home</a>
+                </div>
+            </body>
+            </html>";
 
-        return Response::serverError($html);
+            return Response::serverError($html);
+        }
     }
 }
