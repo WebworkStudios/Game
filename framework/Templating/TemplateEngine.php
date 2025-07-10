@@ -40,17 +40,6 @@ class TemplateEngine
     {
         $templatePath = $this->findTemplate($template);
         $compiledPath = $this->cache->get($templatePath);
-
-        // DEBUG: Ausgabe der Pfade
-        error_log("Template: $template");
-        error_log("Template Path: $templatePath");
-        error_log("Compiled Path: $compiledPath");
-
-        // DEBUG: Inhalt der kompilierten Datei ausgeben
-        if (file_exists($compiledPath)) {
-            error_log("Compiled content: " . file_get_contents($compiledPath));
-        }
-
         // Merge globals with data
         $data = array_merge($this->globals, $data);
 

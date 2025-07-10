@@ -117,8 +117,16 @@ PHP;
 
     private function compileText(array $node): string
     {
-        $content = addcslashes($node['content'], "'\\");
-        return "echo '{$content}';\n";
+        $content = $node['content'];
+
+        // Escape only quotes and backslashes, preserve UTF-8 characters
+        $escaped = str_replace(
+            ['\\', '"', "\n", "\r", "\t"],
+            ['\\\\', '\\"', '\\n', '\\r', '\\t'],
+            $content
+        );
+
+        return "echo \"{$escaped}\";\n";
     }
 
     private function compileVariable(array $node): string
@@ -126,9 +134,6 @@ PHP;
         $variableAccess = $this->compileVariableAccess($node);
         return "echo \$renderer->escape({$variableAccess});\n";
     }
-
-
-// framework/Templating/Compiler/TemplateCompiler.php
 
     private function compileVariableAccess(array $node): string
     {
@@ -154,7 +159,27 @@ PHP;
         // Apply filters if present
         if (!empty($node['filters'])) {
             foreach ($node['filters'] as $filter) {
-                $code = "\$renderer->applyFilter('{$filter}', {$code})";
+                $filterName = $filter['name'];
+                $params = $filter['params'] ?? [];
+
+                if (empty($params)) {
+                    $code = "\$renderer->applyFilter('{$filterName}', {$code})";
+                } else {
+                    // Clean up any escaped quotes in parameters before encoding
+                    $cleanParams = array_map(function($param) {
+                        if (is_string($param)) {
+                            // Remove any remaining escape slashes and quotes
+                            $cleaned = str_replace(['\\\'', '\\"', '\\\\'], ["'", '"', '\\'], $param);
+                            // Remove any wrapping quotes that might still be there
+                            $cleaned = trim($cleaned, '\'"');
+                            return $cleaned;
+                        }
+                        return $param;
+                    }, $params);
+
+                    $paramsJson = json_encode($cleanParams, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                    $code = "\$renderer->applyFilter('{$filterName}', {$code}, {$paramsJson})";
+                }
             }
         }
 

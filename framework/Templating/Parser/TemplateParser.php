@@ -129,13 +129,95 @@ class TemplateParser
         return $ast;
     }
 
+    /**
+     * Parse filter parameters respecting quotes
+     */
+    private function parseFilterParameters(string $paramString): array
+    {
+        $params = [];
+        $current = '';
+        $inQuotes = false;
+        $quoteChar = null;
+
+        for ($i = 0; $i < strlen($paramString); $i++) {
+            $char = $paramString[$i];
+
+            if (!$inQuotes && ($char === '"' || $char === "'")) {
+                $inQuotes = true;
+                $quoteChar = $char;
+                continue; // Skip the opening quote
+            }
+
+            if ($inQuotes && $char === $quoteChar) {
+                $inQuotes = false;
+                $quoteChar = null;
+                continue; // Skip the closing quote
+            }
+
+            if (!$inQuotes && $char === ':') {
+                // Parameter separator
+                $param = trim($current);
+                if ($param !== '') {
+                    $params[] = $this->convertParameter($param);
+                }
+                $current = '';
+                continue;
+            }
+
+            $current .= $char;
+        }
+
+        // Add last parameter
+        $param = trim($current);
+        if ($param !== '') {
+            $params[] = $this->convertParameter($param);
+        }
+
+        return $params;
+    }
+
+    /**
+     * Convert parameter to appropriate type
+     */
+    private function convertParameter(string $param): mixed
+    {
+        if (is_numeric($param)) {
+            return str_contains($param, '.') ? (float)$param : (int)$param;
+        }
+
+        return $param;
+    }
+
     private function parseVariable(string $expression): array
     {
-        // Check for filters: variable|filter|filter2
+        // Check for filters: variable|filter:param1:param2|filter2
         if (str_contains($expression, '|')) {
             $parts = explode('|', $expression);
             $variablePart = trim($parts[0]);
-            $filters = array_map('trim', array_slice($parts, 1));
+            $filterStrings = array_map('trim', array_slice($parts, 1));
+
+            $filters = [];
+            foreach ($filterStrings as $filterString) {
+                if (str_contains($filterString, ':')) {
+                    // Split filter name from parameters
+                    $colonPos = strpos($filterString, ':');
+                    $filterName = substr($filterString, 0, $colonPos);
+                    $paramString = substr($filterString, $colonPos + 1);
+
+                    // Parse parameters - handle quoted strings properly
+                    $params = $this->parseFilterParameters($paramString);
+
+                    $filters[] = [
+                        'name' => $filterName,
+                        'params' => $params
+                    ];
+                } else {
+                    $filters[] = [
+                        'name' => $filterString,
+                        'params' => []
+                    ];
+                }
+            }
 
             $variableParts = explode('.', $variablePart);
 
@@ -152,9 +234,11 @@ class TemplateParser
         return [
             'type' => 'variable',
             'name' => $parts[0],
-            'path' => array_slice($parts, 1)
+            'path' => array_slice($parts, 1),
+            'filters' => []
         ];
     }
+
 
     private function parseBlock(string $expression, array $tokens, int $currentIndex): array
     {
