@@ -15,10 +15,7 @@ class TemplateEngine
     private array $paths = [];
 
     public function __construct(
-        private readonly TemplateParser   $parser,
-        private readonly TemplateCompiler $compiler,
         private readonly TemplateCache    $cache,
-        private readonly bool             $debug = false,
         string                            $defaultPath = ''
     )
     {
@@ -46,10 +43,42 @@ class TemplateEngine
         $templatePath = $this->findTemplate($template);
         $compiledPath = $this->cache->get($templatePath);
 
+        // DEBUG: Ausgabe der Pfade
+        error_log("Template: $template");
+        error_log("Template Path: $templatePath");
+        error_log("Compiled Path: $compiledPath");
+
+        // DEBUG: Inhalt der kompilierten Datei ausgeben
+        if (file_exists($compiledPath)) {
+            error_log("Compiled content: " . file_get_contents($compiledPath));
+        }
+
         // Merge globals with data
         $data = array_merge($this->globals, $data);
 
         return $this->executeTemplate($compiledPath, $data);
+    }
+
+    /**
+     * Render with specific renderer (for block inheritance)
+     */
+    public function renderWithRenderer(string $template, TemplateRenderer $renderer): string
+    {
+        $templatePath = $this->findTemplate($template);
+        $compiledPath = $this->cache->get($templatePath);
+
+        ob_start();
+        try {
+            include $compiledPath;
+            return ob_get_clean();
+        } catch (\Throwable $e) {
+            ob_end_clean();
+            throw new RuntimeException(
+                "Template execution failed: {$e->getMessage()}",
+                0,
+                $e
+            );
+        }
     }
 
     private function findTemplate(string $template): string
@@ -87,6 +116,9 @@ class TemplateEngine
 
         ob_start();
         try {
+            // Make blocks available globally
+            $_parentBlocks = $_parentBlocks ?? [];
+
             include $compiledPath;
             return ob_get_clean();
         } catch (\Throwable $e) {

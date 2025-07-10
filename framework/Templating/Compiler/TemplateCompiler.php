@@ -18,6 +18,9 @@ if (!isset($renderer)) {
 
 PHP;
 
+    private ?string $extendsTemplate = null;
+    private array $blocks = [];
+
     public function __construct(
         private readonly TemplateParser $parser
     )
@@ -26,7 +29,14 @@ PHP;
 
     public function compile(string $content, string $templatePath = ''): string
     {
+        // Reset state for each compilation
+        $this->extendsTemplate = null;
+        $this->blocks = [];
+
         $ast = $this->parser->parse($content);
+
+        // Extract extends and blocks first
+        $this->extractExtendsAndBlocks($ast);
 
         $header = sprintf(
             self::TEMPLATE_HEADER,
@@ -34,9 +44,50 @@ PHP;
             date('Y-m-d H:i:s')
         );
 
-        $body = $this->compileNodes($ast);
+        // If this template extends another, compile differently
+        if ($this->extendsTemplate !== null) {
+            return $header . $this->compileExtendingTemplate($ast);
+        }
 
+        $body = $this->compileNodes($ast);
         return $header . $body;
+    }
+
+    private function extractExtendsAndBlocks(array $nodes): void
+    {
+        foreach ($nodes as $node) {
+            if ($node['type'] === 'extends') {
+                $this->extendsTemplate = $node['template'];
+            } elseif ($node['type'] === 'block') {
+                $this->blocks[$node['name']] = $node;
+            }
+        }
+    }
+
+    private function compileExtendingTemplate(array $nodes): string
+    {
+        $code = '';
+
+        // Define child blocks BEFORE including parent
+        $code .= "\$_childBlocks = [];\n";
+
+        // Define child blocks as closures
+        foreach ($this->blocks as $blockName => $block) {
+            $blockCode = $this->compileNodes($block['body']);
+            $code .= "\$_childBlocks['{$blockName}'] = function() use (\$renderer) {\n";
+            $code .= "ob_start();\n";
+            $code .= $blockCode;
+            $code .= "return ob_get_clean();\n";
+            $code .= "};\n";
+        }
+
+        // Set blocks in renderer BEFORE including parent
+        $code .= "\$renderer->setBlocks(\$_childBlocks);\n";
+
+        // Include parent template (which will now see the blocks)
+        $code .= "echo \$renderer->include('{$this->extendsTemplate}');\n";
+
+        return $code;
     }
 
     private function compileNodes(array $nodes): string
@@ -105,14 +156,27 @@ PHP;
 
     private function compileExtends(array $node): string
     {
-        // Für Template-Vererbung - fürs erste als Kommentar
-        return "// extends: {$node['template']}\n";
+        // Extends is handled in extractExtendsAndBlocks, return empty string
+        return '';
     }
 
     private function compileBlock(array $node): string
     {
-        $body = $this->compileNodes($node['body']);
-        return "// block: {$node['name']}\n{$body}// endblock\n";
+        $blockName = $node['name'];
+
+        // In extending templates, blocks are handled differently
+        if ($this->extendsTemplate !== null) {
+            return ''; // Blocks in extending templates are handled in compileExtendingTemplate
+        }
+
+        // In base templates, render block with potential override
+        $code = "if (\$renderer->hasBlock('{$blockName}')) {\n";
+        $code .= "echo \$renderer->renderBlock('{$blockName}');\n";
+        $code .= "} else {\n";
+        $code .= $this->compileNodes($node['body']);
+        $code .= "}\n";
+
+        return $code;
     }
 
     private function compileIf(array $node): string
@@ -188,7 +252,6 @@ if (is_array(\$_array) || \$_array instanceof \Traversable) {
 
 PHP;
     }
-
 
     private function compileInclude(array $node): string
     {

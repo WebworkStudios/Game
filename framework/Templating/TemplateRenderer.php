@@ -7,6 +7,7 @@ namespace Framework\Templating;
 class TemplateRenderer
 {
     public array $data; // Public für For-Loop Zugriff
+    private array $blocks = []; // Add blocks storage
 
     public function __construct(
         private readonly TemplateEngine $engine,
@@ -14,6 +15,33 @@ class TemplateRenderer
     )
     {
         $this->data = $data;
+    }
+
+    /**
+     * Set blocks for template inheritance
+     */
+    public function setBlocks(array $blocks): void
+    {
+        $this->blocks = array_merge($this->blocks, $blocks);
+    }
+
+    /**
+     * Check if block exists
+     */
+    public function hasBlock(string $name): bool
+    {
+        return isset($this->blocks[$name]);
+    }
+
+    /**
+     * Render block
+     */
+    public function renderBlock(string $name): string
+    {
+        if (isset($this->blocks[$name])) {
+            return $this->blocks[$name]();
+        }
+        return '';
     }
 
     /**
@@ -58,7 +86,12 @@ class TemplateRenderer
     public function include(string $template, array $data = []): string
     {
         $mergedData = array_merge($this->data, $data);
-        return $this->engine->render($template, $mergedData);
+
+        // Create new renderer with same blocks but merged data
+        $childRenderer = new TemplateRenderer($this->engine, $mergedData);
+        $childRenderer->setBlocks($this->blocks); // Wichtig: Blocks weitergeben!
+
+        return $this->engine->renderWithRenderer($template, $childRenderer);
     }
 
     /**

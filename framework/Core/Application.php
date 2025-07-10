@@ -557,11 +557,13 @@ class Application
     /**
      * Installiert Framework (erstellt Verzeichnisse und Konfigurationen)
      */
+// framework/Core/Application.php
+
     public function install(): bool
     {
         $success = true;
 
-        // Erstelle Verzeichnisse
+        // Erstelle Verzeichnisse (bleibt gleich)
         $directories = [
             'storage/cache',
             'storage/cache/views',
@@ -585,24 +587,78 @@ class Application
             }
         }
 
-        // Erstelle Database-Konfiguration
-        if (!DatabaseServiceProvider::publishConfig($this->basePath)) {
-            echo "Failed to create database config\n";
-            $success = false;
-        }
+        // Erstelle alle Konfigurationsdateien
+        $configs = [
+            'App' => [$this, 'createAppConfig'],
+            'Database' => [DatabaseServiceProvider::class, 'publishConfig'],
+            'Security' => [SecurityServiceProvider::class, 'publishConfig'],
+            'Templating' => [TemplatingServiceProvider::class, 'publishConfig'],
+        ];
 
-        // Erstelle Security-Konfiguration
-        if (!SecurityServiceProvider::publishConfig($this->basePath)) {
-            echo "Failed to create security config\n";
-            $success = false;
-        }
-
-        // Erstelle Templating-Konfiguration
-        if (!TemplatingServiceProvider::publishConfig($this->basePath)) {
-            echo "Failed to create templating config\n";
-            $success = false;
+        foreach ($configs as $name => $callback) {
+            if (!call_user_func($callback, $this->basePath)) {
+                echo "Failed to create {$name} config\n";
+                $success = false;
+            } else {
+                echo "✅ Created {$name} config\n";
+            }
         }
 
         return $success;
+    }
+
+    /**
+     * Erstellt App-Konfiguration
+     */
+    private function createAppConfig(string $basePath): bool
+    {
+        $configPath = $basePath . '/app/Config/app.php';
+        $configDir = dirname($configPath);
+
+        if (!is_dir($configDir) && !mkdir($configDir, 0755, true)) {
+            return false;
+        }
+
+        $content = <<<'PHP'
+<?php
+
+declare(strict_types=1);
+
+return [
+    /*
+    |--------------------------------------------------------------------------
+    | Application Configuration
+    |--------------------------------------------------------------------------
+    */
+    
+    'name' => 'Football Manager',
+    'version' => '1.0.0',
+    'debug' => true, // Set to false in production
+    'timezone' => 'UTC',
+    'locale' => 'en',
+    
+    /*
+    |--------------------------------------------------------------------------
+    | Application URL
+    |--------------------------------------------------------------------------
+    */
+    
+    'url' => 'http://localhost:8000',
+    
+    /*
+    |--------------------------------------------------------------------------
+    | Logging Configuration
+    |--------------------------------------------------------------------------
+    */
+    
+    'log' => [
+        'level' => 'debug', // debug, info, warning, error
+        'path' => 'storage/logs/app.log',
+        'max_files' => 7, // Keep 7 days of logs
+    ],
+];
+PHP;
+
+        return file_put_contents($configPath, $content) !== false;
     }
 }

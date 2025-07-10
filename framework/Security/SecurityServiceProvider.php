@@ -25,15 +25,15 @@ class SecurityServiceProvider
      * Erstellt Standard-Konfigurationsdatei
      */
     public static function publishConfig(string $basePath): bool
-    {
-        $configPath = $basePath . '/' . self::DEFAULT_CONFIG_PATH;
-        $configDir = dirname($configPath);
+{
+    $configPath = $basePath . '/' . self::DEFAULT_CONFIG_PATH;
+    $configDir = dirname($configPath);
 
-        if (!is_dir($configDir) && !mkdir($configDir, 0755, true)) {
-            return false;
-        }
+    if (!is_dir($configDir) && !mkdir($configDir, 0755, true)) {
+        return false;
+    }
 
-        $content = <<<'PHP'
+    $content = <<<'PHP'
 <?php
 
 declare(strict_types=1);
@@ -45,15 +45,15 @@ return [
     |--------------------------------------------------------------------------
     */
     'session' => [
-        'lifetime' => env('SESSION_LIFETIME', 7200), // 2 Stunden
-        'path' => env('SESSION_PATH', '/'),
-        'domain' => env('SESSION_DOMAIN', ''),
-        'secure' => env('SESSION_SECURE', false), // In Production: true
-        'httponly' => env('SESSION_HTTPONLY', true),
-        'samesite' => env('SESSION_SAMESITE', 'Lax'), // Lax, Strict, None
-        'gc_maxlifetime' => env('SESSION_GC_MAXLIFETIME', 7200),
-        'gc_probability' => env('SESSION_GC_PROBABILITY', 1),
-        'gc_divisor' => env('SESSION_GC_DIVISOR', 100),
+        'lifetime' => 7200, // 2 hours
+        'path' => '/',
+        'domain' => '',
+        'secure' => false, // Set to true in production with HTTPS
+        'httponly' => true,
+        'samesite' => 'Lax', // Lax, Strict, None
+        'gc_maxlifetime' => 7200,
+        'gc_probability' => 1,
+        'gc_divisor' => 100,
     ],
 
     /*
@@ -62,37 +62,19 @@ return [
     |--------------------------------------------------------------------------
     */
     'csrf' => [
-        'token_lifetime' => env('CSRF_TOKEN_LIFETIME', 7200), // 2 Stunden
-        'regenerate_on_login' => env('CSRF_REGENERATE_ON_LOGIN', true),
+        'token_lifetime' => 7200, // 2 hours
+        'regenerate_on_login' => true,
         'exclude_routes' => [
-            '/api/*',      // API-Routen ausschließen
-            '/webhooks/*', // Webhook-Routen ausschließen
+            '/api/*',      // API routes (use different auth)
+            '/webhooks/*', // Webhook routes
         ],
     ],
 ];
-
-/**
- * Helper function für Environment Variables
- */
-function env(string $key, mixed $default = null): mixed
-{
-    $value = $_ENV[$key] ?? getenv($key);
-    
-    if ($value === false) {
-        return $default;
-    }
-    
-    // Convert string booleans
-    return match(strtolower($value)) {
-        'true', '1', 'on', 'yes' => true,
-        'false', '0', 'off', 'no' => false,
-        default => $value,
-    };
-}
 PHP;
 
-        return file_put_contents($configPath, $content) !== false;
-    }
+    return file_put_contents($configPath, $content) !== false;
+}
+
 
     /**
      * Registriert alle Security Services

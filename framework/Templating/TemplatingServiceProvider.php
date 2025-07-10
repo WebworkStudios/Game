@@ -44,11 +44,11 @@ return [
     |--------------------------------------------------------------------------
     */
     
-    'debug' => env('TEMPLATE_DEBUG', false),
+    'debug' => false, // Set to true for development
     
     'cache' => [
-        'enabled' => env('TEMPLATE_CACHE', true),
-        'check_interval' => env('TEMPLATE_CACHE_CHECK', 60), // seconds
+        'enabled' => true,
+        'check_interval' => 60, // seconds
         'path' => 'storage/cache/views',
     ],
     
@@ -60,31 +60,13 @@ return [
     ],
     
     'globals' => [
-        'app_name' => env('APP_NAME', 'Football Manager'),
+        'app_name' => 'Football Manager',
         'app_version' => '1.0.0',
+        'current_year' => date('Y'),
     ],
     
     'file_extension' => '.html',
 ];
-
-/**
- * Helper function für Environment Variables
- */
-function env(string $key, mixed $default = null): mixed
-{
-    $value = $_ENV[$key] ?? getenv($key);
-    
-    if ($value === false) {
-        return $default;
-    }
-    
-    // Convert string booleans
-    return match(strtolower($value)) {
-        'true', '1', 'on', 'yes' => true,
-        'false', '0', 'off', 'no' => false,
-        default => $value,
-    };
-}
 PHP;
 
         return file_put_contents($configPath, $content) !== false;
@@ -191,10 +173,8 @@ PHP;
             $config = $this->loadTemplatingConfig();
 
             $engine = new TemplateEngine(
-                parser: $container->get(TemplateParser::class),
-                compiler: $container->get(TemplateCompiler::class),
                 cache: $container->get(TemplateCache::class),
-                debug: $config['debug']
+                defaultPath: '' // Wird über addPath() gesetzt
             );
 
             // Add template paths

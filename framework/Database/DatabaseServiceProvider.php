@@ -47,11 +47,11 @@ return [
     */
     'default' => [
         'driver' => 'mysql',
-        'host' => env('DB_HOST', 'localhost'),
-        'port' => env('DB_PORT', 3306),
-        'database' => env('DB_DATABASE', ''),
-        'username' => env('DB_USERNAME', ''),
-        'password' => env('DB_PASSWORD', ''),
+        'host' => 'localhost',
+        'port' => 3306,
+        'database' => 'kickerscup', // Change this to your database name
+        'username' => 'root',
+        'password' => '', // Add your database password
         'charset' => 'utf8mb4',
         'type' => 'write',
         'weight' => 1,
@@ -59,80 +59,20 @@ return [
     
     /*
     |--------------------------------------------------------------------------
-    | Analytics Database (Beispiel für zweite Verbindung)
+    | Analytics Database (Example for second connection)
     |--------------------------------------------------------------------------
     */
     'analytics' => [
         'driver' => 'postgresql',
-        'host' => env('ANALYTICS_DB_HOST', 'localhost'),
-        'port' => env('ANALYTICS_DB_PORT', 5432),
-        'database' => env('ANALYTICS_DB_DATABASE', ''),
-        'username' => env('ANALYTICS_DB_USERNAME', ''),
-        'password' => env('ANALYTICS_DB_PASSWORD', ''),
+        'host' => 'localhost',
+        'port' => 5432,
+        'database' => 'analytics',
+        'username' => 'postgres',
+        'password' => '',
         'type' => 'read',
         'weight' => 1,
     ],
-    
-    /*
-    |--------------------------------------------------------------------------
-    | Load Balancing Beispiel (Master/Replica)
-    |--------------------------------------------------------------------------
-    */
-    'load_balanced' => [
-        // Master (Write)
-        [
-            'driver' => 'mysql',
-            'host' => 'master.db.local',
-            'port' => 3306,
-            'database' => 'myapp',
-            'username' => 'root',
-            'password' => 'secret',
-            'type' => 'write',
-            'weight' => 1,
-        ],
-        // Replica 1 (Read)
-        [
-            'driver' => 'mysql',
-            'host' => 'replica1.db.local',
-            'port' => 3306,
-            'database' => 'myapp',
-            'username' => 'readonly',
-            'password' => 'secret',
-            'type' => 'read',
-            'weight' => 2,
-        ],
-        // Replica 2 (Read)
-        [
-            'driver' => 'mysql',
-            'host' => 'replica2.db.local',
-            'port' => 3306,
-            'database' => 'myapp',
-            'username' => 'readonly',
-            'password' => 'secret',
-            'type' => 'read',
-            'weight' => 1,
-        ],
-    ],
 ];
-
-/**
- * Helper function für Environment Variables
- */
-function env(string $key, mixed $default = null): mixed
-{
-    $value = $_ENV[$key] ?? getenv($key);
-    
-    if ($value === false) {
-        return $default;
-    }
-    
-    // Convert string booleans
-    return match(strtolower($value)) {
-        'true', '1', 'on', 'yes' => true,
-        'false', '0', 'off', 'no' => false,
-        default => $value,
-    };
-}
 PHP;
 
         return file_put_contents($configPath, $content) !== false;
