@@ -155,8 +155,20 @@ PHP;
         $item = $node['item'];
         $body = $this->compileNodes($node['body']);
 
+        // Handle dot notation in array access
+        if (str_contains($array, '.')) {
+            $parts = explode('.', $array);
+            $arrayAccess = "\$renderer->get('{$parts[0]}')";
+
+            foreach (array_slice($parts, 1) as $part) {
+                $arrayAccess = "({$arrayAccess})['{$part}'] ?? null";
+            }
+        } else {
+            $arrayAccess = "\$renderer->get('{$array}')";
+        }
+
         return <<<PHP
-\$_array = \$renderer->get('{$array}') ?? [];
+\$_array = {$arrayAccess} ?? [];
 if (is_array(\$_array) || \$_array instanceof \Traversable) {
     foreach (\$_array as \$_key => \$_item) {
         \$renderer->data['{$item}'] = \$_item;

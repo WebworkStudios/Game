@@ -128,9 +128,15 @@ class TemplateParser
         $command = $parts[0];
         $args = $parts[1] ?? '';
 
-        // Handle closing tags - these should be handled by their parent blocks
-        if (in_array($command, ['endif', 'endfor', 'endblock'])) {
-            throw new \RuntimeException("Unexpected closing tag: {$command}");
+        // Handle closing tags - return them as special nodes instead of throwing error
+        if (in_array($command, ['endif', 'endfor', 'endblock', 'else'])) {
+            return [
+                'node' => [
+                    'type' => 'closing_tag',
+                    'command' => $command
+                ],
+                'nextIndex' => $currentIndex + 1
+            ];
         }
 
         switch ($command) {
@@ -242,7 +248,20 @@ class TemplateParser
                 }
             }
 
+            // Only parse tokens that are not our closing tags
             if ($depth > 0) {
+                // Skip our own closing tags
+                if ($token->getType() === TokenType::BLOCK) {
+                    $expression = trim($token->getValue());
+                    $command = explode(' ', $expression)[0];
+
+                    if (($command === 'endif' || $command === 'else') && $depth === 1) {
+                        // Handle these in the main loop logic above
+                        $i++;
+                        continue;
+                    }
+                }
+
                 $node = $this->parseTokenToNode($token, $tokens, $i);
                 if ($inElse) {
                     $elseBody[] = $node['node'];
@@ -268,12 +287,17 @@ class TemplateParser
 
     private function parseForBlock(string $expression, array $tokens, int $startIndex): array
     {
-        if (!preg_match('/(\w+)\s+as\s+(\w+)/', $expression, $matches)) {
+        // Support both "item in array" and "array as item" syntax
+        if (preg_match('/(\w+)\s+in\s+(.+)/', $expression, $matches)) {
+            $item = $matches[1];
+            $array = trim($matches[2]);
+        } elseif (preg_match('/(.+?)\s+as\s+(\w+)/', $expression, $matches)) {
+            $array = trim($matches[1]);
+            $item = $matches[2];
+        } else {
             throw new \RuntimeException("Invalid for loop syntax: {$expression}");
         }
 
-        $array = $matches[1];
-        $item = $matches[2];
         $body = [];
         $depth = 1;
         $i = $startIndex + 1;
