@@ -103,6 +103,13 @@ PHP;
             }
         }
 
+        // Apply filters if present
+        if (!empty($node['filters'])) {
+            foreach ($node['filters'] as $filter) {
+                $code = "\$renderer->applyFilter('{$filter}', {$code})";
+            }
+        }
+
         return $code;
     }
 

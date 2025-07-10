@@ -71,4 +71,96 @@ class TemplateRenderer
 
         return (string)$value;
     }
+
+    /**
+     * Apply filter to value
+     */
+    public function applyFilter(string $filter, mixed $value): mixed
+    {
+        return match ($filter) {
+            'length' => $this->filterLength($value),
+            'upper' => $this->filterUpper($value),
+            'lower' => $this->filterLower($value),
+            'capitalize' => $this->filterCapitalize($value),
+            'date' => $this->filterDate($value),
+            'number_format' => $this->filterNumberFormat($value),
+            'default' => $this->filterDefault($value),
+            default => throw new \RuntimeException("Unknown filter: {$filter}")
+        };
+    }
+
+    /**
+     * Length filter - get count of array or string length
+     */
+    private function filterLength(mixed $value): int
+    {
+        if (is_array($value) || $value instanceof \Countable) {
+            return count($value);
+        }
+
+        if (is_string($value)) {
+            return mb_strlen($value);
+        }
+
+        return 0;
+    }
+
+    /**
+     * Upper filter - convert to uppercase
+     */
+    private function filterUpper(mixed $value): string
+    {
+        return mb_strtoupper((string)$value);
+    }
+
+    /**
+     * Lower filter - convert to lowercase
+     */
+    private function filterLower(mixed $value): string
+    {
+        return mb_strtolower((string)$value);
+    }
+
+    /**
+     * Capitalize filter - capitalize first letter
+     */
+    private function filterCapitalize(mixed $value): string
+    {
+        return mb_convert_case((string)$value, MB_CASE_TITLE);
+    }
+
+    /**
+     * Date filter - format date
+     */
+    private function filterDate(mixed $value): string
+    {
+        if (is_string($value)) {
+            $timestamp = strtotime($value);
+            if ($timestamp !== false) {
+                return date('Y-m-d', $timestamp);
+            }
+        }
+
+        return (string)$value;
+    }
+
+    /**
+     * Number format filter
+     */
+    private function filterNumberFormat(mixed $value): string
+    {
+        if (is_numeric($value)) {
+            return number_format((float)$value, 0, '.', ',');
+        }
+
+        return (string)$value;
+    }
+
+    /**
+     * Default filter - return default value if empty
+     */
+    private function filterDefault(mixed $value): mixed
+    {
+        return empty($value) ? 'N/A' : $value;
+    }
 }

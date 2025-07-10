@@ -38,14 +38,14 @@
 {% endif %}
 
 <!-- Players by Position -->
-{% for position in team.positions %}
+{% for team.positions as position %}
 <h4>{{ position.name }} ({{ position.players|length }})</h4>
 
+{% if position.players %}
 {% for position.players as player %}
 {% include "components/player-card.html" %}
 {% endfor %}
-
-{% if position.players|length == 0 %}
+{% else %}
 <p><em>No players in this position</em></p>
 {% endif %}
 {% endfor %}

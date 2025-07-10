@@ -114,6 +114,23 @@ class TemplateParser
 
     private function parseVariable(string $expression): array
     {
+        // Check for filters: variable|filter|filter2
+        if (str_contains($expression, '|')) {
+            $parts = explode('|', $expression);
+            $variablePart = trim($parts[0]);
+            $filters = array_map('trim', array_slice($parts, 1));
+
+            $variableParts = explode('.', $variablePart);
+
+            return [
+                'type' => 'variable',
+                'name' => $variableParts[0],
+                'path' => array_slice($variableParts, 1),
+                'filters' => $filters
+            ];
+        }
+
+        // No filters - original logic
         $parts = explode('.', $expression);
         return [
             'type' => 'variable',
@@ -128,15 +145,9 @@ class TemplateParser
         $command = $parts[0];
         $args = $parts[1] ?? '';
 
-        // Handle closing tags - return them as special nodes instead of throwing error
+        // Handle closing tags - these should not create nodes
         if (in_array($command, ['endif', 'endfor', 'endblock', 'else'])) {
-            return [
-                'node' => [
-                    'type' => 'closing_tag',
-                    'command' => $command
-                ],
-                'nextIndex' => $currentIndex + 1
-            ];
+            throw new \RuntimeException("Unexpected closing tag: {$command}");
         }
 
         switch ($command) {
@@ -248,27 +259,36 @@ class TemplateParser
                 }
             }
 
-            // Only parse tokens that are not our closing tags
+            // Only parse non-closing tokens at our depth level
             if ($depth > 0) {
-                // Skip our own closing tags
+                // For nested blocks, let parseTokenToNode handle them
                 if ($token->getType() === TokenType::BLOCK) {
                     $expression = trim($token->getValue());
                     $command = explode(' ', $expression)[0];
 
-                    if (($command === 'endif' || $command === 'else') && $depth === 1) {
-                        // Handle these in the main loop logic above
-                        $i++;
-                        continue;
+                    // If it's a nested block command, parse it normally
+                    if (in_array($command, ['if', 'for', 'block', 'include'])) {
+                        $node = $this->parseTokenToNode($token, $tokens, $i);
+                        if ($inElse) {
+                            $elseBody[] = $node['node'];
+                        } else {
+                            $body[] = $node['node'];
+                        }
+                        $i = $node['nextIndex'] - 1; // -1 because loop will increment
+                    } else {
+                        // Skip closing tags that belong to nested blocks
+                        // They will be handled by their respective block parsers
                     }
-                }
-
-                $node = $this->parseTokenToNode($token, $tokens, $i);
-                if ($inElse) {
-                    $elseBody[] = $node['node'];
                 } else {
-                    $body[] = $node['node'];
+                    // Handle text and variable tokens normally
+                    $node = $this->parseTokenToNode($token, $tokens, $i);
+                    if ($inElse) {
+                        $elseBody[] = $node['node'];
+                    } else {
+                        $body[] = $node['node'];
+                    }
+                    $i = $node['nextIndex'] - 1; // -1 because loop will increment
                 }
-                $i = $node['nextIndex'] - 1; // -1 because loop will increment
             }
 
             $i++;
@@ -322,9 +342,24 @@ class TemplateParser
             }
 
             if ($depth > 0) {
-                $node = $this->parseTokenToNode($token, $tokens, $i);
-                $body[] = $node['node'];
-                $i = $node['nextIndex'] - 1; // -1 because loop will increment
+                // For nested blocks, let parseTokenToNode handle them
+                if ($token->getType() === TokenType::BLOCK) {
+                    $expression = trim($token->getValue());
+                    $command = explode(' ', $expression)[0];
+
+                    // If it's a nested block command, parse it normally
+                    if (in_array($command, ['if', 'for', 'block', 'include'])) {
+                        $node = $this->parseTokenToNode($token, $tokens, $i);
+                        $body[] = $node['node'];
+                        $i = $node['nextIndex'] - 1; // -1 because loop will increment
+                    }
+                    // Skip closing tags that belong to nested blocks
+                } else {
+                    // Handle text and variable tokens normally
+                    $node = $this->parseTokenToNode($token, $tokens, $i);
+                    $body[] = $node['node'];
+                    $i = $node['nextIndex'] - 1; // -1 because loop will increment
+                }
             }
 
             $i++;
