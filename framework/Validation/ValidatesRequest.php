@@ -5,6 +5,7 @@ declare(strict_types=1);
 
 namespace Framework\Validation;
 
+use Framework\Http\HttpStatus;
 use Framework\Http\Request;
 use Framework\Http\Response;
 use Framework\Core\Application;
@@ -55,7 +56,7 @@ trait ValidatesRequest
                 return Response::json([
                     'message' => 'The given data was invalid.',
                     'errors' => $validator->errors()->toArray()
-                ], 422);
+                ], HttpStatus::UNPROCESSABLE_ENTITY);
             }
 
             // For web requests, you might want to redirect back with errors
@@ -63,7 +64,7 @@ trait ValidatesRequest
             return Response::json([
                 'message' => 'Validation failed',
                 'errors' => $validator->errors()->toArray()
-            ], 422);
+            ], HttpStatus::UNPROCESSABLE_ENTITY);
         }
 
         return $validator;

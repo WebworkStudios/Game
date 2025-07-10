@@ -12,11 +12,10 @@ use Framework\Database\ConnectionManager;
 /**
  * Validation Service Provider - Registriert Validation Services im Framework
  */
-class ValidationServiceProvider
+readonly class ValidationServiceProvider
 {
     public function __construct(
-        private readonly ServiceContainer $container,
-        private readonly Application      $app,
+        private ServiceContainer $container
     )
     {
     }
@@ -48,17 +47,10 @@ class ValidationServiceProvider
      */
     private function registerValidatorFactory(): void
     {
-        $this->container->singleton('validator_factory', function (ServiceContainer $container) {
-            return function (array $data, array $rules, ?string $connectionName = null) use ($container) {
-                $connectionManager = $container->get(ConnectionManager::class);
-
-                return Validator::make($data, $rules, $connectionManager);
-            };
-        });
-
-        // Alias für einfacheren Zugriff
         $this->container->singleton(ValidatorFactory::class, function (ServiceContainer $container) {
-            return $container->get('validator_factory');
+            return new ValidatorFactory(
+                connectionManager: $container->get(ConnectionManager::class)
+            );
         });
     }
 

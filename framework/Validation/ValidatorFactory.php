@@ -2,13 +2,15 @@
 
 namespace Framework\Validation;
 
+use Framework\Database\ConnectionManager;
+
 /**
  * ValidatorFactory - Type-safe factory for creating validators
  */
-class ValidatorFactory
+readonly class ValidatorFactory
 {
     public function __construct(
-        private readonly callable $factory
+        private ConnectionManager $connectionManager
     )
     {
     }
@@ -18,6 +20,6 @@ class ValidatorFactory
      */
     public function make(array $data, array $rules, ?string $connectionName = null): Validator
     {
-        return ($this->factory)($data, $rules, $connectionName);
+        return Validator::make($data, $rules, $this->connectionManager);
     }
 }
