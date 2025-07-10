@@ -26,11 +26,10 @@ class TemplateParser
         $length = strlen($content);
 
         while ($position < $length) {
-            // Find next delimiter
             $variablePos = strpos($content, self::VARIABLE_START, $position);
             $blockPos = strpos($content, self::BLOCK_START, $position);
 
-            // Determine which comes first
+            // Find next delimiter
             $nextPos = false;
             $type = null;
 
@@ -44,7 +43,6 @@ class TemplateParser
 
             // Add text before delimiter
             if ($nextPos === false) {
-                // No more delimiters, add remaining text
                 if ($position < $length) {
                     $tokens[] = new Token(
                         TokenType::TEXT,
@@ -55,7 +53,6 @@ class TemplateParser
                 break;
             }
 
-            // Add text token if there's content before delimiter
             if ($nextPos > $position) {
                 $tokens[] = new Token(
                     TokenType::TEXT,
@@ -64,84 +61,60 @@ class TemplateParser
                 );
             }
 
-            // Parse variable or block
+            // Parse token
             if ($type === TokenType::VARIABLE) {
-                $token = $this->parseVariable($content, $nextPos);
+                $end = strpos($content, self::VARIABLE_END, $nextPos + 2);
+                if ($end === false) {
+                    throw new \RuntimeException("Unterminated variable at position {$nextPos}");
+                }
+                $expression = trim(substr($content, $nextPos + 2, $end - $nextPos - 2));
+                $tokens[] = new Token(TokenType::VARIABLE, $expression, $nextPos, $end + 2);
+                $position = $end + 2;
             } else {
-                $token = $this->parseBlock($content, $nextPos);
+                $end = strpos($content, self::BLOCK_END, $nextPos + 2);
+                if ($end === false) {
+                    throw new \RuntimeException("Unterminated block at position {$nextPos}");
+                }
+                $expression = trim(substr($content, $nextPos + 2, $end - $nextPos - 2));
+                $tokens[] = new Token(TokenType::BLOCK, $expression, $nextPos, $end + 2);
+                $position = $end + 2;
             }
-
-            $tokens[] = $token;
-            $position = $token->getEndPosition();
         }
 
         return $tokens;
     }
 
-    private function parseVariable(string $content, int $start): Token
-    {
-        $end = strpos($content, self::VARIABLE_END, $start + 2);
-        if ($end === false) {
-            throw new \RuntimeException("Unterminated variable at position {$start}");
-        }
-
-        $expression = trim(substr($content, $start + 2, $end - $start - 2));
-
-        return new Token(
-            TokenType::VARIABLE,
-            $expression,
-            $start,
-            $end + 2
-        );
-    }
-
-    private function parseBlock(string $content, int $start): Token
-    {
-        $end = strpos($content, self::BLOCK_END, $start + 2);
-        if ($end === false) {
-            throw new \RuntimeException("Unterminated block at position {$start}");
-        }
-
-        $expression = trim(substr($content, $start + 2, $end - $start - 2));
-
-        return new Token(
-            TokenType::BLOCK,
-            $expression,
-            $start,
-            $end + 2
-        );
-    }
-
     private function parseTokens(array $tokens): array
     {
         $ast = [];
-        $i = 0;
+        $tokenCount = count($tokens);
 
-        while ($i < count($tokens)) {
+        for ($i = 0; $i < $tokenCount; $i++) {
             $token = $tokens[$i];
 
-            if ($token->getType() === TokenType::TEXT) {
-                $ast[] = ['type' => 'text', 'content' => $token->getValue()];
-            } elseif ($token->getType() === TokenType::VARIABLE) {
-                $ast[] = $this->parseVariableExpression($token->getValue());
-            } elseif ($token->getType() === TokenType::BLOCK) {
-                $result = $this->parseBlockExpression($token->getValue(), $tokens, $i);
-                $ast[] = $result['node'];
-                $i = $result['position']; // Skip processed tokens
-                continue;
-            }
+            switch ($token->getType()) {
+                case TokenType::TEXT:
+                    $ast[] = ['type' => 'text', 'content' => $token->getValue()];
+                    break;
 
-            $i++;
+                case TokenType::VARIABLE:
+                    $ast[] = $this->parseVariable($token->getValue());
+                    break;
+
+                case TokenType::BLOCK:
+                    $blockResult = $this->parseBlock($token->getValue(), $tokens, $i);
+                    $ast[] = $blockResult['node'];
+                    $i = $blockResult['nextIndex'] - 1; // -1 because loop will increment
+                    break;
+            }
         }
 
         return $ast;
     }
 
-    private function parseVariableExpression(string $expression): array
+    private function parseVariable(string $expression): array
     {
-        // Handle dot notation: player.name -> ['player', 'name']
         $parts = explode('.', $expression);
-
         return [
             'type' => 'variable',
             'name' => $parts[0],
@@ -149,18 +122,35 @@ class TemplateParser
         ];
     }
 
-    private function parseBlockExpression(string $expression, array $tokens, int &$position): array
+    private function parseBlock(string $expression, array $tokens, int $currentIndex): array
     {
-        $parts = explode(' ', $expression, 2);
+        $parts = explode(' ', trim($expression), 2);
         $command = $parts[0];
         $args = $parts[1] ?? '';
 
+        // Handle closing tags - these should be handled by their parent blocks
+        if (in_array($command, ['endif', 'endfor', 'endblock'])) {
+            throw new \RuntimeException("Unexpected closing tag: {$command}");
+        }
+
         switch ($command) {
+            case 'extends':
+                return [
+                    'node' => [
+                        'type' => 'extends',
+                        'template' => trim($args, '"\'')
+                    ],
+                    'nextIndex' => $currentIndex + 1
+                ];
+
+            case 'block':
+                return $this->parseBlockDefinition($args, $tokens, $currentIndex);
+
             case 'if':
-                return $this->parseIfBlock($args, $tokens, $position);
+                return $this->parseIfBlock($args, $tokens, $currentIndex);
 
             case 'for':
-                return $this->parseForBlock($args, $tokens, $position);
+                return $this->parseForBlock($args, $tokens, $currentIndex);
 
             case 'include':
                 return [
@@ -168,7 +158,7 @@ class TemplateParser
                         'type' => 'include',
                         'template' => trim($args, '"\'')
                     ],
-                    'position' => $position
+                    'nextIndex' => $currentIndex + 1
                 ];
 
             default:
@@ -176,121 +166,195 @@ class TemplateParser
         }
     }
 
-    private function parseIfBlock(string $condition, array $tokens, int &$position): array
+    private function parseBlockDefinition(string $args, array $tokens, int $startIndex): array
     {
-        $body = $this->collectBlockBody($tokens, $position, 'if');
-
-        return [
-            'node' => [
-                'type' => 'if',
-                'condition' => $this->parseCondition($condition),
-                'body' => $body['body'],
-                'else' => $body['else'] ?? null
-            ],
-            'position' => $body['endPosition']
-        ];
-    }
-
-    private function parseForBlock(string $expression, array $tokens, int &$position): array
-    {
-        // Parse: "players as player" or "matches as match"
-        if (!preg_match('/(\w+)\s+as\s+(\w+)/', $expression, $matches)) {
-            throw new \RuntimeException("Invalid for loop syntax: {$expression}");
-        }
-
-        $array = $matches[1];
-        $item = $matches[2];
-
-        $body = $this->collectBlockBody($tokens, $position, 'for');
-
-        return [
-            'node' => [
-                'type' => 'for',
-                'array' => $array,
-                'item' => $item,
-                'body' => $body['body']
-            ],
-            'position' => $body['endPosition']
-        ];
-    }
-
-    private function collectBlockBody(array $tokens, int &$position, string $blockType): array
-    {
+        $blockName = trim($args);
         $body = [];
-        $else = null;
         $depth = 1;
-        $i = $position + 1;
+        $i = $startIndex + 1;
+        $tokenCount = count($tokens);
 
-        while ($i < count($tokens) && $depth > 0) {
+        while ($i < $tokenCount && $depth > 0) {
             $token = $tokens[$i];
 
             if ($token->getType() === TokenType::BLOCK) {
-                $expression = $token->getValue();
+                $expression = trim($token->getValue());
                 $parts = explode(' ', $expression);
                 $command = $parts[0];
 
-                if ($command === $blockType) {
+                if ($command === 'block') {
                     $depth++;
-                } elseif ($command === "end{$blockType}") {
+                } elseif ($command === 'endblock') {
                     $depth--;
                     if ($depth === 0) {
                         break;
                     }
-                } elseif ($command === 'else' && $depth === 1 && $blockType === 'if') {
-                    // Start collecting else body
-                    $else = [];
+                }
+            }
+
+            if ($depth > 0) {
+                $node = $this->parseTokenToNode($token, $tokens, $i);
+                $body[] = $node['node'];
+                $i = $node['nextIndex'] - 1; // -1 because loop will increment
+            }
+
+            $i++;
+        }
+
+        return [
+            'node' => [
+                'type' => 'block',
+                'name' => $blockName,
+                'body' => $body
+            ],
+            'nextIndex' => $i + 1
+        ];
+    }
+
+    private function parseIfBlock(string $condition, array $tokens, int $startIndex): array
+    {
+        $body = [];
+        $elseBody = [];
+        $inElse = false;
+        $depth = 1;
+        $i = $startIndex + 1;
+        $tokenCount = count($tokens);
+
+        while ($i < $tokenCount && $depth > 0) {
+            $token = $tokens[$i];
+
+            if ($token->getType() === TokenType::BLOCK) {
+                $expression = trim($token->getValue());
+                $parts = explode(' ', $expression);
+                $command = $parts[0];
+
+                if ($command === 'if') {
+                    $depth++;
+                } elseif ($command === 'endif') {
+                    $depth--;
+                    if ($depth === 0) {
+                        break;
+                    }
+                } elseif ($command === 'else' && $depth === 1) {
+                    $inElse = true;
                     $i++;
                     continue;
                 }
             }
 
             if ($depth > 0) {
-                if ($else !== null) {
-                    if ($token->getType() === TokenType::TEXT) {
-                        $else[] = ['type' => 'text', 'content' => $token->getValue()];
-                    } elseif ($token->getType() === TokenType::VARIABLE) {
-                        $else[] = $this->parseVariableExpression($token->getValue());
-                    }
+                $node = $this->parseTokenToNode($token, $tokens, $i);
+                if ($inElse) {
+                    $elseBody[] = $node['node'];
                 } else {
-                    if ($token->getType() === TokenType::TEXT) {
-                        $body[] = ['type' => 'text', 'content' => $token->getValue()];
-                    } elseif ($token->getType() === TokenType::VARIABLE) {
-                        $body[] = $this->parseVariableExpression($token->getValue());
-                    }
+                    $body[] = $node['node'];
                 }
+                $i = $node['nextIndex'] - 1; // -1 because loop will increment
             }
 
             $i++;
         }
 
-        if ($depth > 0) {
-            throw new \RuntimeException("Unterminated {$blockType} block");
+        return [
+            'node' => [
+                'type' => 'if',
+                'condition' => $this->parseCondition($condition),
+                'body' => $body,
+                'else' => empty($elseBody) ? null : $elseBody
+            ],
+            'nextIndex' => $i + 1
+        ];
+    }
+
+    private function parseForBlock(string $expression, array $tokens, int $startIndex): array
+    {
+        if (!preg_match('/(\w+)\s+as\s+(\w+)/', $expression, $matches)) {
+            throw new \RuntimeException("Invalid for loop syntax: {$expression}");
+        }
+
+        $array = $matches[1];
+        $item = $matches[2];
+        $body = [];
+        $depth = 1;
+        $i = $startIndex + 1;
+        $tokenCount = count($tokens);
+
+        while ($i < $tokenCount && $depth > 0) {
+            $token = $tokens[$i];
+
+            if ($token->getType() === TokenType::BLOCK) {
+                $expression = trim($token->getValue());
+                $parts = explode(' ', $expression);
+                $command = $parts[0];
+
+                if ($command === 'for') {
+                    $depth++;
+                } elseif ($command === 'endfor') {
+                    $depth--;
+                    if ($depth === 0) {
+                        break;
+                    }
+                }
+            }
+
+            if ($depth > 0) {
+                $node = $this->parseTokenToNode($token, $tokens, $i);
+                $body[] = $node['node'];
+                $i = $node['nextIndex'] - 1; // -1 because loop will increment
+            }
+
+            $i++;
         }
 
         return [
-            'body' => $body,
-            'else' => $else,
-            'endPosition' => $i
+            'node' => [
+                'type' => 'for',
+                'array' => $array,
+                'item' => $item,
+                'body' => $body
+            ],
+            'nextIndex' => $i + 1
         ];
+    }
+
+    private function parseTokenToNode(Token $token, array $tokens, int $index): array
+    {
+        switch ($token->getType()) {
+            case TokenType::TEXT:
+                return [
+                    'node' => ['type' => 'text', 'content' => $token->getValue()],
+                    'nextIndex' => $index + 1
+                ];
+
+            case TokenType::VARIABLE:
+                return [
+                    'node' => $this->parseVariable($token->getValue()),
+                    'nextIndex' => $index + 1
+                ];
+
+            case TokenType::BLOCK:
+                return $this->parseBlock($token->getValue(), $tokens, $index);
+
+            default:
+                throw new \RuntimeException("Unknown token type: {$token->getType()->value}");
+        }
     }
 
     private function parseCondition(string $condition): array
     {
-        // Simple condition parsing for now: "player.injured" or "player.name == 'John'"
         if (str_contains($condition, '==')) {
             [$left, $right] = explode('==', $condition, 2);
             return [
                 'type' => 'comparison',
                 'operator' => '==',
-                'left' => $this->parseVariableExpression(trim($left)),
+                'left' => $this->parseVariable(trim($left)),
                 'right' => trim($right, '\'" ')
             ];
         }
 
-        // Simple variable check
         return [
             'type' => 'variable',
-            'expression' => $this->parseVariableExpression($condition)
+            'expression' => $this->parseVariable($condition)
         ];
     }
 }

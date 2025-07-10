@@ -53,11 +53,25 @@ PHP;
         return match ($node['type']) {
             'text' => $this->compileText($node),
             'variable' => $this->compileVariable($node),
+            'extends' => $this->compileExtends($node),
+            'block' => $this->compileBlock($node),
             'if' => $this->compileIf($node),
             'for' => $this->compileFor($node),
             'include' => $this->compileInclude($node),
             default => throw new \RuntimeException("Unknown node type: {$node['type']}")
         };
+    }
+
+    private function compileExtends(array $node): string
+    {
+        // Für Template-Vererbung - fürs erste als Kommentar
+        return "// extends: {$node['template']}\n";
+    }
+
+    private function compileBlock(array $node): string
+    {
+        $body = $this->compileNodes($node['body']);
+        return "// block: {$node['name']}\n{$body}// endblock\n";
     }
 
     private function compileText(array $node): string
