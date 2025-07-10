@@ -7,6 +7,9 @@ namespace Framework\Core;
 use Framework\Database\DatabaseServiceProvider;
 use Framework\Database\ConnectionManager;
 use Framework\Database\QueryBuilder;
+use Framework\Security\SecurityServiceProvider;
+use Framework\Security\Session;
+use Framework\Security\Csrf;
 use Framework\Http\Request;
 use Framework\Http\Response;
 use Framework\Routing\Router;
@@ -15,7 +18,7 @@ use RuntimeException;
 use Throwable;
 
 /**
- * Application - Bootstrap und Orchestrierung des Frameworks (Database-erweitert)
+ * Application - Bootstrap und Orchestrierung des Frameworks (Database & Security erweitert)
  */
 class Application
 {
@@ -150,6 +153,22 @@ class Application
     }
 
     /**
+     * Holt Session-Service
+     */
+    public function getSession(): Session
+    {
+        return $this->container->get(Session::class);
+    }
+
+    /**
+     * Holt CSRF-Service
+     */
+    public function getCsrf(): Csrf
+    {
+        return $this->container->get(Csrf::class);
+    }
+
+    /**
      * Registriert einen Service
      */
     public function singleton(string $abstract, string|callable|null $concrete = null): self
@@ -211,6 +230,7 @@ class Application
             'storage/uploads',
             'app/Config',
             'app/Actions',
+            'app/Middleware',
         ];
 
         foreach ($directories as $dir) {
@@ -227,6 +247,12 @@ class Application
             $success = false;
         }
 
+        // Erstelle Security-Konfiguration
+        if (!SecurityServiceProvider::publishConfig($this->basePath)) {
+            echo "Failed to create security config\n";
+            $success = false;
+        }
+
         return $success;
     }
 
@@ -238,6 +264,7 @@ class Application
         $this->setupEnvironment();
         $this->registerCoreServices();
         $this->registerDatabaseServices();
+        $this->registerSecurityServices();
         $this->setupRouter();
     }
 
@@ -258,10 +285,8 @@ class Application
         ini_set('default_charset', self::DEFAULT_CHARSET);
         mb_internal_encoding(self::DEFAULT_CHARSET);
 
-        // Session (falls benötigt)
-        if (session_status() === PHP_SESSION_NONE) {
-            session_start();
-        }
+        // Session (wird später durch SecurityServiceProvider verwaltet)
+        // Hier bewusst nicht starten, da SessionMiddleware das übernimmt
     }
 
     /**
@@ -299,6 +324,15 @@ class Application
     private function registerDatabaseServices(): void
     {
         $provider = new DatabaseServiceProvider($this->container, $this);
+        $provider->register();
+    }
+
+    /**
+     * Registriert Security-Services
+     */
+    private function registerSecurityServices(): void
+    {
+        $provider = new SecurityServiceProvider($this->container, $this);
         $provider->register();
     }
 
