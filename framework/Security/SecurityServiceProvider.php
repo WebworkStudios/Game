@@ -106,8 +106,7 @@ PHP;
         $configPath = $this->app->getBasePath() . '/' . self::DEFAULT_CONFIG_PATH;
 
         if (!file_exists($configPath)) {
-            // Default-Konfiguration zurückgeben wenn keine Config-Datei existiert
-            return $this->getDefaultConfig();
+            throw new \InvalidArgumentException("Security config not found: {$configPath}");
         }
 
         $config = require $configPath;
@@ -116,31 +115,7 @@ PHP;
             throw new \InvalidArgumentException('Security config must return array');
         }
 
-        return array_merge($this->getDefaultConfig(), $config);
-    }
-
-    /**
-     * Standard-Konfiguration
-     */
-    private function getDefaultConfig(): array
-    {
-        return [
-            'session' => [
-                'lifetime' => 7200, // 2 Stunden
-                'path' => '/',
-                'domain' => '',
-                'secure' => $_SERVER['HTTPS'] ?? false, // Auto-detect HTTPS
-                'httponly' => true,
-                'samesite' => 'Lax',
-                'gc_maxlifetime' => 7200,
-                'gc_probability' => 1,
-                'gc_divisor' => 100,
-            ],
-            'csrf' => [
-                'token_lifetime' => 7200, // 2 Stunden
-                'regenerate_on_login' => true,
-            ],
-        ];
+        return $config; // ← Kein Merge mit Defaults mehr
     }
 
     /**

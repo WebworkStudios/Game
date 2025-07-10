@@ -131,8 +131,7 @@ PHP;
         $configPath = $this->app->getBasePath() . '/' . self::DEFAULT_CONFIG_PATH;
 
         if (!file_exists($configPath)) {
-            // Default-Konfiguration zurückgeben wenn keine Config-Datei existiert
-            return $this->getDefaultConfig();
+            throw new \InvalidArgumentException("Templating config not found: {$configPath}");
         }
 
         $config = require $configPath;
@@ -141,27 +140,7 @@ PHP;
             throw new \InvalidArgumentException('Templating config must return array');
         }
 
-        return array_merge($this->getDefaultConfig(), $config);
-    }
-
-    /**
-     * Standard-Konfiguration
-     */
-    private function getDefaultConfig(): array
-    {
-        return [
-            'debug' => false,
-            'cache' => [
-                'enabled' => true,
-                'check_interval' => 60,
-                'path' => 'storage/cache/views',
-            ],
-            'paths' => [
-                '' => 'app/Views',
-            ],
-            'globals' => [],
-            'file_extension' => '.html',
-        ];
+        return $config; // ← Kein Merge mit Defaults mehr
     }
 
     /**

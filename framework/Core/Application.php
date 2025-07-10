@@ -53,12 +53,31 @@ class Application
     private function bootstrap(): void
     {
         $this->setupEnvironment();
+        $this->loadAppConfig(); // ← NEU
         $this->registerCoreServices();
         $this->registerDatabaseServices();
         $this->registerSecurityServices();
         $this->registerValidationServices();
         $this->registerTemplatingServices();
         $this->setupRouter();
+    }
+
+    private function loadAppConfig(): void
+    {
+        try {
+            $config = $this->loadConfig('app/Config/app.php');
+
+            // Debug-Modus setzen
+            $this->setDebug($config['debug'] ?? false);
+
+            // Timezone setzen (überschreibt setupEnvironment)
+            if (isset($config['timezone'])) {
+                date_default_timezone_set($config['timezone']);
+            }
+        } catch (\Exception) {
+            // Config nicht gefunden - Default-Werte aus setupEnvironment verwenden
+            // Kein Error, da app.php optional ist (hat sinnvolle Defaults)
+        }
     }
 
     /**
