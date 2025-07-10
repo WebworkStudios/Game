@@ -17,7 +17,9 @@ class TestSecurityAction
 {
     public function __construct(
         private readonly Application $app
-    ) {}
+    )
+    {
+    }
 
     public function __invoke(Request $request): Response
     {

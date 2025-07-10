@@ -32,8 +32,10 @@ class Router
 
     public function __construct(
         private readonly ServiceContainer $container,
-        private readonly RouterCache $cache,
-    ) {}
+        private readonly RouterCache      $cache,
+    )
+    {
+    }
 
     /**
      * Verarbeitet HTTP-Request und gibt Response zurück
@@ -57,76 +59,6 @@ class Router
         }
 
         return $this->executeRoute($request, $matchedRoute['route'], $matchedRoute['parameters']);
-    }
-
-    /**
-     * Fügt globale Middleware hinzu
-     */
-    public function addGlobalMiddleware(string $middlewareClass): void
-    {
-        $this->globalMiddlewares[] = $middlewareClass;
-    }
-
-    /**
-     * Setzt alle globalen Middlewares
-     */
-    public function setGlobalMiddlewares(array $middlewares): void
-    {
-        $this->globalMiddlewares = $middlewares;
-    }
-
-    /**
-     * Holt alle globalen Middlewares
-     */
-    public function getGlobalMiddlewares(): array
-    {
-        return $this->globalMiddlewares;
-    }
-
-    /**
-     * Setzt 404-Handler
-     */
-    public function setNotFoundHandler(callable $handler): void
-    {
-        $this->notFoundHandler = $handler;
-    }
-
-    /**
-     * Setzt 405-Handler
-     */
-    public function setMethodNotAllowedHandler(callable $handler): void
-    {
-        $this->methodNotAllowedHandler = $handler;
-    }
-
-    /**
-     * Generiert URL für benannte Route
-     */
-    public function url(string $name, array $parameters = []): string
-    {
-        $this->loadRoutes();
-
-        if (!isset($this->namedRoutes[$name])) {
-            throw new InvalidArgumentException("Route '{$name}' not found");
-        }
-
-        $route = $this->namedRoutes[$name];
-        $pattern = $route->pattern;
-
-        // Entferne Regex-Anchors
-        $url = trim($pattern, '#^$');
-
-        // Ersetze Parameter
-        foreach ($parameters as $key => $value) {
-            $url = preg_replace("/\(\?\P<{$key}>[^)]+\)/", (string) $value, $url);
-        }
-
-        // Prüfe ob alle Parameter ersetzt wurden
-        if (preg_match('/\(\?\?P<\w+>[^)]+\)/', $url)) {
-            throw new InvalidArgumentException("Missing parameters for route '{$name}'");
-        }
-
-        return $url;
     }
 
     /**
@@ -174,85 +106,6 @@ class Router
     }
 
     /**
-     * Führt Route mit Middleware-Chain aus
-     */
-    private function executeRoute(Request $request, RouteEntry $route, array $parameters): Response
-    {
-        // Parameter zum Request hinzufügen
-        $requestWithParams = $this->addParametersToRequest($request, $parameters);
-
-        // Middleware-Chain aufbauen: Global + Route Middlewares
-        $middlewares = array_merge($this->globalMiddlewares, $route->middlewares);
-        $handler = fn(Request $req) => $this->executeAction($req, $route->action);
-
-        // Middleware-Chain rückwärts aufbauen
-        foreach (array_reverse($middlewares) as $middlewareClass) {
-            $currentHandler = $handler;
-            $handler = function (Request $req) use ($middlewareClass, $currentHandler) {
-                $middleware = $this->container->get($middlewareClass);
-
-                if (!$middleware instanceof MiddlewareInterface) {
-                    throw new RuntimeException(
-                        "Middleware {$middlewareClass} must implement MiddlewareInterface"
-                    );
-                }
-
-                return $middleware->handle($req, $currentHandler);
-            };
-        }
-
-        return $handler($requestWithParams);
-    }
-
-    /**
-     * Führt Action aus
-     */
-    private function executeAction(Request $request, string $actionClass): Response
-    {
-        $action = $this->container->get($actionClass);
-
-        if (!method_exists($action, '__invoke')) {
-            throw new RuntimeException("Action {$actionClass} must have __invoke method");
-        }
-
-        $response = $action($request);
-
-        if (!$response instanceof Response) {
-            throw new RuntimeException(
-                "Action {$actionClass} must return Response instance"
-            );
-        }
-
-        return $response;
-    }
-
-    /**
-     * Fügt Route-Parameter zum Request hinzu
-     */
-    private function addParametersToRequest(Request $request, array $parameters): Request
-    {
-        if (empty($parameters)) {
-            return $request;
-        }
-
-        // Parameter zu Query-Parametern hinzufügen (für einfachen Zugriff)
-        $query = array_merge($request->getQuery(), $parameters);
-
-        return new Request(
-            method: $request->getMethod(),
-            uri: $request->getUri(),
-            headers: $request->getHeaders(),
-            query: $query,
-            post: $request->getPost(),
-            files: $request->getFiles(),
-            cookies: $request->getCookies(),
-            server: $request->getServer(),
-            body: $request->getBody(),
-            protocol: $request->getProtocol(),
-        );
-    }
-
-    /**
      * Behandelt 404 Not Found
      */
     private function handleNotFound(Request $request): Response
@@ -288,6 +141,155 @@ class Router
 
         return Response::methodNotAllowed(self::DEFAULT_405_MESSAGE)
             ->withHeader('Allow', implode(', ', $allowedMethods));
+    }
+
+    /**
+     * Führt Route mit Middleware-Chain aus
+     */
+    private function executeRoute(Request $request, RouteEntry $route, array $parameters): Response
+    {
+        // Parameter zum Request hinzufügen
+        $requestWithParams = $this->addParametersToRequest($request, $parameters);
+
+        // Middleware-Chain aufbauen: Global + Route Middlewares
+        $middlewares = array_merge($this->globalMiddlewares, $route->middlewares);
+        $handler = fn(Request $req) => $this->executeAction($req, $route->action);
+
+        // Middleware-Chain rückwärts aufbauen
+        foreach (array_reverse($middlewares) as $middlewareClass) {
+            $currentHandler = $handler;
+            $handler = function (Request $req) use ($middlewareClass, $currentHandler) {
+                $middleware = $this->container->get($middlewareClass);
+
+                if (!$middleware instanceof MiddlewareInterface) {
+                    throw new RuntimeException(
+                        "Middleware {$middlewareClass} must implement MiddlewareInterface"
+                    );
+                }
+
+                return $middleware->handle($req, $currentHandler);
+            };
+        }
+
+        return $handler($requestWithParams);
+    }
+
+    /**
+     * Fügt Route-Parameter zum Request hinzu
+     */
+    private function addParametersToRequest(Request $request, array $parameters): Request
+    {
+        if (empty($parameters)) {
+            return $request;
+        }
+
+        // Parameter zu Query-Parametern hinzufügen (für einfachen Zugriff)
+        $query = array_merge($request->getQuery(), $parameters);
+
+        return new Request(
+            method: $request->getMethod(),
+            uri: $request->getUri(),
+            headers: $request->getHeaders(),
+            query: $query,
+            post: $request->getPost(),
+            files: $request->getFiles(),
+            cookies: $request->getCookies(),
+            server: $request->getServer(),
+            body: $request->getBody(),
+            protocol: $request->getProtocol(),
+        );
+    }
+
+    /**
+     * Führt Action aus
+     */
+    private function executeAction(Request $request, string $actionClass): Response
+    {
+        $action = $this->container->get($actionClass);
+
+        if (!method_exists($action, '__invoke')) {
+            throw new RuntimeException("Action {$actionClass} must have __invoke method");
+        }
+
+        $response = $action($request);
+
+        if (!$response instanceof Response) {
+            throw new RuntimeException(
+                "Action {$actionClass} must return Response instance"
+            );
+        }
+
+        return $response;
+    }
+
+    /**
+     * Fügt globale Middleware hinzu
+     */
+    public function addGlobalMiddleware(string $middlewareClass): void
+    {
+        $this->globalMiddlewares[] = $middlewareClass;
+    }
+
+    /**
+     * Holt alle globalen Middlewares
+     */
+    public function getGlobalMiddlewares(): array
+    {
+        return $this->globalMiddlewares;
+    }
+
+    /**
+     * Setzt alle globalen Middlewares
+     */
+    public function setGlobalMiddlewares(array $middlewares): void
+    {
+        $this->globalMiddlewares = $middlewares;
+    }
+
+    /**
+     * Setzt 404-Handler
+     */
+    public function setNotFoundHandler(callable $handler): void
+    {
+        $this->notFoundHandler = $handler;
+    }
+
+    /**
+     * Setzt 405-Handler
+     */
+    public function setMethodNotAllowedHandler(callable $handler): void
+    {
+        $this->methodNotAllowedHandler = $handler;
+    }
+
+    /**
+     * Generiert URL für benannte Route
+     */
+    public function url(string $name, array $parameters = []): string
+    {
+        $this->loadRoutes();
+
+        if (!isset($this->namedRoutes[$name])) {
+            throw new InvalidArgumentException("Route '{$name}' not found");
+        }
+
+        $route = $this->namedRoutes[$name];
+        $pattern = $route->pattern;
+
+        // Entferne Regex-Anchors
+        $url = trim($pattern, '#^$');
+
+        // Ersetze Parameter
+        foreach ($parameters as $key => $value) {
+            $url = preg_replace("/\(\?\P<{$key}>[^)]+\)/", (string)$value, $url);
+        }
+
+        // Prüfe ob alle Parameter ersetzt wurden
+        if (preg_match('/\(\?\?P<\w+>[^)]+\)/', $url)) {
+            throw new InvalidArgumentException("Missing parameters for route '{$name}'");
+        }
+
+        return $url;
     }
 
     /**

@@ -52,6 +52,22 @@ readonly class Route
     }
 
     /**
+     * Erstellt Regex-Pattern für Pfad-Matching
+     */
+    public function getPattern(): string
+    {
+        $pattern = $this->getNormalizedPath();
+
+        // Parameter durch Regex ersetzen
+        foreach ($this->getParameters() as $param) {
+            $constraint = $this->constraints[$param] ?? '[^/]+';
+            $pattern = str_replace("{{$param}}", "(?P<{$param}>{$constraint})", $pattern);
+        }
+
+        return '#^' . $pattern . '$#';
+    }
+
+    /**
      * Normalisiert den Pfad
      */
     public function getNormalizedPath(): string
@@ -67,21 +83,5 @@ readonly class Route
     {
         preg_match_all('/\{(\w+)}/', $this->path, $matches);
         return $matches[1] ?? [];
-    }
-
-    /**
-     * Erstellt Regex-Pattern für Pfad-Matching
-     */
-    public function getPattern(): string
-    {
-        $pattern = $this->getNormalizedPath();
-
-        // Parameter durch Regex ersetzen
-        foreach ($this->getParameters() as $param) {
-            $constraint = $this->constraints[$param] ?? '[^/]+';
-            $pattern = str_replace("{{$param}}", "(?P<{$param}>{$constraint})", $pattern);
-        }
-
-        return '#^' . $pattern . '$#';
     }
 }

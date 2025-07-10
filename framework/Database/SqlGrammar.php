@@ -62,69 +62,6 @@ class SqlGrammar
     }
 
     /**
-     * Erstellt INSERT Statement
-     */
-    public function compileInsert(string $table, array $values): string
-    {
-        $table = $this->wrapTable($table);
-
-        if (empty($values)) {
-            throw new \InvalidArgumentException('Insert values cannot be empty');
-        }
-
-        // Single row insert
-        if (isset($values[0]) && is_array($values[0])) {
-            return $this->compileInsertMultiple($table, $values);
-        }
-
-        // Single row insert
-        $columns = array_keys($values);
-        $placeholders = array_map(fn($col) => ":{$col}", $columns);
-
-        return sprintf(
-            'INSERT INTO %s (%s) VALUES (%s)',
-            $table,
-            implode(', ', array_map([$this, 'wrapColumn'], $columns)),
-            implode(', ', $placeholders)
-        );
-    }
-
-    /**
-     * Erstellt UPDATE Statement
-     */
-    public function compileUpdate(string $table, array $values, array $wheres): string
-    {
-        $table = $this->wrapTable($table);
-
-        $sets = [];
-        foreach ($values as $column => $value) {
-            $sets[] = $this->wrapColumn($column) . " = :{$column}";
-        }
-
-        $sql = sprintf('UPDATE %s SET %s', $table, implode(', ', $sets));
-
-        if (!empty($wheres)) {
-            $sql .= $this->compileWheres($wheres);
-        }
-
-        return $sql;
-    }
-
-    /**
-     * Erstellt DELETE Statement
-     */
-    public function compileDelete(string $table, array $wheres): string
-    {
-        $sql = 'DELETE FROM ' . $this->wrapTable($table);
-
-        if (!empty($wheres)) {
-            $sql .= $this->compileWheres($wheres);
-        }
-
-        return $sql;
-    }
-
-    /**
      * Kompiliert Spalten
      */
     private function compileColumns(array $columns): string
@@ -134,6 +71,18 @@ class SqlGrammar
         }
 
         return implode(', ', array_map([$this, 'wrapColumn'], $columns));
+    }
+
+    /**
+     * Wraps table name mit Driver-spezifischen Quotes
+     */
+    public function wrapTable(string $table): string
+    {
+        return match ($this->driver) {
+            DatabaseDriver::MYSQL => "`{$table}`",
+            DatabaseDriver::POSTGRESQL => "\"{$table}\"",
+            DatabaseDriver::SQLITE => "`{$table}`",
+        };
     }
 
     /**
@@ -155,6 +104,29 @@ class SqlGrammar
         }
 
         return $sql;
+    }
+
+    /**
+     * Wraps column name mit Driver-spezifischen Quotes
+     */
+    public function wrapColumn(string $column): string
+    {
+        // Handle table.column notation
+        if (str_contains($column, '.')) {
+            [$table, $col] = explode('.', $column, 2);
+            return $this->wrapTable($table) . '.' . $this->wrapColumn($col);
+        }
+
+        // Skip if already wrapped or is a function
+        if (str_contains($column, '(') || str_contains($column, '`') || str_contains($column, '"')) {
+            return $column;
+        }
+
+        return match ($this->driver) {
+            DatabaseDriver::MYSQL => "`{$column}`",
+            DatabaseDriver::POSTGRESQL => "\"{$column}\"",
+            DatabaseDriver::SQLITE => "`{$column}`",
+        };
     }
 
     /**
@@ -183,6 +155,60 @@ class SqlGrammar
         }
 
         return $sql . implode(' AND ', $conditions);
+    }
+
+    /**
+     * Basic WHERE Condition
+     */
+    private function compileBasicWhere(array $where): string
+    {
+        return sprintf(
+            '%s %s :%s',
+            $this->wrapColumn($where['column']),
+            $where['operator'],
+            $where['binding']
+        );
+    }
+
+    /**
+     * IN WHERE Condition
+     */
+    private function compileInWhere(array $where): string
+    {
+        $placeholders = array_map(fn($i) => ":{$where['binding']}_{$i}", array_keys($where['values']));
+
+        return sprintf(
+            '%s %s (%s)',
+            $this->wrapColumn($where['column']),
+            $where['not'] ? 'NOT IN' : 'IN',
+            implode(', ', $placeholders)
+        );
+    }
+
+    /**
+     * NULL WHERE Condition
+     */
+    private function compileNullWhere(array $where): string
+    {
+        return sprintf(
+            '%s %s',
+            $this->wrapColumn($where['column']),
+            $where['not'] ? 'IS NOT NULL' : 'IS NULL'
+        );
+    }
+
+    /**
+     * BETWEEN WHERE Condition
+     */
+    private function compileBetweenWhere(array $where): string
+    {
+        return sprintf(
+            '%s %s :%s_min AND :%s_max',
+            $this->wrapColumn($where['column']),
+            $where['not'] ? 'NOT BETWEEN' : 'BETWEEN',
+            $where['binding'],
+            $where['binding']
+        );
     }
 
     /**
@@ -266,6 +292,34 @@ class SqlGrammar
     }
 
     /**
+     * Erstellt INSERT Statement
+     */
+    public function compileInsert(string $table, array $values): string
+    {
+        $table = $this->wrapTable($table);
+
+        if (empty($values)) {
+            throw new \InvalidArgumentException('Insert values cannot be empty');
+        }
+
+        // Single row insert
+        if (isset($values[0]) && is_array($values[0])) {
+            return $this->compileInsertMultiple($table, $values);
+        }
+
+        // Single row insert
+        $columns = array_keys($values);
+        $placeholders = array_map(fn($col) => ":{$col}", $columns);
+
+        return sprintf(
+            'INSERT INTO %s (%s) VALUES (%s)',
+            $table,
+            implode(', ', array_map([$this, 'wrapColumn'], $columns)),
+            implode(', ', $placeholders)
+        );
+    }
+
+    /**
      * Multiple Row Insert
      */
     private function compileInsertMultiple(string $table, array $rows): string
@@ -290,92 +344,38 @@ class SqlGrammar
     }
 
     /**
-     * Basic WHERE Condition
+     * Erstellt UPDATE Statement
      */
-    private function compileBasicWhere(array $where): string
+    public function compileUpdate(string $table, array $values, array $wheres): string
     {
-        return sprintf(
-            '%s %s :%s',
-            $this->wrapColumn($where['column']),
-            $where['operator'],
-            $where['binding']
-        );
-    }
+        $table = $this->wrapTable($table);
 
-    /**
-     * IN WHERE Condition
-     */
-    private function compileInWhere(array $where): string
-    {
-        $placeholders = array_map(fn($i) => ":{$where['binding']}_{$i}", array_keys($where['values']));
-
-        return sprintf(
-            '%s %s (%s)',
-            $this->wrapColumn($where['column']),
-            $where['not'] ? 'NOT IN' : 'IN',
-            implode(', ', $placeholders)
-        );
-    }
-
-    /**
-     * NULL WHERE Condition
-     */
-    private function compileNullWhere(array $where): string
-    {
-        return sprintf(
-            '%s %s',
-            $this->wrapColumn($where['column']),
-            $where['not'] ? 'IS NOT NULL' : 'IS NULL'
-        );
-    }
-
-    /**
-     * BETWEEN WHERE Condition
-     */
-    private function compileBetweenWhere(array $where): string
-    {
-        return sprintf(
-            '%s %s :%s_min AND :%s_max',
-            $this->wrapColumn($where['column']),
-            $where['not'] ? 'NOT BETWEEN' : 'BETWEEN',
-            $where['binding'],
-            $where['binding']
-        );
-    }
-
-    /**
-     * Wraps table name mit Driver-spezifischen Quotes
-     */
-    public function wrapTable(string $table): string
-    {
-        return match ($this->driver) {
-            DatabaseDriver::MYSQL => "`{$table}`",
-            DatabaseDriver::POSTGRESQL => "\"{$table}\"",
-            DatabaseDriver::SQLITE => "`{$table}`",
-        };
-    }
-
-    /**
-     * Wraps column name mit Driver-spezifischen Quotes
-     */
-    public function wrapColumn(string $column): string
-    {
-        // Handle table.column notation
-        if (str_contains($column, '.')) {
-            [$table, $col] = explode('.', $column, 2);
-            return $this->wrapTable($table) . '.' . $this->wrapColumn($col);
+        $sets = [];
+        foreach ($values as $column => $value) {
+            $sets[] = $this->wrapColumn($column) . " = :{$column}";
         }
 
-        // Skip if already wrapped or is a function
-        if (str_contains($column, '(') || str_contains($column, '`') || str_contains($column, '"')) {
-            return $column;
+        $sql = sprintf('UPDATE %s SET %s', $table, implode(', ', $sets));
+
+        if (!empty($wheres)) {
+            $sql .= $this->compileWheres($wheres);
         }
 
-        return match ($this->driver) {
-            DatabaseDriver::MYSQL => "`{$column}`",
-            DatabaseDriver::POSTGRESQL => "\"{$column}\"",
-            DatabaseDriver::SQLITE => "`{$column}`",
-        };
+        return $sql;
+    }
+
+    /**
+     * Erstellt DELETE Statement
+     */
+    public function compileDelete(string $table, array $wheres): string
+    {
+        $sql = 'DELETE FROM ' . $this->wrapTable($table);
+
+        if (!empty($wheres)) {
+            $sql .= $this->compileWheres($wheres);
+        }
+
+        return $sql;
     }
 
     /**

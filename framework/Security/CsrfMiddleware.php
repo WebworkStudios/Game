@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace Framework\Security;
 
+use Framework\Http\HttpStatus;
 use Framework\Http\Request;
 use Framework\Http\Response;
-use Framework\Http\HttpStatus;
 use Framework\Routing\MiddlewareInterface;
 use Framework\Routing\RouterCache;
 use ReflectionClass;
@@ -18,9 +18,11 @@ use ReflectionException;
 class CsrfMiddleware implements MiddlewareInterface
 {
     public function __construct(
-        private readonly Csrf $csrf,
+        private readonly Csrf        $csrf,
         private readonly RouterCache $routerCache
-    ) {}
+    )
+    {
+    }
 
     /**
      * Verarbeitet Request und validiert CSRF-Token

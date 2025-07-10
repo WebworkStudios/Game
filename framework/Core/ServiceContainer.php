@@ -5,10 +5,9 @@ declare(strict_types=1);
 
 namespace Framework\Core;
 
+use InvalidArgumentException;
 use ReflectionClass;
 use ReflectionException;
-use ReflectionParameter;
-use InvalidArgumentException;
 use RuntimeException;
 
 /**
@@ -37,6 +36,17 @@ class ServiceContainer
     public function singleton(string $abstract, string|callable|null $concrete = null): void
     {
         $this->register($abstract, $concrete, self::SINGLETON);
+    }
+
+    /**
+     * Registriert einen Service
+     */
+    private function register(string $abstract, string|callable|null $concrete, string $type): void
+    {
+        $this->services[$abstract] = [
+            'concrete' => $concrete ?? $abstract,
+            'type' => $type,
+        ];
     }
 
     /**
@@ -100,40 +110,6 @@ class ServiceContainer
     }
 
     /**
-     * Prüft, ob ein Service registriert ist
-     */
-    public function has(string $abstract): bool
-    {
-        return isset($this->services[$abstract])
-            || isset($this->instances[$abstract])
-            || isset($this->bindings[$abstract])
-            || class_exists($abstract);
-    }
-
-    /**
-     * Erstellt eine neue Instanz ohne Singleton-Caching
-     */
-    public function make(string $abstract, array $parameters = []): object
-    {
-        if (isset($this->bindings[$abstract])) {
-            $abstract = $this->bindings[$abstract];
-        }
-
-        return $this->createInstance($abstract, $parameters);
-    }
-
-    /**
-     * Registriert einen Service
-     */
-    private function register(string $abstract, string|callable|null $concrete, string $type): void
-    {
-        $this->services[$abstract] = [
-            'concrete' => $concrete ?? $abstract,
-            'type' => $type,
-        ];
-    }
-
-    /**
      * Löst einen registrierten Service auf
      */
     private function resolveService(string $abstract): object
@@ -151,19 +127,6 @@ class ServiceContainer
         if ($service['type'] === self::SINGLETON) {
             $this->instances[$abstract] = $instance;
         }
-
-        return $instance;
-    }
-
-    /**
-     * Erstellt eine Instanz mit Auto-wiring
-     */
-    private function autowire(string $class): object
-    {
-        $instance = $this->createInstance($class);
-
-        // Auto-wired Klassen standardmäßig als Singleton cachen
-        $this->instances[$class] = $instance;
 
         return $instance;
     }
@@ -256,5 +219,41 @@ class ServiceContainer
         }
 
         return $dependencies;
+    }
+
+    /**
+     * Erstellt eine Instanz mit Auto-wiring
+     */
+    private function autowire(string $class): object
+    {
+        $instance = $this->createInstance($class);
+
+        // Auto-wired Klassen standardmäßig als Singleton cachen
+        $this->instances[$class] = $instance;
+
+        return $instance;
+    }
+
+    /**
+     * Prüft, ob ein Service registriert ist
+     */
+    public function has(string $abstract): bool
+    {
+        return isset($this->services[$abstract])
+            || isset($this->instances[$abstract])
+            || isset($this->bindings[$abstract])
+            || class_exists($abstract);
+    }
+
+    /**
+     * Erstellt eine neue Instanz ohne Singleton-Caching
+     */
+    public function make(string $abstract, array $parameters = []): object
+    {
+        if (isset($this->bindings[$abstract])) {
+            $abstract = $this->bindings[$abstract];
+        }
+
+        return $this->createInstance($abstract, $parameters);
     }
 }

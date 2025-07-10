@@ -15,16 +15,18 @@ readonly class Request
 
     public function __construct(
         private HttpMethod $method,
-        private string $uri,
-        private array $headers = [],
-        private array $query = [],
-        private array $post = [],
-        private array $files = [],
-        private array $cookies = [],
-        private array $server = [],
-        private string $body = '',
-        private string $protocol = self::DEFAULT_PROTOCOL,
-    ) {}
+        private string     $uri,
+        private array      $headers = [],
+        private array      $query = [],
+        private array      $post = [],
+        private array      $files = [],
+        private array      $cookies = [],
+        private array      $server = [],
+        private string     $body = '',
+        private string     $protocol = self::DEFAULT_PROTOCOL,
+    )
+    {
+    }
 
     /**
      * Erstellt Request aus globalen PHP-Variablen
@@ -48,6 +50,38 @@ readonly class Request
             body: file_get_contents('php://input') ?: '',
             protocol: $protocol,
         );
+    }
+
+    /**
+     * Parst HTTP-Headers aus $_SERVER
+     */
+    private static function parseHeaders(): array
+    {
+        $headers = [];
+
+        foreach ($_SERVER as $key => $value) {
+            if (str_starts_with($key, 'HTTP_')) {
+                $header = strtolower(str_replace('_', '-', substr($key, 5)));
+                $headers[$header] = $value;
+            }
+        }
+
+        // Spezielle Headers
+        if (isset($_SERVER['CONTENT_TYPE'])) {
+            $headers['content-type'] = $_SERVER['CONTENT_TYPE'];
+        }
+
+        if (isset($_SERVER['CONTENT_LENGTH'])) {
+            $headers['content-length'] = $_SERVER['CONTENT_LENGTH'];
+        }
+
+        if (isset($_SERVER['PHP_AUTH_USER'])) {
+            $headers['authorization'] = 'Basic ' . base64_encode(
+                    $_SERVER['PHP_AUTH_USER'] . ':' . ($_SERVER['PHP_AUTH_PW'] ?? '')
+                );
+        }
+
+        return $headers;
     }
 
     /**
@@ -107,6 +141,8 @@ readonly class Request
         );
     }
 
+    // Getters
+
     /**
      * Erstellt neuen Request mit neuem Body
      */
@@ -126,15 +162,9 @@ readonly class Request
         );
     }
 
-    // Getters
     public function getMethod(): HttpMethod
     {
         return $this->method;
-    }
-
-    public function getUri(): string
-    {
-        return $this->uri;
     }
 
     public function getPath(): string
@@ -172,11 +202,6 @@ readonly class Request
         return $this->headers;
     }
 
-    public function getHeader(string $name): ?string
-    {
-        return $this->headers[strtolower($name)] ?? null;
-    }
-
     public function hasHeader(string $name): bool
     {
         return isset($this->headers[strtolower($name)]);
@@ -190,25 +215,6 @@ readonly class Request
     public function getProtocol(): string
     {
         return $this->protocol;
-    }
-
-    public function getHost(): string
-    {
-        return $this->getHeader('host') ?? $this->server['HTTP_HOST'] ?? 'localhost';
-    }
-
-    public function getScheme(): string
-    {
-        return $this->isSecure() ? 'https' : 'http';
-    }
-
-    public function getPort(): int
-    {
-        if ($port = $this->server['SERVER_PORT'] ?? null) {
-            return (int) $port;
-        }
-
-        return $this->isSecure() ? 443 : 80;
     }
 
     public function getFullUrl(): string
@@ -226,7 +232,44 @@ readonly class Request
         return "{$scheme}://{$host}{$portString}{$uri}";
     }
 
+    public function getScheme(): string
+    {
+        return $this->isSecure() ? 'https' : 'http';
+    }
+
+    public function isSecure(): bool
+    {
+        return ($this->server['HTTPS'] ?? 'off') !== 'off'
+            || ($this->server['SERVER_PORT'] ?? 80) == 443
+            || $this->getHeader('x-forwarded-proto') === 'https';
+    }
+
+    public function getHeader(string $name): ?string
+    {
+        return $this->headers[strtolower($name)] ?? null;
+    }
+
+    public function getHost(): string
+    {
+        return $this->getHeader('host') ?? $this->server['HTTP_HOST'] ?? 'localhost';
+    }
+
     // Convenience Methods
+
+    public function getPort(): int
+    {
+        if ($port = $this->server['SERVER_PORT'] ?? null) {
+            return (int)$port;
+        }
+
+        return $this->isSecure() ? 443 : 80;
+    }
+
+    public function getUri(): string
+    {
+        return $this->uri;
+    }
+
     public function isGet(): bool
     {
         return $this->method === HttpMethod::GET;
@@ -262,11 +305,9 @@ readonly class Request
         return $this->method === HttpMethod::OPTIONS;
     }
 
-    public function isSecure(): bool
+    public function isXmlHttpRequest(): bool
     {
-        return ($this->server['HTTPS'] ?? 'off') !== 'off'
-            || ($this->server['SERVER_PORT'] ?? 80) == 443
-            || $this->getHeader('x-forwarded-proto') === 'https';
+        return $this->isAjax();
     }
 
     public function isAjax(): bool
@@ -274,10 +315,9 @@ readonly class Request
         return $this->getHeader('x-requested-with') === 'XMLHttpRequest';
     }
 
-    public function isJson(): bool
+    public function wantsJson(): bool
     {
-        $contentType = $this->getHeader('content-type') ?? '';
-        return str_contains($contentType, 'application/json');
+        return $this->expectsJson() || $this->isAjax();
     }
 
     public function expectsJson(): bool
@@ -288,14 +328,21 @@ readonly class Request
             || str_contains($accept, '*/*');
     }
 
-    public function isXmlHttpRequest(): bool
+    /**
+     * Holt nur bestimmte Keys aus Input
+     */
+    public function only(array $keys): array
     {
-        return $this->isAjax();
+        $all = $this->all();
+        return array_intersect_key($all, array_flip($keys));
     }
 
-    public function wantsJson(): bool
+    /**
+     * Holt alle Input-Daten als Array
+     */
+    public function all(): array
     {
-        return $this->expectsJson() || $this->isAjax();
+        return array_merge($this->query, $this->json(), $this->post);
     }
 
     /**
@@ -315,29 +362,10 @@ readonly class Request
         }
     }
 
-    /**
-     * Holt Input-Wert (POST > JSON > Query Priority)
-     */
-    public function input(string $key, mixed $default = null): mixed
+    public function isJson(): bool
     {
-        return $this->post[$key] ?? $this->json()[$key] ?? $this->query[$key] ?? $default;
-    }
-
-    /**
-     * Holt alle Input-Daten als Array
-     */
-    public function all(): array
-    {
-        return array_merge($this->query, $this->json(), $this->post);
-    }
-
-    /**
-     * Holt nur bestimmte Keys aus Input
-     */
-    public function only(array $keys): array
-    {
-        $all = $this->all();
-        return array_intersect_key($all, array_flip($keys));
+        $contentType = $this->getHeader('content-type') ?? '';
+        return str_contains($contentType, 'application/json');
     }
 
     /**
@@ -355,6 +383,14 @@ readonly class Request
     public function has(string $key): bool
     {
         return $this->input($key) !== null;
+    }
+
+    /**
+     * Holt Input-Wert (POST > JSON > Query Priority)
+     */
+    public function input(string $key, mixed $default = null): mixed
+    {
+        return $this->post[$key] ?? $this->json()[$key] ?? $this->query[$key] ?? $default;
     }
 
     /**
@@ -395,37 +431,5 @@ readonly class Request
         }
 
         return $this->server['REMOTE_ADDR'] ?? '0.0.0.0';
-    }
-
-    /**
-     * Parst HTTP-Headers aus $_SERVER
-     */
-    private static function parseHeaders(): array
-    {
-        $headers = [];
-
-        foreach ($_SERVER as $key => $value) {
-            if (str_starts_with($key, 'HTTP_')) {
-                $header = strtolower(str_replace('_', '-', substr($key, 5)));
-                $headers[$header] = $value;
-            }
-        }
-
-        // Spezielle Headers
-        if (isset($_SERVER['CONTENT_TYPE'])) {
-            $headers['content-type'] = $_SERVER['CONTENT_TYPE'];
-        }
-
-        if (isset($_SERVER['CONTENT_LENGTH'])) {
-            $headers['content-length'] = $_SERVER['CONTENT_LENGTH'];
-        }
-
-        if (isset($_SERVER['PHP_AUTH_USER'])) {
-            $headers['authorization'] = 'Basic ' . base64_encode(
-                    $_SERVER['PHP_AUTH_USER'] . ':' . ($_SERVER['PHP_AUTH_PW'] ?? '')
-                );
-        }
-
-        return $headers;
     }
 }

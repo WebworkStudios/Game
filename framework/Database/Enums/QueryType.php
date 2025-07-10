@@ -13,13 +13,13 @@ enum QueryType: string
     case UPDATE = 'update';
     case DELETE = 'delete';
 
-    public function isReadOnly(): bool
-    {
-        return $this === self::SELECT;
-    }
-
     public function requiresConnection(): ConnectionType
     {
         return $this->isReadOnly() ? ConnectionType::READ : ConnectionType::WRITE;
+    }
+
+    public function isReadOnly(): bool
+    {
+        return $this === self::SELECT;
     }
 }

@@ -19,7 +19,7 @@ enum ParameterType: int
      */
     public static function fromValue(mixed $value): self
     {
-        return match(true) {
+        return match (true) {
             is_null($value) => self::NULL,
             is_bool($value) => self::BOOLEAN,
             is_int($value) => self::INTEGER,

@@ -16,7 +16,7 @@ enum DatabaseDriver: string
 
     public function getDefaultPort(): int
     {
-        return match($this) {
+        return match ($this) {
             self::MYSQL => 3306,
             self::POSTGRESQL, self::PGSQL => 5432,
             self::SQLITE => 0,
@@ -25,7 +25,7 @@ enum DatabaseDriver: string
 
     public function requiresHost(): bool
     {
-        return match($this) {
+        return match ($this) {
             self::MYSQL, self::POSTGRESQL, self::PGSQL => true,
             self::SQLITE => false,
         };
@@ -36,7 +36,7 @@ enum DatabaseDriver: string
      */
     public function getPdoDriver(): string
     {
-        return match($this) {
+        return match ($this) {
             self::MYSQL => 'mysql',
             self::POSTGRESQL, self::PGSQL => 'pgsql',
             self::SQLITE => 'sqlite',

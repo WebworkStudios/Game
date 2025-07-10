@@ -72,7 +72,7 @@ class QueryBuilder
         $this->wheres[] = [
             'type' => 'basic',
             'column' => $column,
-            'operator' => (string) $operator, // Cast zu string
+            'operator' => (string)$operator, // Cast zu string
             'binding' => $binding,
         ];
 

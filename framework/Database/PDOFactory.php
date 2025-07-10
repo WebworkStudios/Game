@@ -20,6 +20,28 @@ class PDOFactory
     private const int RETRY_DELAY_MS = 100;
 
     /**
+     * Testet Datenbankverbindung
+     */
+    public static function testConnection(DatabaseConfig $config): bool
+    {
+        try {
+            $pdo = self::create($config);
+
+            // Einfache Query zum Testen
+            $result = match ($config->driver) {
+                DatabaseDriver::MYSQL => $pdo->query('SELECT 1'),
+                DatabaseDriver::POSTGRESQL => $pdo->query('SELECT 1'),
+                DatabaseDriver::SQLITE => $pdo->query('SELECT 1'),
+            };
+
+            return $result !== false;
+
+        } catch (\Exception) {
+            return false;
+        }
+    }
+
+    /**
      * Erstellt PDO-Verbindung aus Konfiguration
      */
     public static function create(DatabaseConfig $config): PDO
@@ -119,28 +141,6 @@ class PDOFactory
         $pdo->exec('PRAGMA synchronous = NORMAL');
         $pdo->exec('PRAGMA cache_size = 1000');
         $pdo->exec('PRAGMA temp_store = MEMORY');
-    }
-
-    /**
-     * Testet Datenbankverbindung
-     */
-    public static function testConnection(DatabaseConfig $config): bool
-    {
-        try {
-            $pdo = self::create($config);
-
-            // Einfache Query zum Testen
-            $result = match ($config->driver) {
-                DatabaseDriver::MYSQL => $pdo->query('SELECT 1'),
-                DatabaseDriver::POSTGRESQL => $pdo->query('SELECT 1'),
-                DatabaseDriver::SQLITE => $pdo->query('SELECT 1'),
-            };
-
-            return $result !== false;
-
-        } catch (\Exception) {
-            return false;
-        }
     }
 
     /**

@@ -29,19 +29,6 @@ class ConnectionManager
     private bool $debugMode = false;
 
     /**
-     * Fügt Datenbank-Konfiguration hinzu
-     */
-    public function addConnection(string $name, DatabaseConfig $config): void
-    {
-        if (!isset($this->configurations[$name])) {
-            $this->configurations[$name] = [];
-        }
-
-        $this->configurations[$name][] = $config;
-        $this->statistics[$name] = ['reads' => 0, 'writes' => 0];
-    }
-
-    /**
      * Lädt Konfiguration aus Array
      */
     public function loadFromConfig(array $config): void
@@ -58,6 +45,27 @@ class ConnectionManager
                 $this->addConnection($name, DatabaseConfig::fromArray($connConfig));
             }
         }
+    }
+
+    /**
+     * Fügt Datenbank-Konfiguration hinzu
+     */
+    public function addConnection(string $name, DatabaseConfig $config): void
+    {
+        if (!isset($this->configurations[$name])) {
+            $this->configurations[$name] = [];
+        }
+
+        $this->configurations[$name][] = $config;
+        $this->statistics[$name] = ['reads' => 0, 'writes' => 0];
+    }
+
+    /**
+     * Holt Read-Connection (Load Balancing aware)
+     */
+    public function getReadConnection(string $name = self::DEFAULT_CONNECTION): PDO
+    {
+        return $this->getConnection($name, ConnectionType::READ);
     }
 
     /**
@@ -97,110 +105,14 @@ class ConnectionManager
     }
 
     /**
-     * Holt Read-Connection (Load Balancing aware)
+     * Aktualisiert Verbindungsstatistiken
      */
-    public function getReadConnection(string $name = self::DEFAULT_CONNECTION): PDO
+    private function updateStatistics(string $name, ConnectionType $type): void
     {
-        return $this->getConnection($name, ConnectionType::READ);
-    }
-
-    /**
-     * Holt Write-Connection
-     */
-    public function getWriteConnection(string $name = self::DEFAULT_CONNECTION): PDO
-    {
-        return $this->getConnection($name, ConnectionType::WRITE);
-    }
-
-    /**
-     * Startet Transaktion auf Write-Connection
-     */
-    public function beginTransaction(string $name = self::DEFAULT_CONNECTION): bool
-    {
-        $connection = $this->getWriteConnection($name);
-        return $connection->beginTransaction();
-    }
-
-    /**
-     * Committed Transaktion
-     */
-    public function commit(string $name = self::DEFAULT_CONNECTION): bool
-    {
-        $connection = $this->getWriteConnection($name);
-        return $connection->commit();
-    }
-
-    /**
-     * Rollback Transaktion
-     */
-    public function rollback(string $name = self::DEFAULT_CONNECTION): bool
-    {
-        $connection = $this->getWriteConnection($name);
-        return $connection->rollBack();
-    }
-
-    /**
-     * Führt Callback in Transaktion aus
-     */
-    public function transaction(callable $callback, string $name = self::DEFAULT_CONNECTION): mixed
-    {
-        $this->beginTransaction($name);
-
-        try {
-            $result = $callback($this);
-            $this->commit($name);
-            return $result;
-        } catch (\Exception $e) {
-            $this->rollback($name);
-            throw $e;
-        }
-    }
-
-    /**
-     * Setzt Debug-Modus
-     */
-    public function setDebugMode(bool $debug): void
-    {
-        $this->debugMode = $debug;
-    }
-
-    /**
-     * Testet alle konfigurierten Verbindungen
-     */
-    public function testAllConnections(): array
-    {
-        $results = [];
-
-        foreach ($this->configurations as $name => $configs) {
-            foreach ($configs as $index => $config) {
-                $key = "{$name}[{$index}]";
-                $results[$key] = [
-                    'config' => $config->toArray(),
-                    'success' => PDOFactory::testConnection($config),
-                ];
-            }
-        }
-
-        return $results;
-    }
-
-    /**
-     * Holt Verbindungsstatistiken
-     */
-    public function getStatistics(): array
-    {
-        return $this->statistics;
-    }
-
-    /**
-     * Schließt alle Verbindungen
-     */
-    public function closeAllConnections(): void
-    {
-        $this->connections = [];
-
-        if ($this->debugMode) {
-            error_log("All database connections closed");
+        if ($type === ConnectionType::READ) {
+            $this->statistics[$name]['reads']++;
+        } else {
+            $this->statistics[$name]['writes']++;
         }
     }
 
@@ -252,14 +164,102 @@ class ConnectionManager
     }
 
     /**
-     * Aktualisiert Verbindungsstatistiken
+     * Führt Callback in Transaktion aus
      */
-    private function updateStatistics(string $name, ConnectionType $type): void
+    public function transaction(callable $callback, string $name = self::DEFAULT_CONNECTION): mixed
     {
-        if ($type === ConnectionType::READ) {
-            $this->statistics[$name]['reads']++;
-        } else {
-            $this->statistics[$name]['writes']++;
+        $this->beginTransaction($name);
+
+        try {
+            $result = $callback($this);
+            $this->commit($name);
+            return $result;
+        } catch (\Exception $e) {
+            $this->rollback($name);
+            throw $e;
+        }
+    }
+
+    /**
+     * Startet Transaktion auf Write-Connection
+     */
+    public function beginTransaction(string $name = self::DEFAULT_CONNECTION): bool
+    {
+        $connection = $this->getWriteConnection($name);
+        return $connection->beginTransaction();
+    }
+
+    /**
+     * Holt Write-Connection
+     */
+    public function getWriteConnection(string $name = self::DEFAULT_CONNECTION): PDO
+    {
+        return $this->getConnection($name, ConnectionType::WRITE);
+    }
+
+    /**
+     * Committed Transaktion
+     */
+    public function commit(string $name = self::DEFAULT_CONNECTION): bool
+    {
+        $connection = $this->getWriteConnection($name);
+        return $connection->commit();
+    }
+
+    /**
+     * Rollback Transaktion
+     */
+    public function rollback(string $name = self::DEFAULT_CONNECTION): bool
+    {
+        $connection = $this->getWriteConnection($name);
+        return $connection->rollBack();
+    }
+
+    /**
+     * Setzt Debug-Modus
+     */
+    public function setDebugMode(bool $debug): void
+    {
+        $this->debugMode = $debug;
+    }
+
+    /**
+     * Testet alle konfigurierten Verbindungen
+     */
+    public function testAllConnections(): array
+    {
+        $results = [];
+
+        foreach ($this->configurations as $name => $configs) {
+            foreach ($configs as $index => $config) {
+                $key = "{$name}[{$index}]";
+                $results[$key] = [
+                    'config' => $config->toArray(),
+                    'success' => PDOFactory::testConnection($config),
+                ];
+            }
+        }
+
+        return $results;
+    }
+
+    /**
+     * Holt Verbindungsstatistiken
+     */
+    public function getStatistics(): array
+    {
+        return $this->statistics;
+    }
+
+    /**
+     * Schließt alle Verbindungen
+     */
+    public function closeAllConnections(): void
+    {
+        $this->connections = [];
+
+        if ($this->debugMode) {
+            error_log("All database connections closed");
         }
     }
 }

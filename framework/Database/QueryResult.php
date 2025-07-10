@@ -5,8 +5,8 @@ declare(strict_types=1);
 
 namespace Framework\Database;
 
-use Iterator;
 use Countable;
+use Iterator;
 use PDOStatement;
 
 /**
@@ -36,14 +36,6 @@ class QueryResult implements Iterator, Countable
     }
 
     /**
-     * Holt erste Zeile oder null
-     */
-    public function first(): ?array
-    {
-        return $this->data[0] ?? null;
-    }
-
-    /**
      * Holt erste Zeile oder wirft Exception
      */
     public function firstOrFail(): array
@@ -55,6 +47,14 @@ class QueryResult implements Iterator, Countable
         }
 
         return $first;
+    }
+
+    /**
+     * Holt erste Zeile oder null
+     */
+    public function first(): ?array
+    {
+        return $this->data[0] ?? null;
     }
 
     /**
@@ -136,19 +136,19 @@ class QueryResult implements Iterator, Countable
     }
 
     /**
-     * Prüft ob Ergebnisse leer sind
-     */
-    public function isEmpty(): bool
-    {
-        return empty($this->data);
-    }
-
-    /**
      * Prüft ob Ergebnisse vorhanden sind
      */
     public function isNotEmpty(): bool
     {
         return !$this->isEmpty();
+    }
+
+    /**
+     * Prüft ob Ergebnisse leer sind
+     */
+    public function isEmpty(): bool
+    {
+        return empty($this->data);
     }
 
     /**
@@ -190,14 +190,6 @@ class QueryResult implements Iterator, Countable
     }
 
     /**
-     * Erstellt JSON-String der Ergebnisse
-     */
-    public function toJson(): string
-    {
-        return json_encode($this->data, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE);
-    }
-
-    /**
      * Debug-Output für Query
      */
     public function dump(): self
@@ -212,7 +204,16 @@ class QueryResult implements Iterator, Countable
         return $this;
     }
 
+    /**
+     * Erstellt JSON-String der Ergebnisse
+     */
+    public function toJson(): string
+    {
+        return json_encode($this->data, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE);
+    }
+
     // Iterator Interface
+
     public function current(): mixed
     {
         return $this->data[$this->position];

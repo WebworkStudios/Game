@@ -3,8 +3,8 @@ declare(strict_types=1);
 
 namespace Framework\Database;
 
-use Framework\Core\ServiceContainer;
 use Framework\Core\Application;
+use Framework\Core\ServiceContainer;
 use Framework\Database\Enums\DatabaseDriver;
 use InvalidArgumentException;
 
@@ -17,106 +17,9 @@ class DatabaseServiceProvider
 
     public function __construct(
         private readonly ServiceContainer $container,
-        private readonly Application $app,
-    ) {}
-
-    /**
-     * Registriert alle Database Services
-     */
-    public function register(): void
+        private readonly Application      $app,
+    )
     {
-        $this->registerConnectionManager();
-        $this->registerQueryBuilder();
-        $this->registerGrammar();
-        $this->bindInterfaces();
-    }
-
-    /**
-     * Registriert ConnectionManager als Singleton
-     */
-    private function registerConnectionManager(): void
-    {
-        $this->container->singleton(ConnectionManager::class, function (ServiceContainer $container) {
-            $manager = new ConnectionManager();
-
-            // Konfiguration laden
-            $config = $this->loadDatabaseConfig();
-            $manager->loadFromConfig($config);
-
-            // Debug-Modus aus Application übernehmen
-            if (method_exists($this->app, 'isDebug') && $this->app->isDebug()) {
-                $manager->setDebugMode(true);
-            }
-
-            return $manager;
-        });
-    }
-
-    /**
-     * Registriert QueryBuilder Factory
-     */
-    private function registerQueryBuilder(): void
-    {
-        $this->container->transient(QueryBuilder::class, function (ServiceContainer $container) {
-            return new QueryBuilder(
-                connectionManager: $container->get(ConnectionManager::class),
-                grammar: $container->get(SqlGrammar::class),
-                connectionName: 'default'
-            );
-        });
-
-        // Named QueryBuilder Factory
-        $this->container->singleton('query_builder_factory', function (ServiceContainer $container) {
-            return function (string $connectionName = 'default') use ($container) {
-                return new QueryBuilder(
-                    connectionManager: $container->get(ConnectionManager::class),
-                    grammar: $container->get(SqlGrammar::class),
-                    connectionName: $connectionName
-                );
-            };
-        });
-    }
-
-    /**
-     * Registriert SQL Grammar
-     */
-    private function registerGrammar(): void
-    {
-        $this->container->singleton(SqlGrammar::class, function () {
-            $config = $this->loadDatabaseConfig();
-            $defaultDriver = DatabaseDriver::from($config['default']['driver'] ?? 'mysql');
-
-            return new SqlGrammar($defaultDriver);
-        });
-    }
-
-    /**
-     * Bindet Interfaces (für zukünftige Repository Pattern)
-     */
-    private function bindInterfaces(): void
-    {
-        // Placeholder für Repository Interfaces
-        // $this->container->bind(UserRepositoryInterface::class, UserRepository::class);
-    }
-
-    /**
-     * Lädt Database-Konfiguration
-     */
-    private function loadDatabaseConfig(): array
-    {
-        $configPath = $this->app->getBasePath() . '/' . self::DEFAULT_CONFIG_PATH;
-
-        if (!file_exists($configPath)) {
-            throw new InvalidArgumentException("Database config not found: {$configPath}");
-        }
-
-        $config = require $configPath;
-
-        if (!is_array($config)) {
-            throw new InvalidArgumentException('Database config must return array');
-        }
-
-        return $config;
     }
 
     /**
@@ -233,5 +136,104 @@ function env(string $key, mixed $default = null): mixed
 PHP;
 
         return file_put_contents($configPath, $content) !== false;
+    }
+
+    /**
+     * Registriert alle Database Services
+     */
+    public function register(): void
+    {
+        $this->registerConnectionManager();
+        $this->registerQueryBuilder();
+        $this->registerGrammar();
+        $this->bindInterfaces();
+    }
+
+    /**
+     * Registriert ConnectionManager als Singleton
+     */
+    private function registerConnectionManager(): void
+    {
+        $this->container->singleton(ConnectionManager::class, function (ServiceContainer $container) {
+            $manager = new ConnectionManager();
+
+            // Konfiguration laden
+            $config = $this->loadDatabaseConfig();
+            $manager->loadFromConfig($config);
+
+            // Debug-Modus aus Application übernehmen
+            if (method_exists($this->app, 'isDebug') && $this->app->isDebug()) {
+                $manager->setDebugMode(true);
+            }
+
+            return $manager;
+        });
+    }
+
+    /**
+     * Lädt Database-Konfiguration
+     */
+    private function loadDatabaseConfig(): array
+    {
+        $configPath = $this->app->getBasePath() . '/' . self::DEFAULT_CONFIG_PATH;
+
+        if (!file_exists($configPath)) {
+            throw new InvalidArgumentException("Database config not found: {$configPath}");
+        }
+
+        $config = require $configPath;
+
+        if (!is_array($config)) {
+            throw new InvalidArgumentException('Database config must return array');
+        }
+
+        return $config;
+    }
+
+    /**
+     * Registriert QueryBuilder Factory
+     */
+    private function registerQueryBuilder(): void
+    {
+        $this->container->transient(QueryBuilder::class, function (ServiceContainer $container) {
+            return new QueryBuilder(
+                connectionManager: $container->get(ConnectionManager::class),
+                grammar: $container->get(SqlGrammar::class),
+                connectionName: 'default'
+            );
+        });
+
+        // Named QueryBuilder Factory
+        $this->container->singleton('query_builder_factory', function (ServiceContainer $container) {
+            return function (string $connectionName = 'default') use ($container) {
+                return new QueryBuilder(
+                    connectionManager: $container->get(ConnectionManager::class),
+                    grammar: $container->get(SqlGrammar::class),
+                    connectionName: $connectionName
+                );
+            };
+        });
+    }
+
+    /**
+     * Registriert SQL Grammar
+     */
+    private function registerGrammar(): void
+    {
+        $this->container->singleton(SqlGrammar::class, function () {
+            $config = $this->loadDatabaseConfig();
+            $defaultDriver = DatabaseDriver::from($config['default']['driver'] ?? 'mysql');
+
+            return new SqlGrammar($defaultDriver);
+        });
+    }
+
+    /**
+     * Bindet Interfaces (für zukünftige Repository Pattern)
+     */
+    private function bindInterfaces(): void
+    {
+        // Placeholder für Repository Interfaces
+        // $this->container->bind(UserRepositoryInterface::class, UserRepository::class);
     }
 }

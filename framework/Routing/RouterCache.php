@@ -19,7 +19,9 @@ class RouterCache
     public function __construct(
         private readonly string $cacheFile,
         private readonly string $actionsPath,
-    ) {}
+    )
+    {
+    }
 
     /**
      * Lädt RouteEntry-Objekte (Hauptmethode für Router)
@@ -58,6 +60,29 @@ class RouterCache
         }
 
         return true;
+    }
+
+    /**
+     * Holt alle Action-Dateien
+     */
+    private function getActionFiles(): array
+    {
+        if (!is_dir($this->actionsPath)) {
+            return [];
+        }
+
+        $files = [];
+        $iterator = new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator($this->actionsPath)
+        );
+
+        foreach ($iterator as $file) {
+            if ($file->isFile() && $file->getExtension() === 'php') {
+                $files[] = $file->getPathname();
+            }
+        }
+
+        return $files;
     }
 
     /**
@@ -115,6 +140,29 @@ class RouterCache
     }
 
     /**
+     * Extrahiert Klassennamen aus PHP-Datei
+     */
+    private function getClassNameFromFile(string $file): ?string
+    {
+        $content = file_get_contents($file);
+        if ($content === false) {
+            return null;
+        }
+
+        // Namespace extrahieren
+        if (!preg_match('/namespace\s+([^;]+);/', $content, $namespaceMatches)) {
+            return null;
+        }
+
+        // Klassennamen extrahieren
+        if (!preg_match('/class\s+(\w+)/', $content, $classMatches)) {
+            return null;
+        }
+
+        return $namespaceMatches[1] . '\\' . $classMatches[1];
+    }
+
+    /**
      * Speichert RouteEntry-Objekte als Arrays in Cache-Datei
      */
     private function saveToCache(array $routes): void
@@ -150,52 +198,6 @@ class RouterCache
         if (function_exists('opcache_invalidate')) {
             opcache_invalidate($this->cacheFile, true);
         }
-    }
-
-    /**
-     * Holt alle Action-Dateien
-     */
-    private function getActionFiles(): array
-    {
-        if (!is_dir($this->actionsPath)) {
-            return [];
-        }
-
-        $files = [];
-        $iterator = new RecursiveIteratorIterator(
-            new RecursiveDirectoryIterator($this->actionsPath)
-        );
-
-        foreach ($iterator as $file) {
-            if ($file->isFile() && $file->getExtension() === 'php') {
-                $files[] = $file->getPathname();
-            }
-        }
-
-        return $files;
-    }
-
-    /**
-     * Extrahiert Klassennamen aus PHP-Datei
-     */
-    private function getClassNameFromFile(string $file): ?string
-    {
-        $content = file_get_contents($file);
-        if ($content === false) {
-            return null;
-        }
-
-        // Namespace extrahieren
-        if (!preg_match('/namespace\s+([^;]+);/', $content, $namespaceMatches)) {
-            return null;
-        }
-
-        // Klassennamen extrahieren
-        if (!preg_match('/class\s+(\w+)/', $content, $classMatches)) {
-            return null;
-        }
-
-        return $namespaceMatches[1] . '\\' . $classMatches[1];
     }
 
     /**

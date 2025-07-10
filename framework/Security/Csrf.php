@@ -6,7 +6,6 @@ declare(strict_types=1);
 namespace Framework\Security;
 
 use Framework\Http\Request;
-use InvalidArgumentException;
 use Random\RandomException;
 use RuntimeException;
 
@@ -28,20 +27,16 @@ class Csrf
     }
 
     /**
-     * Generiert einen neuen CSRF-Token
-     * @throws RandomException
+     * Erstellt HTML-Input-Field für CSRF-Token
      */
-    public function generateToken(): string
+    public function getTokenField(): string
     {
-        $token = bin2hex(random_bytes(self::TOKEN_LENGTH));
-
-        $this->session->setFramework(self::TOKEN_KEY, [
-            'token' => $token,
-            'created_at' => time(),
-            'expires_at' => time() + self::DEFAULT_LIFETIME,
-        ]);
-
-        return $token;
+        $token = $this->getToken();
+        return sprintf(
+            '<input type="hidden" name="%s" value="%s">',
+            self::TOKEN_FIELD_NAME,
+            htmlspecialchars($token, ENT_QUOTES, 'UTF-8')
+        );
     }
 
     /**
@@ -60,51 +55,28 @@ class Csrf
     }
 
     /**
-     * Validiert CSRF-Token aus Request
+     * Prüft ob Token abgelaufen ist
      */
-    public function validateToken(Request $request): bool
+    private function isTokenExpired(array $tokenData): bool
     {
-        $requestToken = $this->getTokenFromRequest($request);
-
-        if ($requestToken === null) {
-            return false;
-        }
-
-        return $this->isValidToken($requestToken);
+        return time() > $tokenData['expires_at'];
     }
 
     /**
-     * Validiert einen spezifischen Token
+     * Generiert einen neuen CSRF-Token
+     * @throws RandomException
      */
-    public function isValidToken(string $token): bool
+    public function generateToken(): string
     {
-        $tokenData = $this->session->getFramework(self::TOKEN_KEY);
+        $token = bin2hex(random_bytes(self::TOKEN_LENGTH));
 
-        if (!$tokenData) {
-            return false;
-        }
+        $this->session->setFramework(self::TOKEN_KEY, [
+            'token' => $token,
+            'created_at' => time(),
+            'expires_at' => time() + self::DEFAULT_LIFETIME,
+        ]);
 
-        // Token abgelaufen
-        if ($this->isTokenExpired($tokenData)) {
-            $this->clearToken();
-            return false;
-        }
-
-        // Hash-sicherer Vergleich
-        return hash_equals($tokenData['token'], $token);
-    }
-
-    /**
-     * Erstellt HTML-Input-Field für CSRF-Token
-     */
-    public function getTokenField(): string
-    {
-        $token = $this->getToken();
-        return sprintf(
-            '<input type="hidden" name="%s" value="%s">',
-            self::TOKEN_FIELD_NAME,
-            htmlspecialchars($token, ENT_QUOTES, 'UTF-8')
-        );
+        return $token;
     }
 
     /**
@@ -149,15 +121,6 @@ class Csrf
     }
 
     /**
-     * Prüft ob Request CSRF-Validierung benötigt
-     */
-    public function requiresValidation(Request $request): bool
-    {
-        // Nur state-changing HTTP-Methoden validieren
-        return in_array($request->getMethod()->value, ['POST', 'PUT', 'PATCH', 'DELETE'], true);
-    }
-
-    /**
      * Validiert Request und wirft Exception bei Fehler
      */
     public function validateOrFail(Request $request): void
@@ -169,6 +132,76 @@ class Csrf
         if (!$this->validateToken($request)) {
             throw new CsrfException('CSRF token validation failed');
         }
+    }
+
+    /**
+     * Prüft ob Request CSRF-Validierung benötigt
+     */
+    public function requiresValidation(Request $request): bool
+    {
+        // Nur state-changing HTTP-Methoden validieren
+        return in_array($request->getMethod()->value, ['POST', 'PUT', 'PATCH', 'DELETE'], true);
+    }
+
+    /**
+     * Validiert CSRF-Token aus Request
+     */
+    public function validateToken(Request $request): bool
+    {
+        $requestToken = $this->getTokenFromRequest($request);
+
+        if ($requestToken === null) {
+            return false;
+        }
+
+        return $this->isValidToken($requestToken);
+    }
+
+    /**
+     * Extrahiert Token aus Request
+     */
+    private function getTokenFromRequest(Request $request): ?string
+    {
+        // 1. POST/Form-Daten prüfen
+        $token = $request->input(self::TOKEN_FIELD_NAME);
+        if ($token !== null) {
+            return (string)$token;
+        }
+
+        // 2. HTTP-Header prüfen (für AJAX)
+        $token = $request->getHeader(strtolower(self::TOKEN_HEADER_NAME));
+        if ($token !== null) {
+            return $token;
+        }
+
+        // 3. JSON-Body prüfen
+        $json = $request->json();
+        if (isset($json[self::TOKEN_FIELD_NAME])) {
+            return (string)$json[self::TOKEN_FIELD_NAME];
+        }
+
+        return null;
+    }
+
+    /**
+     * Validiert einen spezifischen Token
+     */
+    public function isValidToken(string $token): bool
+    {
+        $tokenData = $this->session->getFramework(self::TOKEN_KEY);
+
+        if (!$tokenData) {
+            return false;
+        }
+
+        // Token abgelaufen
+        if ($this->isTokenExpired($tokenData)) {
+            $this->clearToken();
+            return false;
+        }
+
+        // Hash-sicherer Vergleich
+        return hash_equals($tokenData['token'], $token);
     }
 
     /**
@@ -199,40 +232,6 @@ class Csrf
             'is_expired' => $this->isTokenExpired($tokenData),
             'remaining_time' => max(0, $tokenData['expires_at'] - $now),
         ];
-    }
-
-    /**
-     * Extrahiert Token aus Request
-     */
-    private function getTokenFromRequest(Request $request): ?string
-    {
-        // 1. POST/Form-Daten prüfen
-        $token = $request->input(self::TOKEN_FIELD_NAME);
-        if ($token !== null) {
-            return (string)$token;
-        }
-
-        // 2. HTTP-Header prüfen (für AJAX)
-        $token = $request->getHeader(strtolower(self::TOKEN_HEADER_NAME));
-        if ($token !== null) {
-            return $token;
-        }
-
-        // 3. JSON-Body prüfen
-        $json = $request->json();
-        if (isset($json[self::TOKEN_FIELD_NAME])) {
-            return (string)$json[self::TOKEN_FIELD_NAME];
-        }
-
-        return null;
-    }
-
-    /**
-     * Prüft ob Token abgelaufen ist
-     */
-    private function isTokenExpired(array $tokenData): bool
-    {
-        return time() > $tokenData['expires_at'];
     }
 }
 

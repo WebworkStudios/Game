@@ -3,7 +3,6 @@ declare(strict_types=1);
 
 namespace Framework\Security;
 
-use InvalidArgumentException;
 use RuntimeException;
 
 /**
@@ -22,6 +21,74 @@ class Session
     {
         $this->config = array_merge($this->getDefaultConfig(), $config);
         $this->configureSession();
+    }
+
+    /**
+     * Standard-Konfiguration
+     */
+    private function getDefaultConfig(): array
+    {
+        return [
+            'lifetime' => 7200, // 2 Stunden
+            'path' => '/',
+            'domain' => '',
+            'secure' => false, // In Production auf true setzen
+            'httponly' => true,
+            'samesite' => 'Lax',
+            'gc_maxlifetime' => 7200,
+            'gc_probability' => 1,
+            'gc_divisor' => 100,
+        ];
+    }
+
+    /**
+     * Konfiguriert Session-Parameter
+     */
+    private function configureSession(): void
+    {
+        // Nur konfigurieren wenn Session noch nicht gestartet
+        if (session_status() !== PHP_SESSION_NONE) {
+            return;
+        }
+
+        // Cookie-Parameter setzen
+        session_set_cookie_params([
+            'lifetime' => $this->config['lifetime'],
+            'path' => $this->config['path'],
+            'domain' => $this->config['domain'],
+            'secure' => $this->config['secure'],
+            'httponly' => $this->config['httponly'],
+            'samesite' => $this->config['samesite'],
+        ]);
+
+        // Garbage Collection
+        ini_set('session.gc_maxlifetime', (string)$this->config['gc_maxlifetime']);
+        ini_set('session.gc_probability', (string)$this->config['gc_probability']);
+        ini_set('session.gc_divisor', (string)$this->config['gc_divisor']);
+
+        // Security-Einstellungen
+        ini_set('session.use_only_cookies', '1');
+        ini_set('session.use_trans_sid', '0');
+        ini_set('session.use_strict_mode', '1');
+    }
+
+    /**
+     * Leert die komplette Session
+     */
+    public function clear(): void
+    {
+        $this->ensureStarted();
+        $_SESSION = [];
+    }
+
+    /**
+     * Stellt sicher dass Session gestartet ist
+     */
+    private function ensureStarted(): void
+    {
+        if (!$this->started) {
+            $this->start();
+        }
     }
 
     /**
@@ -53,68 +120,19 @@ class Session
     }
 
     /**
-     * Setzt einen Wert in der Session
+     * Initialisiert Session-Struktur
      */
-    public function set(string $key, mixed $value): void
+    private function initializeSession(): void
     {
-        $this->ensureStarted();
-
-        if (str_contains($key, '.')) {
-            $this->setNested($key, $value);
-        } else {
-            $_SESSION[$key] = $value;
-        }
-    }
-
-    /**
-     * Holt einen Wert aus der Session
-     */
-    public function get(string $key, mixed $default = null): mixed
-    {
-        $this->ensureStarted();
-
-        if (str_contains($key, '.')) {
-            return $this->getNested($key, $default);
+        // Framework-Namespace initialisieren
+        if (!isset($_SESSION[self::FRAMEWORK_NAMESPACE])) {
+            $_SESSION[self::FRAMEWORK_NAMESPACE] = [];
         }
 
-        return $_SESSION[$key] ?? $default;
-    }
-
-    /**
-     * Prüft ob ein Key existiert
-     */
-    public function has(string $key): bool
-    {
-        $this->ensureStarted();
-
-        if (str_contains($key, '.')) {
-            return $this->hasNested($key);
+        // Flash-Namespace initialisieren
+        if (!isset($_SESSION[self::FLASH_NAMESPACE])) {
+            $_SESSION[self::FLASH_NAMESPACE] = [];
         }
-
-        return isset($_SESSION[$key]);
-    }
-
-    /**
-     * Entfernt einen Wert aus der Session
-     */
-    public function remove(string $key): void
-    {
-        $this->ensureStarted();
-
-        if (str_contains($key, '.')) {
-            $this->removeNested($key);
-        } else {
-            unset($_SESSION[$key]);
-        }
-    }
-
-    /**
-     * Leert die komplette Session
-     */
-    public function clear(): void
-    {
-        $this->ensureStarted();
-        $_SESSION = [];
     }
 
     /**
@@ -183,6 +201,38 @@ class Session
     }
 
     /**
+     * Setzt einen Wert in der Session
+     */
+    public function set(string $key, mixed $value): void
+    {
+        $this->ensureStarted();
+
+        if (str_contains($key, '.')) {
+            $this->setNested($key, $value);
+        } else {
+            $_SESSION[$key] = $value;
+        }
+    }
+
+    /**
+     * Setzt verschachtelten Wert mit Dot-Notation
+     */
+    private function setNested(string $key, mixed $value): void
+    {
+        $keys = explode('.', $key);
+        $current = &$_SESSION;
+
+        foreach ($keys as $k) {
+            if (!isset($current[$k]) || !is_array($current[$k])) {
+                $current[$k] = [];
+            }
+            $current = &$current[$k];
+        }
+
+        $current = $value;
+    }
+
+    /**
      * Framework-interne Werte holen
      */
     public function getFramework(string $key, mixed $default = null): mixed
@@ -191,11 +241,35 @@ class Session
     }
 
     /**
-     * Flash-Message setzen (nur für nächsten Request verfügbar)
+     * Holt einen Wert aus der Session
      */
-    public function flash(string $key, mixed $value): void
+    public function get(string $key, mixed $default = null): mixed
     {
-        $this->set(self::FLASH_NAMESPACE . '.' . $key, $value);
+        $this->ensureStarted();
+
+        if (str_contains($key, '.')) {
+            return $this->getNested($key, $default);
+        }
+
+        return $_SESSION[$key] ?? $default;
+    }
+
+    /**
+     * Holt verschachtelten Wert mit Dot-Notation
+     */
+    private function getNested(string $key, mixed $default = null): mixed
+    {
+        $keys = explode('.', $key);
+        $current = $_SESSION;
+
+        foreach ($keys as $k) {
+            if (!isset($current[$k])) {
+                return $default;
+            }
+            $current = $current[$k];
+        }
+
+        return $current;
     }
 
     /**
@@ -206,6 +280,39 @@ class Session
         $value = $this->get(self::FLASH_NAMESPACE . '.' . $key, $default);
         $this->remove(self::FLASH_NAMESPACE . '.' . $key);
         return $value;
+    }
+
+    /**
+     * Entfernt einen Wert aus der Session
+     */
+    public function remove(string $key): void
+    {
+        $this->ensureStarted();
+
+        if (str_contains($key, '.')) {
+            $this->removeNested($key);
+        } else {
+            unset($_SESSION[$key]);
+        }
+    }
+
+    /**
+     * Entfernt verschachtelten Wert mit Dot-Notation
+     */
+    private function removeNested(string $key): void
+    {
+        $keys = explode('.', $key);
+        $lastKey = array_pop($keys);
+        $current = &$_SESSION;
+
+        foreach ($keys as $k) {
+            if (!isset($current[$k]) || !is_array($current[$k])) {
+                return; // Pfad existiert nicht
+            }
+            $current = &$current[$k];
+        }
+
+        unset($current[$lastKey]);
     }
 
     /**
@@ -227,11 +334,51 @@ class Session
     }
 
     /**
+     * Prüft ob ein Key existiert
+     */
+    public function has(string $key): bool
+    {
+        $this->ensureStarted();
+
+        if (str_contains($key, '.')) {
+            return $this->hasNested($key);
+        }
+
+        return isset($_SESSION[$key]);
+    }
+
+    /**
+     * Prüft verschachtelten Key mit Dot-Notation
+     */
+    private function hasNested(string $key): bool
+    {
+        $keys = explode('.', $key);
+        $current = $_SESSION;
+
+        foreach ($keys as $k) {
+            if (!isset($current[$k])) {
+                return false;
+            }
+            $current = $current[$k];
+        }
+
+        return true;
+    }
+
+    /**
      * Success Flash-Message (Convenience)
      */
     public function flashSuccess(string $message): void
     {
         $this->flash('success', $message);
+    }
+
+    /**
+     * Flash-Message setzen (nur für nächsten Request verfügbar)
+     */
+    public function flash(string $key, mixed $value): void
+    {
+        $this->set(self::FLASH_NAMESPACE . '.' . $key, $value);
     }
 
     /**
@@ -278,153 +425,5 @@ class Session
     public function isStarted(): bool
     {
         return $this->started;
-    }
-
-    /**
-     * Standard-Konfiguration
-     */
-    private function getDefaultConfig(): array
-    {
-        return [
-            'lifetime' => 7200, // 2 Stunden
-            'path' => '/',
-            'domain' => '',
-            'secure' => false, // In Production auf true setzen
-            'httponly' => true,
-            'samesite' => 'Lax',
-            'gc_maxlifetime' => 7200,
-            'gc_probability' => 1,
-            'gc_divisor' => 100,
-        ];
-    }
-
-    /**
-     * Konfiguriert Session-Parameter
-     */
-    private function configureSession(): void
-    {
-        // Nur konfigurieren wenn Session noch nicht gestartet
-        if (session_status() !== PHP_SESSION_NONE) {
-            return;
-        }
-
-        // Cookie-Parameter setzen
-        session_set_cookie_params([
-            'lifetime' => $this->config['lifetime'],
-            'path' => $this->config['path'],
-            'domain' => $this->config['domain'],
-            'secure' => $this->config['secure'],
-            'httponly' => $this->config['httponly'],
-            'samesite' => $this->config['samesite'],
-        ]);
-
-        // Garbage Collection
-        ini_set('session.gc_maxlifetime', (string)$this->config['gc_maxlifetime']);
-        ini_set('session.gc_probability', (string)$this->config['gc_probability']);
-        ini_set('session.gc_divisor', (string)$this->config['gc_divisor']);
-
-        // Security-Einstellungen
-        ini_set('session.use_only_cookies', '1');
-        ini_set('session.use_trans_sid', '0');
-        ini_set('session.use_strict_mode', '1');
-    }
-
-    /**
-     * Initialisiert Session-Struktur
-     */
-    private function initializeSession(): void
-    {
-        // Framework-Namespace initialisieren
-        if (!isset($_SESSION[self::FRAMEWORK_NAMESPACE])) {
-            $_SESSION[self::FRAMEWORK_NAMESPACE] = [];
-        }
-
-        // Flash-Namespace initialisieren
-        if (!isset($_SESSION[self::FLASH_NAMESPACE])) {
-            $_SESSION[self::FLASH_NAMESPACE] = [];
-        }
-    }
-
-    /**
-     * Stellt sicher dass Session gestartet ist
-     */
-    private function ensureStarted(): void
-    {
-        if (!$this->started) {
-            $this->start();
-        }
-    }
-
-    /**
-     * Setzt verschachtelten Wert mit Dot-Notation
-     */
-    private function setNested(string $key, mixed $value): void
-    {
-        $keys = explode('.', $key);
-        $current = &$_SESSION;
-
-        foreach ($keys as $k) {
-            if (!isset($current[$k]) || !is_array($current[$k])) {
-                $current[$k] = [];
-            }
-            $current = &$current[$k];
-        }
-
-        $current = $value;
-    }
-
-    /**
-     * Holt verschachtelten Wert mit Dot-Notation
-     */
-    private function getNested(string $key, mixed $default = null): mixed
-    {
-        $keys = explode('.', $key);
-        $current = $_SESSION;
-
-        foreach ($keys as $k) {
-            if (!isset($current[$k])) {
-                return $default;
-            }
-            $current = $current[$k];
-        }
-
-        return $current;
-    }
-
-    /**
-     * Prüft verschachtelten Key mit Dot-Notation
-     */
-    private function hasNested(string $key): bool
-    {
-        $keys = explode('.', $key);
-        $current = $_SESSION;
-
-        foreach ($keys as $k) {
-            if (!isset($current[$k])) {
-                return false;
-            }
-            $current = $current[$k];
-        }
-
-        return true;
-    }
-
-    /**
-     * Entfernt verschachtelten Wert mit Dot-Notation
-     */
-    private function removeNested(string $key): void
-    {
-        $keys = explode('.', $key);
-        $lastKey = array_pop($keys);
-        $current = &$_SESSION;
-
-        foreach ($keys as $k) {
-            if (!isset($current[$k]) || !is_array($current[$k])) {
-                return; // Pfad existiert nicht
-            }
-            $current = &$current[$k];
-        }
-
-        unset($current[$lastKey]);
     }
 }

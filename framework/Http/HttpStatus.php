@@ -161,6 +161,14 @@ enum HttpStatus: int
     }
 
     /**
+     * Prüft ob Status Code einen Fehler darstellt (4xx oder 5xx)
+     */
+    public function isError(): bool
+    {
+        return $this->isClientError() || $this->isServerError();
+    }
+
+    /**
      * Prüft ob Status Code Client-Fehler ist (4xx)
      */
     public function isClientError(): bool
@@ -174,14 +182,6 @@ enum HttpStatus: int
     public function isServerError(): bool
     {
         return $this->value >= 500 && $this->value < 600;
-    }
-
-    /**
-     * Prüft ob Status Code einen Fehler darstellt (4xx oder 5xx)
-     */
-    public function isError(): bool
-    {
-        return $this->isClientError() || $this->isServerError();
     }
 
     /**
