@@ -25,7 +25,12 @@ class TestSecurityAction
         $csrf = $this->app->getCsrf();
 
         if ($request->isPost()) {
-            // POST-Request verarbeiten
+            // AJAX-Request erkennen
+            if ($request->isJson() || $request->isAjax()) {
+                return $this->handleAjaxRequest($request, $session);
+            }
+
+            // Normaler Form-Submit
             $session->flashSuccess('Form submitted successfully!');
             return Response::redirect('/test/security');
         }
@@ -33,6 +38,51 @@ class TestSecurityAction
         // GET-Request: Formular anzeigen
         $html = $this->renderSecurityTestPage($csrf, $session);
         return Response::ok($html);
+    }
+
+    /**
+     * Verarbeitet AJAX-Requests für Session-Tests
+     */
+    private function handleAjaxRequest(Request $request, $session): Response
+    {
+        $json = $request->json();
+        $action = $json['action'] ?? null;
+
+        switch ($action) {
+            case 'set_session':
+                $key = $json['key'] ?? 'test_key';
+                $value = $json['value'] ?? 'Default value';
+                $session->set($key, $value);
+
+                return Response::json([
+                    'success' => true,
+                    'message' => "Session value '{$key}' set to '{$value}'"
+                ]);
+
+            case 'get_session':
+                $key = $json['key'] ?? 'test_key';
+                $value = $session->get($key, 'Not found');
+
+                return Response::json([
+                    'success' => true,
+                    'key' => $key,
+                    'value' => $value
+                ]);
+
+            case 'clear_session':
+                $session->clear();
+
+                return Response::json([
+                    'success' => true,
+                    'message' => 'Session cleared'
+                ]);
+
+            default:
+                return Response::json([
+                    'success' => true,
+                    'message' => 'AJAX test successful'
+                ]);
+        }
     }
 
     private function renderSecurityTestPage($csrf, $session): string
@@ -136,8 +186,72 @@ class TestSecurityAction
                             key: 'test_key',
                             value: 'Hello from JavaScript! ' + Date.now()
                         })
-                    }).then(response => {
-                        document.getElementById('session-result').innerHTML = 'Session value set!';
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        document.getElementById('session-result').innerHTML = 
+                            '<strong>✅ ' + data.message + '</strong>';
+                    })
+                    .catch(error => {
+                        document.getElementById('session-result').innerHTML = 
+                            '<strong>❌ Error: ' + error + '</strong>';
+                    });
+                }
+
+                function getSessionValue() {
+                    fetch('/test/security', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRF-TOKEN': csrfToken
+                        },
+                        body: JSON.stringify({
+                            _token: csrfToken,
+                            action: 'get_session',
+                            key: 'test_key'
+                        })
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        document.getElementById('session-result').innerHTML = 
+                            '<strong>📖 Key: ' + data.key + '</strong><br>' +
+                            '<strong>💾 Value: ' + data.value + '</strong>';
+                    })
+                    .catch(error => {
+                        document.getElementById('session-result').innerHTML = 
+                            '<strong>❌ Error: ' + error + '</strong>';
+                    });
+                }
+
+                function clearSession() {
+                    if (!confirm('Are you sure you want to clear the entire session?')) {
+                        return;
+                    }
+                    
+                    fetch('/test/security', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRF-TOKEN': csrfToken
+                        },
+                        body: JSON.stringify({
+                            _token: csrfToken,
+                            action: 'clear_session'
+                        })
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        document.getElementById('session-result').innerHTML = 
+                            '<strong>🗑️ ' + data.message + '</strong>';
+                        
+                        // Page nach 2 Sekunden neu laden (da Session gecleared)
+                        setTimeout(() => {
+                            window.location.reload();
+                        }, 2000);
+                    })
+                    .catch(error => {
+                        document.getElementById('session-result').innerHTML = 
+                            '<strong>❌ Error: ' + error + '</strong>';
                     });
                 }
 

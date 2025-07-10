@@ -40,6 +40,7 @@ class Router
      */
     public function handle(Request $request): Response
     {
+        // IMMER zuerst Routes laden
         $this->loadRoutes();
 
         $method = $request->getMethod();
@@ -155,6 +156,9 @@ class Router
      */
     private function findRoute(string $path, HttpMethod $method): ?array
     {
+        // WICHTIG: Routes MÜSSEN geladen werden BEVOR wir suchen
+        $this->loadRoutes();
+
         foreach ($this->routes as $route) {
             $parameters = $route->matches($path);
 
@@ -310,6 +314,8 @@ class Router
      */
     public function getMiddlewareInfo(): array
     {
+        $this->loadRoutes(); // Sicherstellen dass Routes geladen sind
+
         return [
             'global_middlewares' => $this->globalMiddlewares,
             'total_global_count' => count($this->globalMiddlewares),

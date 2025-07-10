@@ -27,20 +27,18 @@ class CsrfMiddleware implements MiddlewareInterface
      */
     public function handle(Request $request, callable $next): Response
     {
-        // CSRF-Validierung nur für state-changing Requests
         if ($this->csrf->requiresValidation($request)) {
 
-            // Prüfe ob Request von CSRF-Validierung ausgenommen ist
+
             if ($this->isExempt($request)) {
                 return $next($request);
             }
 
-            // CSRF-Token validieren
             if (!$this->csrf->validateToken($request)) {
                 return $this->handleCsrfFailure($request);
             }
-        }
 
+        }
         return $next($request);
     }
 
@@ -49,26 +47,32 @@ class CsrfMiddleware implements MiddlewareInterface
      */
     private function isExempt(Request $request): bool
     {
+        $path = $request->getPath();
+
         // API-Endpunkte können ausgenommen werden (nutzen andere Auth-Methoden)
-        if (str_starts_with($request->getPath(), '/api/')) {
+        if (str_starts_with($path, '/api/')) {
             return true;
         }
 
         // Webhook-Endpunkte
-        if (str_starts_with($request->getPath(), '/webhooks/')) {
+        if (str_starts_with($path, '/webhooks/')) {
             return true;
         }
 
-        // Testing-Endpunkte (in Development)
-        if (str_starts_with($request->getPath(), '/test/')) {
+        // Testing-Endpunkte (in Development) - aber NICHT /test/security
+        if (str_starts_with($path, '/test/') && $path !== '/test/security') {
             return true;
+        }
+
+        // Spezielle Prüfung für /test/security
+        if ($path === '/test/security') {
+            // Fahre mit Attribute-Prüfung fort
         }
 
         // Prüfe CsrfExempt Attribute an der Action-Klasse
         if ($this->hasCsrfExemptAttribute($request)) {
             return true;
         }
-
         return false;
     }
 
