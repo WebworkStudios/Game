@@ -67,7 +67,7 @@ class TemplateParser
                 if ($end === false) {
                     throw new \RuntimeException("Unterminated variable at position {$nextPos}");
                 }
-                $expression = trim(substr($content, $nextPos + 2, $end - $nextPos - 2));
+                $expression = $this->cleanExpression(substr($content, $nextPos + 2, $end - $nextPos - 2));
                 $tokens[] = new Token(TokenType::VARIABLE, $expression, $nextPos, $end + 2);
                 $position = $end + 2;
             } else {
@@ -75,13 +75,30 @@ class TemplateParser
                 if ($end === false) {
                     throw new \RuntimeException("Unterminated block at position {$nextPos}");
                 }
-                $expression = trim(substr($content, $nextPos + 2, $end - $nextPos - 2));
+                $expression = $this->cleanExpression(substr($content, $nextPos + 2, $end - $nextPos - 2));
                 $tokens[] = new Token(TokenType::BLOCK, $expression, $nextPos, $end + 2);
                 $position = $end + 2;
             }
         }
 
         return $tokens;
+    }
+
+    /**
+     * Clean expression by normalizing whitespace and removing unnecessary characters
+     */
+    private function cleanExpression(string $expression): string
+    {
+        // Remove leading/trailing whitespace
+        $expression = trim($expression);
+
+        // Replace multiple whitespace characters (including newlines) with single spaces
+        $expression = preg_replace('/\s+/', ' ', $expression);
+
+        // Remove any remaining problematic characters
+        $expression = trim($expression);
+
+        return $expression;
     }
 
     private function parseTokens(array $tokens): array
@@ -164,24 +181,65 @@ class TemplateParser
                 return $this->parseBlockDefinition($args, $tokens, $currentIndex);
 
             case 'if':
+                // Wenn if ohne Argumente, als Text behandeln
+                if (empty($args)) {
+                    return [
+                        'node' => ['type' => 'text', 'content' => '{% ' . $expression . ' %}'],
+                        'nextIndex' => $currentIndex + 1
+                    ];
+                }
                 return $this->parseIfBlock($args, $tokens, $currentIndex);
 
             case 'for':
+                // Wenn for ohne Argumente, als Text behandeln
+                if (empty($args)) {
+                    return [
+                        'node' => ['type' => 'text', 'content' => '{% ' . $expression . ' %}'],
+                        'nextIndex' => $currentIndex + 1
+                    ];
+                }
                 return $this->parseForBlock($args, $tokens, $currentIndex);
 
             case 'include':
-                return [
-                    'node' => [
-                        'type' => 'include',
-                        'template' => trim($args, '"\'')
-                    ],
-                    'nextIndex' => $currentIndex + 1
-                ];
+                return $this->parseIncludeBlock($args, $tokens, $currentIndex);
 
             default:
                 throw new \RuntimeException("Unknown block command: {$command}");
         }
     }
+
+// framework/Templating/Parser/TemplateParser.php
+
+    private function parseIncludeBlock(string $args, array $tokens, int $currentIndex): array
+    {
+        echo "DEBUG INCLUDE ARGS: " . var_export($args, true) . "\n";
+
+        // Parse: "template.html" with data.source as variable
+        if (preg_match('/^["\'](.+?)["\'](?:\s+with\s+(.+?)\s+as\s+(\w+))?$/', trim($args), $matches)) {
+            echo "DEBUG REGEX MATCHES: " . var_export($matches, true) . "\n";
+
+            $template = $matches[1];
+            $dataSource = $matches[2] ?? null;
+            $variable = $matches[3] ?? null;
+
+            $node = [
+                'type' => 'include',
+                'template' => $template,
+                'data_source' => $dataSource,
+                'variable' => $variable
+            ];
+
+            echo "DEBUG INCLUDE NODE: " . var_export($node, true) . "\n";
+
+            return [
+                'node' => $node,
+                'nextIndex' => $currentIndex + 1
+            ];
+        }
+
+        throw new \RuntimeException("Invalid include syntax: {$args}");
+    }
+
 
     private function parseBlockDefinition(string $args, array $tokens, int $startIndex): array
     {
@@ -307,11 +365,11 @@ class TemplateParser
 
     private function parseForBlock(string $expression, array $tokens, int $startIndex): array
     {
-        // Support both "item in array" and "array as item" syntax
+        // Support both "item in array" and "array as item" syntax with dot notation
         if (preg_match('/(\w+)\s+in\s+(.+)/', $expression, $matches)) {
             $item = $matches[1];
             $array = trim($matches[2]);
-        } elseif (preg_match('/(.+?)\s+as\s+(\w+)/', $expression, $matches)) {
+        } elseif (preg_match('/([a-zA-Z_][a-zA-Z0-9_.]*)\s+as\s+(\w+)/', $expression, $matches)) {
             $array = trim($matches[1]);
             $item = $matches[2];
         } else {

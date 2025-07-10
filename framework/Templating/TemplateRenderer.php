@@ -163,4 +163,13 @@ class TemplateRenderer
     {
         return empty($value) ? 'N/A' : $value;
     }
+
+    /**
+     * Include template with variable mapping
+     */
+    public function includeWith(string $template, string $variable, mixed $data): string
+    {
+        $templateData = array_merge($this->data, [$variable => $data]);
+        return $this->engine->render($template, $templateData);
+    }
 }

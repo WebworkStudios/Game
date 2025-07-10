@@ -53,6 +53,8 @@ class TemplateEngine
 
     private function findTemplate(string $template): string
     {
+        echo "DEBUG FIND TEMPLATE: " . var_export($template, true) . "\n";
+
         // Handle namespaced templates (@namespace/template.html)
         if (str_starts_with($template, '@')) {
             [$namespace, $template] = explode('/', $template, 2);
@@ -71,6 +73,8 @@ class TemplateEngine
         if (!str_contains($template, '.')) {
             $path .= '.html';
         }
+
+        echo "DEBUG TEMPLATE PATH: " . var_export($path, true) . "\n";
 
         if (!file_exists($path)) {
             throw new InvalidArgumentException("Template not found: {$path}");

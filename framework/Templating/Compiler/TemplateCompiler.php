@@ -62,6 +62,7 @@ PHP;
         };
     }
 
+
     private function compileExtends(array $node): string
     {
         // Für Template-Vererbung - fürs erste als Kommentar
@@ -187,9 +188,28 @@ if (is_array(\$_array) || \$_array instanceof \Traversable) {
 PHP;
     }
 
+
     private function compileInclude(array $node): string
     {
+        echo "DEBUG COMPILE INCLUDE: " . var_export($node, true) . "\n";
+
         $template = $node['template'];
+
+        if (isset($node['data_source']) && isset($node['variable'])) {
+            echo "DEBUG: Using includeWith\n";
+            // Include with data mapping
+            $dataSource = $this->compileVariableAccess([
+                'name' => explode('.', $node['data_source'])[0],
+                'path' => array_slice(explode('.', $node['data_source']), 1)
+            ]);
+
+            $code = "echo \$renderer->includeWith('{$template}', '{$node['variable']}', {$dataSource});\n";
+            echo "DEBUG GENERATED CODE: " . $code . "\n";
+            return $code;
+        }
+
+        echo "DEBUG: Using simple include\n";
+        // Simple include
         return "echo \$renderer->include('{$template}');\n";
     }
 }

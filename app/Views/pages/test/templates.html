@@ -25,7 +25,7 @@
 
 <!-- Conditionals Demo -->
 <section>
-    <h3>2. Conditionals {% if %}</h3>
+    <h3>2. Conditionals {{ "{% if %}" }}</h3>
 
     {% if user.is_admin %}
     <div class="alert alert-success">
@@ -46,7 +46,7 @@
 
 <!-- Loops Demo -->
 <section>
-    <h3>3. Loops {% for %}</h3>
+    <h3>3. Loops {{ "{% for %}" }}</h3>
 
     <h4>Demo Items:</h4>
     {% if demo.items %}
@@ -72,8 +72,8 @@
     <div>
         {% for demo.numbers as number %}
         <span style="display: inline-block; margin: 5px; padding: 10px; background: #667eea; color: white; border-radius: 5px;">
-                {{ number }}
-            </span>
+               {{ number }}
+           </span>
         {% endfor %}
     </div>
     {% endif %}
@@ -114,8 +114,8 @@
         <div style="margin-top: 10px;">
             {% for team.players as player %}
             <span style="display: inline-block; margin: 2px; padding: 5px 10px; background: #f0f0f0; border-radius: 3px; font-size: 0.9em;">
-                            {{ player.name }} ({{ player.position }})
-                        </span>
+                           {{ player.name }} ({{ player.position }})
+                       </span>
             {% endfor %}
         </div>
         {% else %}
