@@ -5,9 +5,9 @@ declare(strict_types=1);
 namespace App\Actions;
 
 use Framework\Core\Application;
-use Framework\Http\HttpStatus;
 use Framework\Http\Request;
 use Framework\Http\Response;
+use Framework\Http\HttpStatus;
 use Framework\Routing\Route;
 use Framework\Validation\ValidatesRequest;
 
@@ -38,7 +38,20 @@ class TestValidationAction
      */
     private function handleValidation(Request $request): Response
     {
-        // Example 1: Using Application helper
+        // Prüfe explizit auf JSON/AJAX Request
+        if ($request->expectsJson() || $request->isAjax() || $request->getHeader('content-type') === 'application/json') {
+            return $this->handleJsonValidation($request);
+        }
+
+        // Form-Submit: Redirect zurück mit Flash Message
+        return $this->handleFormValidation($request);
+    }
+
+    /**
+     * Handle JSON/AJAX validation
+     */
+    private function handleJsonValidation(Request $request): Response
+    {
         $validator = $this->app->validate($request->all(), [
             'name' => 'required|string|min:2|max:50',
             'email' => 'required|email|unique:users,email',
@@ -55,7 +68,7 @@ class TestValidationAction
                 'success' => false,
                 'errors' => $validator->errors()->toArray(),
                 'message' => 'Validation failed',
-                'method' => 'Application helper'
+                'method' => 'JSON validation'
             ], HttpStatus::UNPROCESSABLE_ENTITY);
         }
 
@@ -63,8 +76,29 @@ class TestValidationAction
             'success' => true,
             'validated' => $validator->validated(),
             'message' => 'Validation passed!',
-            'method' => 'Application helper'
+            'method' => 'JSON validation'
         ]);
+    }
+
+    /**
+     * Handle form validation (non-AJAX)
+     */
+    private function handleFormValidation(Request $request): Response
+    {
+        try {
+            $validated = $this->app->validateOrFail($request->all(), [
+                'name' => 'required|string|min:2|max:50',
+                'email' => 'required|email',
+                'age' => 'numeric|min:18',
+            ]);
+
+            $this->app->getSession()->flashSuccess('Validation successful!');
+            return Response::redirect('/test/validation');
+
+        } catch (\Framework\Validation\ValidationFailedException $e) {
+            $this->app->getSession()->flashError('Validation failed: ' . implode(', ', array_keys($e->getErrorsArray())));
+            return Response::redirect('/test/validation');
+        }
     }
 
     /**
@@ -118,7 +152,7 @@ class TestValidationAction
                 'errors' => $e->getErrorsArray(),
                 'message' => $e->getMessage(),
                 'method' => 'validateOrFail (exception caught)'
-            ], $e->getCode());
+            ], HttpStatus::from($e->getCode()));
         }
     }
 
@@ -155,68 +189,93 @@ class TestValidationAction
         <body>
             <h1>🔍 Validation Test - Framework Integration</h1>
             
-            <form id='validation-form'>
-                <div class='form-group'>
-                    <label>Name (required, string, min:2, max:50):</label>
-                    <input type='text' name='name' placeholder='Enter your name'>
-                </div>
+            " . $this->renderFlashMessages($this->app->getSession()->getAllFlash()) . "
+
+            <div class='section'>
+                <h2>JSON/AJAX Test</h2>
+                <form id='validation-form'>
+                    <div class='form-group'>
+                        <label>Name (required, string, min:2, max:50):</label>
+                        <input type='text' name='name' placeholder='Enter your name'>
+                    </div>
+                    
+                    <div class='form-group'>
+                        <label>Email (required, email, unique in users table):</label>
+                        <input type='email' name='email' placeholder='Enter your email'>
+                    </div>
+                    
+                    <div class='form-group'>
+                        <label>Age (numeric, min:18, max:99):</label>
+                        <input type='number' name='age' placeholder='Enter your age'>
+                    </div>
+                    
+                    <div class='form-group'>
+                        <label>User ID (must exist in users table):</label>
+                        <input type='number' name='user_id' placeholder='Enter existing user ID'>
+                    </div>
+                    
+                    <div class='form-group'>
+                        <label>Role (in: admin,user,moderator):</label>
+                        <select name='role'>
+                            <option value=''>Select role...</option>
+                            <option value='admin'>Admin</option>
+                            <option value='user'>User</option>
+                            <option value='moderator'>Moderator</option>
+                            <option value='invalid'>Invalid Role</option>
+                        </select>
+                    </div>
+                    
+                    <div class='form-group'>
+                        <label>Website (nullable, url):</label>
+                        <input type='url' name='website' placeholder='https://example.com'>
+                    </div>
+                    
+                    <div class='form-group'>
+                        <label>Active (boolean):</label>
+                        <select name='active'>
+                            <option value=''>Select...</option>
+                            <option value='1'>Yes</option>
+                            <option value='0'>No</option>
+                            <option value='true'>True</option>
+                            <option value='false'>False</option>
+                        </select>
+                    </div>
+                    
+                    <div class='form-group'>
+                        <label>Password (nullable, min:8, confirmed):</label>
+                        <input type='password' name='password' placeholder='Enter password'>
+                    </div>
+                    
+                    <div class='form-group'>
+                        <label>Password Confirmation:</label>
+                        <input type='password' name='password_confirmation' placeholder='Confirm password'>
+                    </div>
+                    
+                    <button type='submit'>Test JSON Validation</button>
+                </form>
                 
-                <div class='form-group'>
-                    <label>Email (required, email, unique in users table):</label>
-                    <input type='email' name='email' placeholder='Enter your email'>
-                </div>
-                
-                <div class='form-group'>
-                    <label>Age (numeric, min:18, max:99):</label>
-                    <input type='number' name='age' placeholder='Enter your age'>
-                </div>
-                
-                <div class='form-group'>
-                    <label>User ID (must exist in users table):</label>
-                    <input type='number' name='user_id' placeholder='Enter existing user ID'>
-                </div>
-                
-                <div class='form-group'>
-                    <label>Role (in: admin,user,moderator):</label>
-                    <select name='role'>
-                        <option value=''>Select role...</option>
-                        <option value='admin'>Admin</option>
-                        <option value='user'>User</option>
-                        <option value='moderator'>Moderator</option>
-                        <option value='invalid'>Invalid Role</option>
-                    </select>
-                </div>
-                
-                <div class='form-group'>
-                    <label>Website (nullable, url):</label>
-                    <input type='url' name='website' placeholder='https://example.com'>
-                </div>
-                
-                <div class='form-group'>
-                    <label>Active (boolean):</label>
-                    <select name='active'>
-                        <option value=''>Select...</option>
-                        <option value='1'>Yes</option>
-                        <option value='0'>No</option>
-                        <option value='true'>True</option>
-                        <option value='false'>False</option>
-                    </select>
-                </div>
-                
-                <div class='form-group'>
-                    <label>Password (nullable, min:8, confirmed):</label>
-                    <input type='password' name='password' placeholder='Enter password'>
-                </div>
-                
-                <div class='form-group'>
-                    <label>Password Confirmation:</label>
-                    <input type='password' name='password_confirmation' placeholder='Confirm password'>
-                </div>
-                
-                <button type='submit'>Test Validation</button>
-            </form>
-            
-            <div id='result'></div>
+                <div id='result'></div>
+            </div>
+
+            <div class='section'>
+                <h2>Form Submission Test</h2>
+                <form method='POST'>
+                    " . $this->app->getCsrf()->getTokenField() . "
+                    <div class='form-group'>
+                        <label>Name:</label>
+                        <input type='text' name='name' placeholder='Test form submission'>
+                    </div>
+                    <div class='form-group'>
+                        <label>Email:</label>
+                        <input type='email' name='email' placeholder='test@example.com'>
+                    </div>
+                    <div class='form-group'>
+                        <label>Age:</label>
+                        <input type='number' name='age' placeholder='25'>
+                    </div>
+                    <button type='submit'>Test Form Validation</button>
+                </form>
+            </div>
             
             <div class='rule-examples'>
                 <div class='rule-box'>
@@ -301,5 +360,19 @@ class TestValidationAction
             </script>
         </body>
         </html>";
+    }
+
+    private function renderFlashMessages(array $messages): string
+    {
+        if (empty($messages)) {
+            return '';
+        }
+
+        $html = '';
+        foreach ($messages as $type => $message) {
+            $html .= "<div class='result {$type}'>{$message}</div>";
+        }
+
+        return $html;
     }
 }

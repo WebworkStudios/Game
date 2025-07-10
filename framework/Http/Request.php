@@ -342,7 +342,18 @@ readonly class Request
      */
     public function all(): array
     {
-        return array_merge($this->query, $this->json(), $this->post);
+        // JSON hat Priorität bei JSON Content-Type
+        if ($this->isJson()) {
+            return array_merge($this->query, $this->json());
+        }
+
+        return array_merge($this->query, $this->post, $this->json());
+    }
+
+    public function isJson(): bool
+    {
+        $contentType = $this->getHeader('content-type') ?? '';
+        return str_contains($contentType, 'application/json');
     }
 
     /**
@@ -360,12 +371,6 @@ readonly class Request
         } catch (JsonException) {
             return [];
         }
-    }
-
-    public function isJson(): bool
-    {
-        $contentType = $this->getHeader('content-type') ?? '';
-        return str_contains($contentType, 'application/json');
     }
 
     /**
