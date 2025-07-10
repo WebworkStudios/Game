@@ -343,6 +343,10 @@ class Application
     {
         $this->router = $this->container->get(Router::class);
 
+        // GLOBALE MIDDLEWARE REGISTRIEREN
+        $this->router->addGlobalMiddleware(\Framework\Security\SessionMiddleware::class);
+        $this->router->addGlobalMiddleware(\Framework\Security\CsrfMiddleware::class);
+
         // Standard 404 Handler
         $this->router->setNotFoundHandler(function (Request $request) {
             return $this->render404Page($request);

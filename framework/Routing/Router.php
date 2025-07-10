@@ -22,6 +22,7 @@ class Router
     private array $routes = [];
     private array $namedRoutes = [];
     private bool $routesLoaded = false;
+    private array $globalMiddlewares = [];
 
     /** @var callable|null */
     private $notFoundHandler = null;
@@ -55,6 +56,30 @@ class Router
         }
 
         return $this->executeRoute($request, $matchedRoute['route'], $matchedRoute['parameters']);
+    }
+
+    /**
+     * Fügt globale Middleware hinzu
+     */
+    public function addGlobalMiddleware(string $middlewareClass): void
+    {
+        $this->globalMiddlewares[] = $middlewareClass;
+    }
+
+    /**
+     * Setzt alle globalen Middlewares
+     */
+    public function setGlobalMiddlewares(array $middlewares): void
+    {
+        $this->globalMiddlewares = $middlewares;
+    }
+
+    /**
+     * Holt alle globalen Middlewares
+     */
+    public function getGlobalMiddlewares(): array
+    {
+        return $this->globalMiddlewares;
     }
 
     /**
@@ -152,8 +177,8 @@ class Router
         // Parameter zum Request hinzufügen
         $requestWithParams = $this->addParametersToRequest($request, $parameters);
 
-        // Middleware-Chain aufbauen
-        $middlewares = $route->middlewares;
+        // Middleware-Chain aufbauen: Global + Route Middlewares
+        $middlewares = array_merge($this->globalMiddlewares, $route->middlewares);
         $handler = fn(Request $req) => $this->executeAction($req, $route->action);
 
         // Middleware-Chain rückwärts aufbauen
@@ -278,6 +303,19 @@ class Router
                 'parameters' => $route->parameters,
             ];
         }, $this->routes);
+    }
+
+    /**
+     * Holt Debug-Information über Middleware
+     */
+    public function getMiddlewareInfo(): array
+    {
+        return [
+            'global_middlewares' => $this->globalMiddlewares,
+            'total_global_count' => count($this->globalMiddlewares),
+            'routes_loaded' => $this->routesLoaded,
+            'route_count' => count($this->routes),
+        ];
     }
 
     /**

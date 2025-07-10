@@ -67,7 +67,7 @@ class SecurityServiceProvider
         $this->container->transient(CsrfMiddleware::class, function (ServiceContainer $container) {
             return new CsrfMiddleware(
                 csrf: $container->get(Csrf::class),
-                routerCache: $container->get(RouterCache::class) // ← NEU
+                routerCache: $container->get(RouterCache::class) // ← WICHTIG!
             );
         });
     }

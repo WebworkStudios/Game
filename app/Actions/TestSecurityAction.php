@@ -1,6 +1,5 @@
 <?php
 
-
 declare(strict_types=1);
 
 namespace App\Actions;
@@ -18,9 +17,7 @@ class TestSecurityAction
 {
     public function __construct(
         private readonly Application $app
-    )
-    {
-    }
+    ) {}
 
     public function __invoke(Request $request): Response
     {
@@ -48,7 +45,7 @@ class TestSecurityAction
 
         return "
         <!DOCTYPE html>
-        <html lang=de>
+        <html>
         <head>
             <title>Security Test Page</title>
             <meta charset='utf-8'>
@@ -122,49 +119,50 @@ class TestSecurityAction
                 <div id='ajax-result'></div>
             </div>
 
-           <script>
-            // CSRF-Token für JavaScript holen
-            const csrfToken = document.querySelector('meta[name=\"csrf-token\"]').getAttribute('content');
+            <script>
+                // CSRF-Token für JavaScript holen
+                const csrfToken = document.querySelector('meta[name=\"csrf-token\"]').getAttribute('content');
 
-            function setSessionValue() {
-                fetch('/test/security', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': csrfToken
-                    },
-                    body: JSON.stringify({
-                        _token: csrfToken,
-                        action: 'set_session',
-                        key: 'test_key',
-                        value: 'Hello from JavaScript! ' + Date.now()
-                    })
-                }).then(() => {  
-                    document.getElementById('session-result').innerHTML = 'Session value set!';
-                });
-            }
+                function setSessionValue() {
+                    fetch('/test/security', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRF-TOKEN': csrfToken
+                        },
+                        body: JSON.stringify({
+                            _token: csrfToken,
+                            action: 'set_session',
+                            key: 'test_key',
+                            value: 'Hello from JavaScript! ' + Date.now()
+                        })
+                    }).then(response => {
+                        document.getElementById('session-result').innerHTML = 'Session value set!';
+                    });
+                }
 
-            function makeAjaxRequest() {
-                fetch('/test/security', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': csrfToken
-                    },
-                    body: JSON.stringify({
-                        _token: csrfToken,
-                        ajax_test: true,
-                        message: 'Hello from AJAX!'
+                function makeAjaxRequest() {
+                    fetch('/test/security', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRF-TOKEN': csrfToken
+                        },
+                        body: JSON.stringify({
+                            _token: csrfToken,
+                            ajax_test: true,
+                            message: 'Hello from AJAX!'
+                        })
                     })
-                })
-                .then(() => {  
-                    document.getElementById('ajax-result').innerHTML = 'AJAX successful!';
-                })
-                .catch(error => {
-                    document.getElementById('ajax-result').innerHTML = 'AJAX failed: ' + error;
-                });
-            }
-        </script>
+                    .then(response => response.text())
+                    .then(data => {
+                        document.getElementById('ajax-result').innerHTML = 'AJAX successful!';
+                    })
+                    .catch(error => {
+                        document.getElementById('ajax-result').innerHTML = 'AJAX failed: ' + error;
+                    });
+                }
+            </script>
         </body>
         </html>";
     }
