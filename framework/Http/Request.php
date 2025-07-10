@@ -323,9 +323,10 @@ readonly class Request
     public function expectsJson(): bool
     {
         $accept = $this->getHeader('accept') ?? '';
-        return str_contains($accept, 'application/json')
-            || str_contains($accept, 'application/*')
-            || str_contains($accept, '*/*');
+
+        // Nur echte JSON-Requests - nicht Browser mit */*
+        return str_contains($accept, 'application/json') &&
+            !str_contains($accept, 'text/html');
     }
 
     /**
