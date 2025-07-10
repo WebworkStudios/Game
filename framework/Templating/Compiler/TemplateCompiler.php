@@ -127,20 +127,27 @@ PHP;
         return "echo \$renderer->escape({$variableAccess});\n";
     }
 
+
+// framework/Templating/Compiler/TemplateCompiler.php
+
     private function compileVariableAccess(array $node): string
     {
         $name = $node['name'];
         $path = $node['path'] ?? [];
 
-        // Start with base variable
-        $code = "\$renderer->get('{$name}')";
+        // Für einfache Variablen ohne Pfad
+        if (empty($path)) {
+            $code = "\$renderer->get('{$name}')";
+        } else {
+            // Für verschachtelte Zugriffe: variable.property.subproperty
+            $code = "\$renderer->get('{$name}')";
 
-        // Add path traversal
-        foreach ($path as $property) {
-            if (is_numeric($property)) {
-                $code = "({$code})[{$property}] ?? null";
-            } else {
-                $code = "({$code})['{$property}'] ?? null";
+            foreach ($path as $property) {
+                if (is_numeric($property)) {
+                    $code = "is_array({$code}) ? ({$code})[{$property}] ?? null : null";
+                } else {
+                    $code = "is_array({$code}) ? ({$code})['{$property}'] ?? null : null";
+                }
             }
         }
 

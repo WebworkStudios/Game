@@ -25,15 +25,15 @@ class SecurityServiceProvider
      * Erstellt Standard-Konfigurationsdatei
      */
     public static function publishConfig(string $basePath): bool
-{
-    $configPath = $basePath . '/' . self::DEFAULT_CONFIG_PATH;
-    $configDir = dirname($configPath);
+    {
+        $configPath = $basePath . '/' . self::DEFAULT_CONFIG_PATH;
+        $configDir = dirname($configPath);
 
-    if (!is_dir($configDir) && !mkdir($configDir, 0755, true)) {
-        return false;
-    }
+        if (!is_dir($configDir) && !mkdir($configDir, 0755, true)) {
+            return false;
+        }
 
-    $content = <<<'PHP'
+        $content = <<<'PHP'
 <?php
 
 declare(strict_types=1);
@@ -72,8 +72,8 @@ return [
 ];
 PHP;
 
-    return file_put_contents($configPath, $content) !== false;
-}
+        return file_put_contents($configPath, $content) !== false;
+    }
 
 
     /**

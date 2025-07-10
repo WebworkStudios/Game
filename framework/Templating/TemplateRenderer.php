@@ -18,14 +18,6 @@ class TemplateRenderer
     }
 
     /**
-     * Set blocks for template inheritance
-     */
-    public function setBlocks(array $blocks): void
-    {
-        $this->blocks = array_merge($this->blocks, $blocks);
-    }
-
-    /**
      * Check if block exists
      */
     public function hasBlock(string $name): bool
@@ -92,6 +84,14 @@ class TemplateRenderer
         $childRenderer->setBlocks($this->blocks); // Wichtig: Blocks weitergeben!
 
         return $this->engine->renderWithRenderer($template, $childRenderer);
+    }
+
+    /**
+     * Set blocks for template inheritance
+     */
+    public function setBlocks(array $blocks): void
+    {
+        $this->blocks = array_merge($this->blocks, $blocks);
     }
 
     /**

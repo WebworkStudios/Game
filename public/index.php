@@ -46,7 +46,7 @@ $app->setNotFoundHandler(function ($request) {
 
     return \Framework\Http\Response::notFound("
         <!DOCTYPE html>
-        <html>
+        <html lang=de>
         <head>
             <title>404 - Page Not Found</title>
             <meta charset='utf-8'>

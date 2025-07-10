@@ -211,7 +211,7 @@ class Application
             // Fallback zu HTML
             $html = "
             <!DOCTYPE html>
-            <html>
+            <html lang=de>
             <head>
                 <title>404 - Page Not Found</title>
                 <meta charset='utf-8'>
@@ -328,7 +328,7 @@ class Application
     {
         $html = "
         <!DOCTYPE html>
-        <html>
+        <html lang=de>
         <head>
             <title>Error - {$e->getMessage()}</title>
             <meta charset='utf-8'>
@@ -373,7 +373,7 @@ class Application
             // Fallback zu HTML
             $html = "
             <!DOCTYPE html>
-            <html>
+            <html lang=de>
             <head>
                 <title>500 - Internal Server Error</title>
                 <meta charset='utf-8'>

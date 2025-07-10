@@ -4,8 +4,6 @@ declare(strict_types=1);
 namespace Framework\Templating;
 
 use Framework\Templating\Cache\TemplateCache;
-use Framework\Templating\Compiler\TemplateCompiler;
-use Framework\Templating\Parser\TemplateParser;
 use InvalidArgumentException;
 use RuntimeException;
 
@@ -15,8 +13,8 @@ class TemplateEngine
     private array $paths = [];
 
     public function __construct(
-        private readonly TemplateCache    $cache,
-        string                            $defaultPath = ''
+        private readonly TemplateCache $cache,
+        string                         $defaultPath = ''
     )
     {
         if (!empty($defaultPath)) {
@@ -59,28 +57,6 @@ class TemplateEngine
         return $this->executeTemplate($compiledPath, $data);
     }
 
-    /**
-     * Render with specific renderer (for block inheritance)
-     */
-    public function renderWithRenderer(string $template, TemplateRenderer $renderer): string
-    {
-        $templatePath = $this->findTemplate($template);
-        $compiledPath = $this->cache->get($templatePath);
-
-        ob_start();
-        try {
-            include $compiledPath;
-            return ob_get_clean();
-        } catch (\Throwable $e) {
-            ob_end_clean();
-            throw new RuntimeException(
-                "Template execution failed: {$e->getMessage()}",
-                0,
-                $e
-            );
-        }
-    }
-
     private function findTemplate(string $template): string
     {
 
@@ -119,6 +95,28 @@ class TemplateEngine
             // Make blocks available globally
             $_parentBlocks = $_parentBlocks ?? [];
 
+            include $compiledPath;
+            return ob_get_clean();
+        } catch (\Throwable $e) {
+            ob_end_clean();
+            throw new RuntimeException(
+                "Template execution failed: {$e->getMessage()}",
+                0,
+                $e
+            );
+        }
+    }
+
+    /**
+     * Render with specific renderer (for block inheritance)
+     */
+    public function renderWithRenderer(string $template, TemplateRenderer $renderer): string
+    {
+        $templatePath = $this->findTemplate($template);
+        $compiledPath = $this->cache->get($templatePath);
+
+        ob_start();
+        try {
             include $compiledPath;
             return ob_get_clean();
         } catch (\Throwable $e) {
