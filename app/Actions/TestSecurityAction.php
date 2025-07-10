@@ -48,7 +48,7 @@ class TestSecurityAction
 
         return "
         <!DOCTYPE html>
-        <html>
+        <html lang=de>
         <head>
             <title>Security Test Page</title>
             <meta charset='utf-8'>
@@ -122,50 +122,49 @@ class TestSecurityAction
                 <div id='ajax-result'></div>
             </div>
 
-            <script>
-                // CSRF-Token für JavaScript holen
-                const csrfToken = document.querySelector('meta[name=\"csrf-token\"]').getAttribute('content');
+           <script>
+            // CSRF-Token für JavaScript holen
+            const csrfToken = document.querySelector('meta[name=\"csrf-token\"]').getAttribute('content');
 
-                function setSessionValue() {
-                    fetch('/test/security', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'X-CSRF-TOKEN': csrfToken
-                        },
-                        body: JSON.stringify({
-                            _token: csrfToken,
-                            action: 'set_session',
-                            key: 'test_key',
-                            value: 'Hello from JavaScript! ' + Date.now()
-                        })
-                    }).then(response => {
-                        document.getElementById('session-result').innerHTML = 'Session value set!';
-                    });
-                }
+            function setSessionValue() {
+                fetch('/test/security', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': csrfToken
+                    },
+                    body: JSON.stringify({
+                        _token: csrfToken,
+                        action: 'set_session',
+                        key: 'test_key',
+                        value: 'Hello from JavaScript! ' + Date.now()
+                    })
+                }).then(() => {  
+                    document.getElementById('session-result').innerHTML = 'Session value set!';
+                });
+            }
 
-                function makeAjaxRequest() {
-                    fetch('/test/security', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'X-CSRF-TOKEN': csrfToken
-                        },
-                        body: JSON.stringify({
-                            _token: csrfToken,
-                            ajax_test: true,
-                            message: 'Hello from AJAX!'
-                        })
+            function makeAjaxRequest() {
+                fetch('/test/security', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': csrfToken
+                    },
+                    body: JSON.stringify({
+                        _token: csrfToken,
+                        ajax_test: true,
+                        message: 'Hello from AJAX!'
                     })
-                    .then(response => response.text())
-                    .then(data => {
-                        document.getElementById('ajax-result').innerHTML = 'AJAX successful!';
-                    })
-                    .catch(error => {
-                        document.getElementById('ajax-result').innerHTML = 'AJAX failed: ' + error;
-                    });
-                }
-            </script>
+                })
+                .then(() => {  
+                    document.getElementById('ajax-result').innerHTML = 'AJAX successful!';
+                })
+                .catch(error => {
+                    document.getElementById('ajax-result').innerHTML = 'AJAX failed: ' + error;
+                });
+            }
+        </script>
         </body>
         </html>";
     }

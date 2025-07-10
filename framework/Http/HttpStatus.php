@@ -53,6 +53,7 @@ enum HttpStatus: int
     case UNSUPPORTED_MEDIA_TYPE = 415;
     case RANGE_NOT_SATISFIABLE = 416;
     case EXPECTATION_FAILED = 417;
+    case PAGE_EXPIRED = 419;
     case UNPROCESSABLE_ENTITY = 422;
     case TOO_MANY_REQUESTS = 429;
 
@@ -118,6 +119,7 @@ enum HttpStatus: int
             self::RANGE_NOT_SATISFIABLE => 'Range Not Satisfiable',
             self::EXPECTATION_FAILED => 'Expectation Failed',
             self::UNPROCESSABLE_ENTITY => 'Unprocessable Entity',
+            self::PAGE_EXPIRED => 'Page Expired',
             self::TOO_MANY_REQUESTS => 'Too Many Requests',
 
             // 5xx Server Error

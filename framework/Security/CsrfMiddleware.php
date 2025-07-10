@@ -137,7 +137,7 @@ class CsrfMiddleware implements MiddlewareInterface
                 'error' => 'CSRF token validation failed',
                 'message' => 'The request could not be completed due to invalid security token.',
                 'code' => 419
-            ], HttpStatus::from(419));
+            ], HttpStatus::PAGE_EXPIRED);  //
         }
 
         // HTML-Response für Web-Requests
@@ -152,7 +152,7 @@ class CsrfMiddleware implements MiddlewareInterface
         $html = $this->renderCsrfErrorPage();
 
         return new Response(
-            status: HttpStatus::from(419), // 419 Page Expired
+            status: HttpStatus::PAGE_EXPIRED,  // ← Geändert von HttpStatus::from(419)
             headers: ['Content-Type' => 'text/html; charset=UTF-8'],
             body: $html
         );
@@ -165,7 +165,7 @@ class CsrfMiddleware implements MiddlewareInterface
     {
         return "
         <!DOCTYPE html>
-        <html>
+        <html lang=de>
         <head>
             <title>419 - CSRF Token Mismatch</title>
             <meta charset='utf-8'>
@@ -306,26 +306,29 @@ class CsrfMiddleware implements MiddlewareInterface
                 </div>
             </div>
 
-            <script>
-                // Auto-refresh nach 5 Sekunden falls JavaScript aktiviert
-                let countdown = 5;
-                const refreshBtn = document.querySelector('.btn-primary');
-                const originalText = refreshBtn.textContent;
+             <script>
+            // CSRF-Token für JavaScript holen
+            const csrfToken = document.querySelector('meta[name=\"csrf-token\"]').getAttribute('content');
+
+            // Auto-refresh nach 5 Sekunden falls JavaScript aktiviert
+            let countdown = 5;
+            const refreshBtn = document.querySelector('.btn-primary');
+            const originalText = refreshBtn.textContent;
+            
+            const timer = setInterval(() => {
+                refreshBtn.textContent = `Refresh (\${countdown}s)`; 
+                countdown--;
                 
-                const timer = setInterval(() => {
-                    refreshBtn.textContent = `Refresh (${countdown}s)`;
-                    countdown--;
-                    
-                    if (countdown < 0) {
-                        clearInterval(timer);
-                        window.location.reload();
-                    }
-                }, 1000);
-                
-                // Stop countdown wenn User interagiert
-                document.addEventListener('click', () => clearInterval(timer));
-                document.addEventListener('keypress', () => clearInterval(timer));
-            </script>
+                if (countdown < 0) {
+                    clearInterval(timer);
+                    window.location.reload();
+                }
+            }, 1000);
+            
+            // Stop countdown wenn User interagiert
+            document.addEventListener('click', () => clearInterval(timer));
+            document.addEventListener('keypress', () => clearInterval(timer));
+        </script>
         </body>
         </html>";
     }
