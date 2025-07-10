@@ -5,30 +5,16 @@ declare(strict_types=1);
 
 namespace Framework\Validation;
 
+use Framework\Core\Application;
 use Framework\Http\HttpStatus;
 use Framework\Http\Request;
 use Framework\Http\Response;
-use Framework\Core\Application;
 
 /**
  * ValidatesRequests - Trait for easy validation in Actions
  */
 trait ValidatesRequest
 {
-    /**
-     * Validate request data
-     */
-    protected function validate(Request $request, array $rules, ?string $connectionName = null): Validator
-    {
-        $data = $request->all();
-
-        if (property_exists($this, 'app') && $this->app instanceof Application) {
-            return $this->app->validate($data, $rules, $connectionName);
-        }
-
-        throw new \RuntimeException('Application instance not found. Ensure $app property exists in Action.');
-    }
-
     /**
      * Validate request data or fail with exception
      */
@@ -71,11 +57,17 @@ trait ValidatesRequest
     }
 
     /**
-     * Get validation rules for this action (override in child classes)
+     * Validate request data
      */
-    protected function rules(Request $request): array
+    protected function validate(Request $request, array $rules, ?string $connectionName = null): Validator
     {
-        return [];
+        $data = $request->all();
+
+        if (property_exists($this, 'app') && $this->app instanceof Application) {
+            return $this->app->validate($data, $rules, $connectionName);
+        }
+
+        throw new \RuntimeException('Application instance not found. Ensure $app property exists in Action.');
     }
 
     /**
@@ -98,5 +90,13 @@ trait ValidatesRequest
         }
 
         return $this->validate($request, $rules, $connectionName);
+    }
+
+    /**
+     * Get validation rules for this action (override in child classes)
+     */
+    protected function rules(Request $request): array
+    {
+        return [];
     }
 }

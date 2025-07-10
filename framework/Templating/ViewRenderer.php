@@ -11,17 +11,36 @@ class ViewRenderer
 {
     public function __construct(
         private readonly TemplateEngine $engine
-    ) {}
+    )
+    {
+    }
+
+    /**
+     * Render JSON with template fallback
+     */
+    public function renderOrJson(
+        string $template,
+        array  $data = [],
+        bool   $wantsJson = false
+    ): Response
+    {
+        if ($wantsJson) {
+            return Response::json($data);
+        }
+
+        return $this->render($template, $data);
+    }
 
     /**
      * Render template to Response
      */
     public function render(
-        string $template,
-        array $data = [],
+        string     $template,
+        array      $data = [],
         HttpStatus $status = HttpStatus::OK,
-        array $headers = []
-    ): Response {
+        array      $headers = []
+    ): Response
+    {
         try {
             $content = $this->engine->render($template, $data);
 
@@ -38,21 +57,6 @@ class ViewRenderer
             // In Production: Re-throw exception
             throw $e;
         }
-    }
-
-    /**
-     * Render JSON with template fallback
-     */
-    public function renderOrJson(
-        string $template,
-        array $data = [],
-        bool $wantsJson = false
-    ): Response {
-        if ($wantsJson) {
-            return Response::json($data);
-        }
-
-        return $this->render($template, $data);
     }
 
     /**

@@ -4,22 +4,22 @@ declare(strict_types=1);
 
 namespace Framework\Core;
 
-use Framework\Database\DatabaseServiceProvider;
 use Framework\Database\ConnectionManager;
+use Framework\Database\DatabaseServiceProvider;
 use Framework\Database\QueryBuilder;
-use Framework\Security\SecurityServiceProvider;
-use Framework\Security\Session;
-use Framework\Security\Csrf;
-use Framework\Templating\TemplatingServiceProvider;
-use Framework\Templating\TemplateEngine;
-use Framework\Templating\ViewRenderer;
-use Framework\Validation\ValidationServiceProvider;
-use Framework\Validation\Validator;
-use Framework\Validation\ValidatorFactory;
 use Framework\Http\Request;
 use Framework\Http\Response;
 use Framework\Routing\Router;
 use Framework\Routing\RouterCache;
+use Framework\Security\Csrf;
+use Framework\Security\SecurityServiceProvider;
+use Framework\Security\Session;
+use Framework\Templating\TemplateEngine;
+use Framework\Templating\TemplatingServiceProvider;
+use Framework\Templating\ViewRenderer;
+use Framework\Validation\ValidationServiceProvider;
+use Framework\Validation\Validator;
+use Framework\Validation\ValidatorFactory;
 use RuntimeException;
 use Throwable;
 
@@ -45,6 +45,228 @@ class Application
         $this->container = new ServiceContainer();
 
         $this->bootstrap();
+    }
+
+    /**
+     * Bootstrap der Anwendung
+     */
+    private function bootstrap(): void
+    {
+        $this->setupEnvironment();
+        $this->registerCoreServices();
+        $this->registerDatabaseServices();
+        $this->registerSecurityServices();
+        $this->registerValidationServices();
+        $this->registerTemplatingServices();
+        $this->setupRouter();
+    }
+
+    /**
+     * Setup der PHP-Umgebung
+     */
+    private function setupEnvironment(): void
+    {
+        // Error Reporting
+        error_reporting(E_ALL);
+        ini_set('display_errors', '0');
+        ini_set('log_errors', '1');
+
+        // Timezone
+        date_default_timezone_set(self::DEFAULT_TIMEZONE);
+
+        // Charset
+        ini_set('default_charset', self::DEFAULT_CHARSET);
+        mb_internal_encoding(self::DEFAULT_CHARSET);
+
+        // Session (wird später durch SecurityServiceProvider verwaltet)
+        // Hier bewusst nicht starten, da SessionMiddleware das übernimmt
+    }
+
+    /**
+     * Registriert Core-Services im Container
+     */
+    private function registerCoreServices(): void
+    {
+        // Container sich selbst registrieren
+        $this->container->instance(ServiceContainer::class, $this->container);
+
+        // Application sich selbst registrieren
+        $this->container->instance(Application::class, $this);
+        $this->container->instance(static::class, $this);
+
+        ServiceRegistry::setContainer($this->container);
+
+        // RouterCache registrieren
+        $this->container->singleton(RouterCache::class, function () {
+            return new RouterCache(
+                cacheFile: $this->basePath . '/storage/cache/routes.php',
+                actionsPath: $this->basePath . '/app/Actions'
+            );
+        });
+
+        // Router registrieren
+        $this->container->singleton(Router::class, function (ServiceContainer $container) {
+            return new Router(
+                container: $container,
+                cache: $container->get(RouterCache::class)
+            );
+        });
+    }
+
+    /**
+     * Registriert einen Service
+     */
+    public function singleton(string $abstract, string|callable|null $concrete = null): self
+    {
+        $this->container->singleton($abstract, $concrete);
+        return $this;
+    }
+
+    /**
+     * Registriert Database-Services
+     */
+    private function registerDatabaseServices(): void
+    {
+        $provider = new DatabaseServiceProvider($this->container, $this);
+        $provider->register();
+    }
+
+    /**
+     * Registriert Security-Services
+     */
+    private function registerSecurityServices(): void
+    {
+        $provider = new SecurityServiceProvider($this->container, $this);
+        $provider->register();
+    }
+
+    /**
+     * Registriert Validation-Services
+     */
+    private function registerValidationServices(): void
+    {
+        $provider = new ValidationServiceProvider($this->container, $this);
+        $provider->register();
+    }
+
+    /**
+     * Registriert Templating-Services
+     */
+    private function registerTemplatingServices(): void
+    {
+        $provider = new TemplatingServiceProvider($this->container, $this);
+        $provider->register();
+
+        // ViewRenderer registrieren
+        $this->container->singleton(ViewRenderer::class, function (ServiceContainer $container) {
+            return new ViewRenderer(
+                engine: $container->get(TemplateEngine::class)
+            );
+        });
+    }
+
+    /**
+     * Setup des Routers
+     */
+    private function setupRouter(): void
+    {
+        $this->router = $this->container->get(Router::class);
+
+        // GLOBALE MIDDLEWARE REGISTRIEREN
+        $this->router->addGlobalMiddleware(\Framework\Security\SessionMiddleware::class);
+        $this->router->addGlobalMiddleware(\Framework\Security\CsrfMiddleware::class);
+
+        // Standard 404 Handler
+        $this->router->setNotFoundHandler(function (Request $request) {
+            return $this->render404Page($request);
+        });
+
+        // Standard 405 Handler
+        $this->router->setMethodNotAllowedHandler(function (Request $request) {
+            return Response::methodNotAllowed('Method Not Allowed');
+        });
+    }
+
+    /**
+     * Setzt 404-Handler
+     */
+    public function setNotFoundHandler(callable $handler): self
+    {
+        $this->router->setNotFoundHandler($handler);
+        return $this;
+    }
+
+    /**
+     * Rendert 404-Seite
+     */
+    private function render404Page(Request $request): Response
+    {
+        // Versuche Template zu laden, falls verfügbar
+        try {
+            return $this->view('errors/404', [
+                'path' => $request->getPath(),
+                'method' => $request->getMethod()->value,
+            ]);
+        } catch (Throwable) {
+            // Fallback zu HTML
+            $html = "
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>404 - Page Not Found</title>
+                <meta charset='utf-8'>
+                <style>
+                    body { font-family: Arial, sans-serif; text-align: center; margin-top: 100px; }
+                    .error { color: #666; }
+                    .code { font-size: 4em; font-weight: bold; color: #333; }
+                    .message { font-size: 1.2em; margin: 20px 0; }
+                    .path { background: #f5f5f5; padding: 10px; border-radius: 5px; margin: 20px auto; max-width: 600px; }
+                </style>
+            </head>
+            <body>
+                <div class='error'>
+                    <div class='code'>404</div>
+                    <div class='message'>Page Not Found</div>
+                    <div class='path'>Path: {$request->getPath()}</div>
+                    <a href='/'>← Back to Home</a>
+                </div>
+            </body>
+            </html>";
+
+            return Response::notFound($html);
+        }
+    }
+
+    /**
+     * Render template to Response
+     */
+    public function view(string $template, array $data = []): Response
+    {
+        return $this->getViewRenderer()->render($template, $data);
+    }
+
+    /**
+     * Render template
+     */
+    public function render(string $template, array $data = []): string
+    {
+        return $this->getTemplateEngine()->render($template, $data);
+    }
+
+    /**
+     * Holt Template Engine
+     */
+    public function getTemplateEngine(): TemplateEngine
+    {
+        return $this->container->get(TemplateEngine::class);
+    }
+
+    /**
+     * Holt View Renderer
+     */
+    public function getViewRenderer(): ViewRenderer
+    {
+        return $this->container->get(ViewRenderer::class);
     }
 
     /**
@@ -74,12 +296,106 @@ class Application
     }
 
     /**
-     * Setzt Debug-Modus
+     * Behandelt Exceptions
      */
-    public function setDebug(bool $debug): self
+    private function handleException(Throwable $e): Response
     {
-        $this->debug = $debug;
-        return $this;
+        // Custom Error Handler
+        if ($this->errorHandler !== null) {
+            try {
+                $response = ($this->errorHandler)($e);
+                if ($response instanceof Response) {
+                    return $response;
+                }
+            } catch (Throwable) {
+                // Fallback zu Standard-Handler
+            }
+        }
+
+        // Debug-Modus: Detaillierte Fehlerausgabe
+        if ($this->debug) {
+            return $this->renderDebugError($e);
+        }
+
+        // Production: Generische Fehlerseite
+        return $this->renderProductionError($e);
+    }
+
+    /**
+     * Rendert Debug-Fehlerseite
+     */
+    private function renderDebugError(Throwable $e): Response
+    {
+        $html = "
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Error - {$e->getMessage()}</title>
+            <meta charset='utf-8'>
+            <style>
+                body { font-family: monospace; margin: 20px; background: #f8f8f8; }
+                .error { background: white; padding: 20px; border-left: 5px solid #e74c3c; }
+                .message { font-size: 1.2em; font-weight: bold; color: #e74c3c; margin-bottom: 10px; }
+                .file { color: #666; margin-bottom: 20px; }
+                .trace { background: #f5f5f5; padding: 15px; border-radius: 5px; overflow-x: auto; }
+                pre { margin: 0; white-space: pre-wrap; }
+            </style>
+        </head>
+        <body>
+            <div class='error'>
+                <div class='message'>" . get_class($e) . ": {$e->getMessage()}</div>
+                <div class='file'>File: {$e->getFile()}:{$e->getLine()}</div>
+                <div class='trace'>
+                    <strong>Stack Trace:</strong>
+                    <pre>{$e->getTraceAsString()}</pre>
+                </div>
+            </div>
+        </body>
+        </html>";
+
+        return Response::serverError($html);
+    }
+
+    /**
+     * Rendert Production-Fehlerseite
+     */
+    private function renderProductionError(Throwable $e): Response
+    {
+        // Log error
+        error_log("Application Error: " . $e->getMessage() . " in " . $e->getFile() . ":" . $e->getLine());
+
+        // Versuche Template zu laden
+        try {
+            return $this->view('errors/500', [
+                'message' => 'Something went wrong. Please try again later.',
+            ]);
+        } catch (Throwable) {
+            // Fallback zu HTML
+            $html = "
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>500 - Internal Server Error</title>
+                <meta charset='utf-8'>
+                <style>
+                    body { font-family: Arial, sans-serif; text-align: center; margin-top: 100px; }
+                    .error { color: #666; }
+                    .code { font-size: 4em; font-weight: bold; color: #e74c3c; }
+                    .message { font-size: 1.2em; margin: 20px 0; }
+                </style>
+            </head>
+            <body>
+                <div class='error'>
+                    <div class='code'>500</div>
+                    <div class='message'>Internal Server Error</div>
+                    <p>Something went wrong. Please try again later.</p>
+                    <a href='/'>← Back to Home</a>
+                </div>
+            </body>
+            </html>";
+
+            return Response::serverError($html);
+        }
     }
 
     /**
@@ -91,20 +407,20 @@ class Application
     }
 
     /**
+     * Setzt Debug-Modus
+     */
+    public function setDebug(bool $debug): self
+    {
+        $this->debug = $debug;
+        return $this;
+    }
+
+    /**
      * Setzt Custom Error Handler
      */
     public function setErrorHandler(callable $handler): self
     {
         $this->errorHandler = $handler;
-        return $this;
-    }
-
-    /**
-     * Setzt 404-Handler
-     */
-    public function setNotFoundHandler(callable $handler): self
-    {
-        $this->router->setNotFoundHandler($handler);
         return $this;
     }
 
@@ -133,14 +449,6 @@ class Application
     }
 
     /**
-     * Holt Database Connection Manager
-     */
-    public function getDatabase(): ConnectionManager
-    {
-        return $this->container->get(ConnectionManager::class);
-    }
-
-    /**
      * Erstellt neuen QueryBuilder
      */
     public function query(string $connectionName = 'default'): QueryBuilder
@@ -156,6 +464,14 @@ class Application
     public function transaction(callable $callback, string $connectionName = 'default'): mixed
     {
         return $this->getDatabase()->transaction($callback, $connectionName);
+    }
+
+    /**
+     * Holt Database Connection Manager
+     */
+    public function getDatabase(): ConnectionManager
+    {
+        return $this->container->get(ConnectionManager::class);
     }
 
     /**
@@ -175,6 +491,14 @@ class Application
     }
 
     /**
+     * Validiert Daten und gibt Validator zurück
+     */
+    public function validate(array $data, array $rules, ?string $connectionName = null): Validator
+    {
+        return $this->validator($data, $rules, $connectionName)->validate();
+    }
+
+    /**
      * Erstellt Validator-Instanz
      */
     public function validator(array $data, array $rules, ?string $connectionName = null): Validator
@@ -185,60 +509,11 @@ class Application
     }
 
     /**
-     * Validiert Daten und gibt Validator zurück
-     */
-    public function validate(array $data, array $rules, ?string $connectionName = null): Validator
-    {
-        return $this->validator($data, $rules, $connectionName)->validate();
-    }
-
-    /**
      * Validiert Daten oder wirft Exception bei Fehler
      */
     public function validateOrFail(array $data, array $rules, ?string $connectionName = null): array
     {
         return $this->validator($data, $rules, $connectionName)->validateOrFail();
-    }
-
-    /**
-     * Holt Template Engine
-     */
-    public function getTemplateEngine(): TemplateEngine
-    {
-        return $this->container->get(TemplateEngine::class);
-    }
-
-    /**
-     * Render template
-     */
-    public function render(string $template, array $data = []): string
-    {
-        return $this->getTemplateEngine()->render($template, $data);
-    }
-
-    /**
-     * Holt View Renderer
-     */
-    public function getViewRenderer(): ViewRenderer
-    {
-        return $this->container->get(ViewRenderer::class);
-    }
-
-    /**
-     * Render template to Response
-     */
-    public function view(string $template, array $data = []): Response
-    {
-        return $this->getViewRenderer()->render($template, $data);
-    }
-
-    /**
-     * Registriert einen Service
-     */
-    public function singleton(string $abstract, string|callable|null $concrete = null): self
-    {
-        $this->container->singleton($abstract, $concrete);
-        return $this;
     }
 
     /**
@@ -329,280 +604,5 @@ class Application
         }
 
         return $success;
-    }
-
-    /**
-     * Bootstrap der Anwendung
-     */
-    private function bootstrap(): void
-    {
-        $this->setupEnvironment();
-        $this->registerCoreServices();
-        $this->registerDatabaseServices();
-        $this->registerSecurityServices();
-        $this->registerValidationServices();
-        $this->registerTemplatingServices();
-        $this->setupRouter();
-    }
-
-    /**
-     * Setup der PHP-Umgebung
-     */
-    private function setupEnvironment(): void
-    {
-        // Error Reporting
-        error_reporting(E_ALL);
-        ini_set('display_errors', '0');
-        ini_set('log_errors', '1');
-
-        // Timezone
-        date_default_timezone_set(self::DEFAULT_TIMEZONE);
-
-        // Charset
-        ini_set('default_charset', self::DEFAULT_CHARSET);
-        mb_internal_encoding(self::DEFAULT_CHARSET);
-
-        // Session (wird später durch SecurityServiceProvider verwaltet)
-        // Hier bewusst nicht starten, da SessionMiddleware das übernimmt
-    }
-
-    /**
-     * Registriert Core-Services im Container
-     */
-    private function registerCoreServices(): void
-    {
-        // Container sich selbst registrieren
-        $this->container->instance(ServiceContainer::class, $this->container);
-
-        // Application sich selbst registrieren
-        $this->container->instance(Application::class, $this);
-        $this->container->instance(static::class, $this);
-
-        ServiceRegistry::setContainer($this->container);
-
-        // RouterCache registrieren
-        $this->container->singleton(RouterCache::class, function () {
-            return new RouterCache(
-                cacheFile: $this->basePath . '/storage/cache/routes.php',
-                actionsPath: $this->basePath . '/app/Actions'
-            );
-        });
-
-        // Router registrieren
-        $this->container->singleton(Router::class, function (ServiceContainer $container) {
-            return new Router(
-                container: $container,
-                cache: $container->get(RouterCache::class)
-            );
-        });
-    }
-
-    /**
-     * Registriert Database-Services
-     */
-    private function registerDatabaseServices(): void
-    {
-        $provider = new DatabaseServiceProvider($this->container, $this);
-        $provider->register();
-    }
-
-    /**
-     * Registriert Security-Services
-     */
-    private function registerSecurityServices(): void
-    {
-        $provider = new SecurityServiceProvider($this->container, $this);
-        $provider->register();
-    }
-
-    /**
-     * Registriert Validation-Services
-     */
-    private function registerValidationServices(): void
-    {
-        $provider = new ValidationServiceProvider($this->container, $this);
-        $provider->register();
-    }
-
-    /**
-     * Registriert Templating-Services
-     */
-    private function registerTemplatingServices(): void
-    {
-        $provider = new TemplatingServiceProvider($this->container, $this);
-        $provider->register();
-
-        // ViewRenderer registrieren
-        $this->container->singleton(ViewRenderer::class, function (ServiceContainer $container) {
-            return new ViewRenderer(
-                engine: $container->get(TemplateEngine::class)
-            );
-        });
-    }
-
-    /**
-     * Setup des Routers
-     */
-    private function setupRouter(): void
-    {
-        $this->router = $this->container->get(Router::class);
-
-        // GLOBALE MIDDLEWARE REGISTRIEREN
-        $this->router->addGlobalMiddleware(\Framework\Security\SessionMiddleware::class);
-        $this->router->addGlobalMiddleware(\Framework\Security\CsrfMiddleware::class);
-
-        // Standard 404 Handler
-        $this->router->setNotFoundHandler(function (Request $request) {
-            return $this->render404Page($request);
-        });
-
-        // Standard 405 Handler
-        $this->router->setMethodNotAllowedHandler(function (Request $request) {
-            return Response::methodNotAllowed('Method Not Allowed');
-        });
-    }
-
-    /**
-     * Behandelt Exceptions
-     */
-    private function handleException(Throwable $e): Response
-    {
-        // Custom Error Handler
-        if ($this->errorHandler !== null) {
-            try {
-                $response = ($this->errorHandler)($e);
-                if ($response instanceof Response) {
-                    return $response;
-                }
-            } catch (Throwable) {
-                // Fallback zu Standard-Handler
-            }
-        }
-
-        // Debug-Modus: Detaillierte Fehlerausgabe
-        if ($this->debug) {
-            return $this->renderDebugError($e);
-        }
-
-        // Production: Generische Fehlerseite
-        return $this->renderProductionError($e);
-    }
-
-    /**
-     * Rendert 404-Seite
-     */
-    private function render404Page(Request $request): Response
-    {
-        // Versuche Template zu laden, falls verfügbar
-        try {
-            return $this->view('errors/404', [
-                'path' => $request->getPath(),
-                'method' => $request->getMethod()->value,
-            ]);
-        } catch (Throwable) {
-            // Fallback zu HTML
-            $html = "
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <title>404 - Page Not Found</title>
-                <meta charset='utf-8'>
-                <style>
-                    body { font-family: Arial, sans-serif; text-align: center; margin-top: 100px; }
-                    .error { color: #666; }
-                    .code { font-size: 4em; font-weight: bold; color: #333; }
-                    .message { font-size: 1.2em; margin: 20px 0; }
-                    .path { background: #f5f5f5; padding: 10px; border-radius: 5px; margin: 20px auto; max-width: 600px; }
-                </style>
-            </head>
-            <body>
-                <div class='error'>
-                    <div class='code'>404</div>
-                    <div class='message'>Page Not Found</div>
-                    <div class='path'>Path: {$request->getPath()}</div>
-                    <a href='/'>← Back to Home</a>
-                </div>
-            </body>
-            </html>";
-
-            return Response::notFound($html);
-        }
-    }
-
-    /**
-     * Rendert Debug-Fehlerseite
-     */
-    private function renderDebugError(Throwable $e): Response
-    {
-        $html = "
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <title>Error - {$e->getMessage()}</title>
-            <meta charset='utf-8'>
-            <style>
-                body { font-family: monospace; margin: 20px; background: #f8f8f8; }
-                .error { background: white; padding: 20px; border-left: 5px solid #e74c3c; }
-                .message { font-size: 1.2em; font-weight: bold; color: #e74c3c; margin-bottom: 10px; }
-                .file { color: #666; margin-bottom: 20px; }
-                .trace { background: #f5f5f5; padding: 15px; border-radius: 5px; overflow-x: auto; }
-                pre { margin: 0; white-space: pre-wrap; }
-            </style>
-        </head>
-        <body>
-            <div class='error'>
-                <div class='message'>" . get_class($e) . ": {$e->getMessage()}</div>
-                <div class='file'>File: {$e->getFile()}:{$e->getLine()}</div>
-                <div class='trace'>
-                    <strong>Stack Trace:</strong>
-                    <pre>{$e->getTraceAsString()}</pre>
-                </div>
-            </div>
-        </body>
-        </html>";
-
-        return Response::serverError($html);
-    }
-
-    /**
-     * Rendert Production-Fehlerseite
-     */
-    private function renderProductionError(Throwable $e): Response
-    {
-        // Log error
-        error_log("Application Error: " . $e->getMessage() . " in " . $e->getFile() . ":" . $e->getLine());
-
-        // Versuche Template zu laden
-        try {
-            return $this->view('errors/500', [
-                'message' => 'Something went wrong. Please try again later.',
-            ]);
-        } catch (Throwable) {
-            // Fallback zu HTML
-            $html = "
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <title>500 - Internal Server Error</title>
-                <meta charset='utf-8'>
-                <style>
-                    body { font-family: Arial, sans-serif; text-align: center; margin-top: 100px; }
-                    .error { color: #666; }
-                    .code { font-size: 4em; font-weight: bold; color: #e74c3c; }
-                    .message { font-size: 1.2em; margin: 20px 0; }
-                </style>
-            </head>
-            <body>
-                <div class='error'>
-                    <div class='code'>500</div>
-                    <div class='message'>Internal Server Error</div>
-                    <p>Something went wrong. Please try again later.</p>
-                    <a href='/'>← Back to Home</a>
-                </div>
-            </body>
-            </html>";
-
-            return Response::serverError($html);
-        }
     }
 }

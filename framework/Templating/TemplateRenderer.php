@@ -10,8 +10,9 @@ class TemplateRenderer
 
     public function __construct(
         private readonly TemplateEngine $engine,
-        array $data
-    ) {
+        array                           $data
+    )
+    {
         $this->data = $data;
     }
 

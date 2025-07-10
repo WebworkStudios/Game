@@ -132,6 +132,23 @@ class Response
     }
 
     /**
+     * Template Response mit JSON-Fallback
+     */
+    public static function viewOrJson(
+        string     $template,
+        array      $data = [],
+        bool       $wantsJson = false,
+        HttpStatus $status = HttpStatus::OK
+    ): self
+    {
+        if ($wantsJson) {
+            return self::json($data, $status);
+        }
+
+        return self::view($template, $data, $status);
+    }
+
+    /**
      * JSON Response Factory
      */
     public static function json(
@@ -156,29 +173,14 @@ class Response
      * Template Response Factory
      */
     public static function view(
-        string $template,
-        array $data = [],
+        string     $template,
+        array      $data = [],
         HttpStatus $status = HttpStatus::OK,
-        array $headers = []
-    ): self {
+        array      $headers = []
+    ): self
+    {
         $viewRenderer = \Framework\Core\ServiceRegistry::get(\Framework\Templating\ViewRenderer::class);
         return $viewRenderer->render($template, $data, $status, $headers);
-    }
-
-    /**
-     * Template Response mit JSON-Fallback
-     */
-    public static function viewOrJson(
-        string $template,
-        array $data = [],
-        bool $wantsJson = false,
-        HttpStatus $status = HttpStatus::OK
-    ): self {
-        if ($wantsJson) {
-            return self::json($data, $status);
-        }
-
-        return self::view($template, $data, $status);
     }
 
     /**

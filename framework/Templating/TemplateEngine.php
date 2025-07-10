@@ -15,12 +15,13 @@ class TemplateEngine
     private array $paths = [];
 
     public function __construct(
-        private readonly TemplateParser $parser,
+        private readonly TemplateParser   $parser,
         private readonly TemplateCompiler $compiler,
-        private readonly TemplateCache $cache,
-        private readonly bool $debug = false,
-        string $defaultPath = ''
-    ) {
+        private readonly TemplateCache    $cache,
+        private readonly bool             $debug = false,
+        string                            $defaultPath = ''
+    )
+    {
         if (!empty($defaultPath)) {
             $this->addPath($defaultPath);
         }
@@ -53,7 +54,6 @@ class TemplateEngine
 
     private function findTemplate(string $template): string
     {
-        echo "DEBUG FIND TEMPLATE: " . var_export($template, true) . "\n";
 
         // Handle namespaced templates (@namespace/template.html)
         if (str_starts_with($template, '@')) {
@@ -73,8 +73,6 @@ class TemplateEngine
         if (!str_contains($template, '.')) {
             $path .= '.html';
         }
-
-        echo "DEBUG TEMPLATE PATH: " . var_export($path, true) . "\n";
 
         if (!file_exists($path)) {
             throw new InvalidArgumentException("Template not found: {$path}");

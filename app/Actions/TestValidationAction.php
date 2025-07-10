@@ -5,9 +5,9 @@ declare(strict_types=1);
 namespace App\Actions;
 
 use Framework\Core\Application;
+use Framework\Http\HttpStatus;
 use Framework\Http\Request;
 use Framework\Http\Response;
-use Framework\Http\HttpStatus;
 use Framework\Routing\Route;
 use Framework\Validation\ValidatesRequest;
 
@@ -21,7 +21,9 @@ class TestValidationAction
 
     public function __construct(
         private readonly Application $app
-    ) {}
+    )
+    {
+    }
 
     public function __invoke(Request $request): Response
     {
@@ -98,61 +100,6 @@ class TestValidationAction
         } catch (\Framework\Validation\ValidationFailedException $e) {
             $this->app->getSession()->flashError('Validation failed: ' . implode(', ', array_keys($e->getErrorsArray())));
             return Response::redirect('/test/validation');
-        }
-    }
-
-    /**
-     * Alternative: Using trait method
-     */
-    private function handleValidationWithTrait(Request $request): Response
-    {
-        // Example 2: Using ValidatesRequests trait
-        $result = $this->validateWithResponse($request, [
-            'name' => 'required|string|min:2|max:50',
-            'email' => 'required|email',
-            'age' => 'numeric|min:18',
-        ]);
-
-        // If validation failed, $result is a Response
-        if ($result instanceof Response) {
-            return $result;
-        }
-
-        // If validation passed, $result is a Validator
-        return Response::json([
-            'success' => true,
-            'validated' => $result->validated(),
-            'message' => 'Validation passed with trait!',
-            'method' => 'ValidatesRequests trait'
-        ]);
-    }
-
-    /**
-     * Alternative: Using validateOrFail
-     */
-    private function handleValidationOrFail(Request $request): Response
-    {
-        try {
-            // Example 3: validateOrFail throws exception on failure
-            $validated = $this->app->validateOrFail($request->all(), [
-                'name' => 'required|string|min:2|max:50',
-                'email' => 'required|email',
-            ]);
-
-            return Response::json([
-                'success' => true,
-                'validated' => $validated,
-                'message' => 'Validation passed with validateOrFail!',
-                'method' => 'validateOrFail'
-            ]);
-
-        } catch (\Framework\Validation\ValidationFailedException $e) {
-            return Response::json([
-                'success' => false,
-                'errors' => $e->getErrorsArray(),
-                'message' => $e->getMessage(),
-                'method' => 'validateOrFail (exception caught)'
-            ], HttpStatus::from($e->getCode()));
         }
     }
 
@@ -374,5 +321,60 @@ class TestValidationAction
         }
 
         return $html;
+    }
+
+    /**
+     * Alternative: Using trait method
+     */
+    private function handleValidationWithTrait(Request $request): Response
+    {
+        // Example 2: Using ValidatesRequests trait
+        $result = $this->validateWithResponse($request, [
+            'name' => 'required|string|min:2|max:50',
+            'email' => 'required|email',
+            'age' => 'numeric|min:18',
+        ]);
+
+        // If validation failed, $result is a Response
+        if ($result instanceof Response) {
+            return $result;
+        }
+
+        // If validation passed, $result is a Validator
+        return Response::json([
+            'success' => true,
+            'validated' => $result->validated(),
+            'message' => 'Validation passed with trait!',
+            'method' => 'ValidatesRequests trait'
+        ]);
+    }
+
+    /**
+     * Alternative: Using validateOrFail
+     */
+    private function handleValidationOrFail(Request $request): Response
+    {
+        try {
+            // Example 3: validateOrFail throws exception on failure
+            $validated = $this->app->validateOrFail($request->all(), [
+                'name' => 'required|string|min:2|max:50',
+                'email' => 'required|email',
+            ]);
+
+            return Response::json([
+                'success' => true,
+                'validated' => $validated,
+                'message' => 'Validation passed with validateOrFail!',
+                'method' => 'validateOrFail'
+            ]);
+
+        } catch (\Framework\Validation\ValidationFailedException $e) {
+            return Response::json([
+                'success' => false,
+                'errors' => $e->getErrorsArray(),
+                'message' => $e->getMessage(),
+                'method' => 'validateOrFail (exception caught)'
+            ], HttpStatus::from($e->getCode()));
+        }
     }
 }

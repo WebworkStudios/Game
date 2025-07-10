@@ -5,7 +5,6 @@ declare(strict_types=1);
 
 namespace Framework\Validation;
 
-use Framework\Core\Application;
 use Framework\Core\ServiceContainer;
 use Framework\Database\ConnectionManager;
 

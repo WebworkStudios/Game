@@ -11,11 +11,19 @@ class TemplateCache
 
     public function __construct(
         private readonly TemplateCompiler $compiler,
-        private readonly string $cacheDir,
-        private readonly bool $debug = false,
-        private readonly int $checkInterval = 60
-    ) {
+        private readonly string           $cacheDir,
+        private readonly bool             $debug = false,
+        private readonly int              $checkInterval = 60
+    )
+    {
         $this->ensureCacheDir();
+    }
+
+    private function ensureCacheDir(): void
+    {
+        if (!is_dir($this->cacheDir) && !mkdir($this->cacheDir, 0755, true)) {
+            throw new \RuntimeException("Cannot create cache directory: {$this->cacheDir}");
+        }
     }
 
     public function get(string $templatePath): string
@@ -29,17 +37,12 @@ class TemplateCache
         return $compiledPath;
     }
 
-    public function clear(): bool
+    private function getCompiledPath(string $templatePath): string
     {
-        $files = glob($this->cacheDir . '/*' . self::CACHE_EXTENSION);
+        $hash = hash('xxh3', $templatePath);
+        $filename = basename($templatePath, '.html') . '_' . $hash . self::CACHE_EXTENSION;
 
-        foreach ($files as $file) {
-            if (!unlink($file)) {
-                return false;
-            }
-        }
-
-        return true;
+        return $this->cacheDir . '/' . $filename;
     }
 
     private function needsRecompile(string $templatePath, string $compiledPath): bool
@@ -86,18 +89,16 @@ class TemplateCache
         }
     }
 
-    private function getCompiledPath(string $templatePath): string
+    public function clear(): bool
     {
-        $hash = hash('xxh3', $templatePath);
-        $filename = basename($templatePath, '.html') . '_' . $hash . self::CACHE_EXTENSION;
+        $files = glob($this->cacheDir . '/*' . self::CACHE_EXTENSION);
 
-        return $this->cacheDir . '/' . $filename;
-    }
-
-    private function ensureCacheDir(): void
-    {
-        if (!is_dir($this->cacheDir) && !mkdir($this->cacheDir, 0755, true)) {
-            throw new \RuntimeException("Cannot create cache directory: {$this->cacheDir}");
+        foreach ($files as $file) {
+            if (!unlink($file)) {
+                return false;
+            }
         }
+
+        return true;
     }
 }

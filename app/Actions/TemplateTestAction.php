@@ -5,7 +5,6 @@ declare(strict_types=1);
 
 namespace App\Actions;
 
-use Framework\Core\Application;
 use Framework\Http\Request;
 use Framework\Http\Response;
 use Framework\Routing\Route;

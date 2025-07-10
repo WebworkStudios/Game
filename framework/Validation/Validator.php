@@ -18,7 +18,8 @@ class Validator
 
     public function __construct(
         private readonly ?ConnectionManager $connectionManager = null
-    ) {
+    )
+    {
         $this->errors = new MessageBag();
     }
 
@@ -35,41 +36,6 @@ class Validator
     }
 
     /**
-     * Run validation
-     */
-    public function validate(): self
-    {
-        $this->errors = new MessageBag();
-        $this->validated = [];
-
-        foreach ($this->rules as $field => $ruleString) {
-            $this->validateField($field, $ruleString);
-        }
-
-        return $this;
-    }
-
-    /**
-     * Check if validation passes
-     */
-    public function passes(): bool
-    {
-        if (!$this->hasRun()) {
-            $this->validate();
-        }
-
-        return $this->errors->isEmpty();
-    }
-
-    /**
-     * Check if validation fails
-     */
-    public function fails(): bool
-    {
-        return !$this->passes();
-    }
-
-    /**
      * Get validation errors
      */
     public function errors(): MessageBag
@@ -82,15 +48,26 @@ class Validator
     }
 
     /**
-     * Get validated data (only fields that passed validation)
+     * Check if validation has been run
      */
-    public function validated(): array
+    private function hasRun(): bool
     {
-        if (!$this->hasRun()) {
-            $this->validate();
+        return !empty($this->validated) || !$this->errors->isEmpty();
+    }
+
+    /**
+     * Run validation
+     */
+    public function validate(): self
+    {
+        $this->errors = new MessageBag();
+        $this->validated = [];
+
+        foreach ($this->rules as $field => $ruleString) {
+            $this->validateField($field, $ruleString);
         }
 
-        return $this->validated;
+        return $this;
     }
 
     /**
@@ -120,61 +97,6 @@ class Validator
         if ($fieldPassed && isset($this->data[$field])) {
             $this->validated[$field] = $value;
         }
-    }
-
-    /**
-     * Validate single rule
-     */
-    private function validateRule(string $field, mixed $value, string $ruleName, array $parameters): bool
-    {
-        $ruleClass = $this->getRuleClass($ruleName);
-
-        if (!class_exists($ruleClass)) {
-            throw new ValidationException("Validation rule '{$ruleName}' not found");
-        }
-
-        // Database rules need ConnectionManager, others don't
-        $needsConnection = in_array($ruleName, ['unique', 'exists'], true);
-        $rule = $needsConnection
-            ? new $ruleClass($this->connectionManager)
-            : new $ruleClass();
-
-        $passes = $rule->passes($field, $value, $parameters, $this->data);
-
-        if (!$passes) {
-            $message = $rule->message($field, $value, $parameters);
-            $this->errors->add($field, $message);
-        }
-
-        return $passes;
-    }
-
-    /**
-     * Parse rule string into array of rules
-     */
-    private function parseRules(string $ruleString): array
-    {
-        $rules = [];
-        $ruleParts = explode('|', $ruleString);
-
-        foreach ($ruleParts as $rule) {
-            $rule = trim($rule);
-
-            if (str_contains($rule, ':')) {
-                [$name, $paramString] = explode(':', $rule, 2);
-                $parameters = explode(',', $paramString);
-            } else {
-                $name = $rule;
-                $parameters = [];
-            }
-
-            $rules[] = [
-                'name' => $name,
-                'parameters' => array_map('trim', $parameters)
-            ];
-        }
-
-        return $rules;
     }
 
     /**
@@ -208,6 +130,61 @@ class Validator
     }
 
     /**
+     * Parse rule string into array of rules
+     */
+    private function parseRules(string $ruleString): array
+    {
+        $rules = [];
+        $ruleParts = explode('|', $ruleString);
+
+        foreach ($ruleParts as $rule) {
+            $rule = trim($rule);
+
+            if (str_contains($rule, ':')) {
+                [$name, $paramString] = explode(':', $rule, 2);
+                $parameters = explode(',', $paramString);
+            } else {
+                $name = $rule;
+                $parameters = [];
+            }
+
+            $rules[] = [
+                'name' => $name,
+                'parameters' => array_map('trim', $parameters)
+            ];
+        }
+
+        return $rules;
+    }
+
+    /**
+     * Validate single rule
+     */
+    private function validateRule(string $field, mixed $value, string $ruleName, array $parameters): bool
+    {
+        $ruleClass = $this->getRuleClass($ruleName);
+
+        if (!class_exists($ruleClass)) {
+            throw new ValidationException("Validation rule '{$ruleName}' not found");
+        }
+
+        // Database rules need ConnectionManager, others don't
+        $needsConnection = in_array($ruleName, ['unique', 'exists'], true);
+        $rule = $needsConnection
+            ? new $ruleClass($this->connectionManager)
+            : new $ruleClass();
+
+        $passes = $rule->passes($field, $value, $parameters, $this->data);
+
+        if (!$passes) {
+            $message = $rule->message($field, $value, $parameters);
+            $this->errors->add($field, $message);
+        }
+
+        return $passes;
+    }
+
+    /**
      * Get rule class name
      */
     private function getRuleClass(string $ruleName): string
@@ -217,11 +194,15 @@ class Validator
     }
 
     /**
-     * Check if validation has been run
+     * Check if validation passes
      */
-    private function hasRun(): bool
+    public function passes(): bool
     {
-        return !empty($this->validated) || !$this->errors->isEmpty();
+        if (!$this->hasRun()) {
+            $this->validate();
+        }
+
+        return $this->errors->isEmpty();
     }
 
     /**
@@ -234,6 +215,26 @@ class Validator
         }
 
         return $this->validated();
+    }
+
+    /**
+     * Check if validation fails
+     */
+    public function fails(): bool
+    {
+        return !$this->passes();
+    }
+
+    /**
+     * Get validated data (only fields that passed validation)
+     */
+    public function validated(): array
+    {
+        if (!$this->hasRun()) {
+            $this->validate();
+        }
+
+        return $this->validated;
     }
 
     /**

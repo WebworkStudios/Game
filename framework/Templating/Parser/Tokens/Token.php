@@ -7,10 +7,12 @@ readonly class Token
 {
     public function __construct(
         private TokenType $type,
-        private string $value,
-        private int $position,
-        private ?int $endPosition = null
-    ) {}
+        private string    $value,
+        private int       $position,
+        private ?int      $endPosition = null
+    )
+    {
+    }
 
     public function getType(): TokenType
     {

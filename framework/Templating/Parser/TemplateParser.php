@@ -208,39 +208,6 @@ class TemplateParser
         }
     }
 
-// framework/Templating/Parser/TemplateParser.php
-
-    private function parseIncludeBlock(string $args, array $tokens, int $currentIndex): array
-    {
-        echo "DEBUG INCLUDE ARGS: " . var_export($args, true) . "\n";
-
-        // Parse: "template.html" with data.source as variable
-        if (preg_match('/^["\'](.+?)["\'](?:\s+with\s+(.+?)\s+as\s+(\w+))?$/', trim($args), $matches)) {
-            echo "DEBUG REGEX MATCHES: " . var_export($matches, true) . "\n";
-
-            $template = $matches[1];
-            $dataSource = $matches[2] ?? null;
-            $variable = $matches[3] ?? null;
-
-            $node = [
-                'type' => 'include',
-                'template' => $template,
-                'data_source' => $dataSource,
-                'variable' => $variable
-            ];
-
-            echo "DEBUG INCLUDE NODE: " . var_export($node, true) . "\n";
-
-            return [
-                'node' => $node,
-                'nextIndex' => $currentIndex + 1
-            ];
-        }
-
-        throw new \RuntimeException("Invalid include syntax: {$args}");
-    }
-
-
     private function parseBlockDefinition(string $args, array $tokens, int $startIndex): array
     {
         $blockName = trim($args);
@@ -284,6 +251,29 @@ class TemplateParser
             ],
             'nextIndex' => $i + 1
         ];
+    }
+
+    private function parseTokenToNode(Token $token, array $tokens, int $index): array
+    {
+        switch ($token->getType()) {
+            case TokenType::TEXT:
+                return [
+                    'node' => ['type' => 'text', 'content' => $token->getValue()],
+                    'nextIndex' => $index + 1
+                ];
+
+            case TokenType::VARIABLE:
+                return [
+                    'node' => $this->parseVariable($token->getValue()),
+                    'nextIndex' => $index + 1
+                ];
+
+            case TokenType::BLOCK:
+                return $this->parseBlock($token->getValue(), $tokens, $index);
+
+            default:
+                throw new \RuntimeException("Unknown token type: {$token->getType()->value}");
+        }
     }
 
     private function parseIfBlock(string $condition, array $tokens, int $startIndex): array
@@ -363,6 +353,24 @@ class TemplateParser
         ];
     }
 
+    private function parseCondition(string $condition): array
+    {
+        if (str_contains($condition, '==')) {
+            [$left, $right] = explode('==', $condition, 2);
+            return [
+                'type' => 'comparison',
+                'operator' => '==',
+                'left' => $this->parseVariable(trim($left)),
+                'right' => trim($right, '\'" ')
+            ];
+        }
+
+        return [
+            'type' => 'variable',
+            'expression' => $this->parseVariable($condition)
+        ];
+    }
+
     private function parseForBlock(string $expression, array $tokens, int $startIndex): array
     {
         // Support both "item in array" and "array as item" syntax with dot notation
@@ -434,44 +442,30 @@ class TemplateParser
         ];
     }
 
-    private function parseTokenToNode(Token $token, array $tokens, int $index): array
+    private function parseIncludeBlock(string $args, array $tokens, int $currentIndex): array
     {
-        switch ($token->getType()) {
-            case TokenType::TEXT:
-                return [
-                    'node' => ['type' => 'text', 'content' => $token->getValue()],
-                    'nextIndex' => $index + 1
-                ];
 
-            case TokenType::VARIABLE:
-                return [
-                    'node' => $this->parseVariable($token->getValue()),
-                    'nextIndex' => $index + 1
-                ];
+        // Parse: "template.html" with data.source as variable
+        if (preg_match('/^["\'](.+?)["\'](?:\s+with\s+(.+?)\s+as\s+(\w+))?$/', trim($args), $matches)) {
 
-            case TokenType::BLOCK:
-                return $this->parseBlock($token->getValue(), $tokens, $index);
 
-            default:
-                throw new \RuntimeException("Unknown token type: {$token->getType()->value}");
-        }
-    }
+            $template = $matches[1];
+            $dataSource = $matches[2] ?? null;
+            $variable = $matches[3] ?? null;
 
-    private function parseCondition(string $condition): array
-    {
-        if (str_contains($condition, '==')) {
-            [$left, $right] = explode('==', $condition, 2);
+            $node = [
+                'type' => 'include',
+                'template' => $template,
+                'data_source' => $dataSource,
+                'variable' => $variable
+            ];
+
             return [
-                'type' => 'comparison',
-                'operator' => '==',
-                'left' => $this->parseVariable(trim($left)),
-                'right' => trim($right, '\'" ')
+                'node' => $node,
+                'nextIndex' => $currentIndex + 1
             ];
         }
 
-        return [
-            'type' => 'variable',
-            'expression' => $this->parseVariable($condition)
-        ];
+        throw new \RuntimeException("Invalid include syntax: {$args}");
     }
 }

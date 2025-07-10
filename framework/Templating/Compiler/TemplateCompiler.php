@@ -20,7 +20,9 @@ PHP;
 
     public function __construct(
         private readonly TemplateParser $parser
-    ) {}
+    )
+    {
+    }
 
     public function compile(string $content, string $templatePath = ''): string
     {
@@ -62,19 +64,6 @@ PHP;
         };
     }
 
-
-    private function compileExtends(array $node): string
-    {
-        // Für Template-Vererbung - fürs erste als Kommentar
-        return "// extends: {$node['template']}\n";
-    }
-
-    private function compileBlock(array $node): string
-    {
-        $body = $this->compileNodes($node['body']);
-        return "// block: {$node['name']}\n{$body}// endblock\n";
-    }
-
     private function compileText(array $node): string
     {
         $content = addcslashes($node['content'], "'\\");
@@ -112,6 +101,18 @@ PHP;
         }
 
         return $code;
+    }
+
+    private function compileExtends(array $node): string
+    {
+        // Für Template-Vererbung - fürs erste als Kommentar
+        return "// extends: {$node['template']}\n";
+    }
+
+    private function compileBlock(array $node): string
+    {
+        $body = $this->compileNodes($node['body']);
+        return "// block: {$node['name']}\n{$body}// endblock\n";
     }
 
     private function compileIf(array $node): string
@@ -191,12 +192,9 @@ PHP;
 
     private function compileInclude(array $node): string
     {
-        echo "DEBUG COMPILE INCLUDE: " . var_export($node, true) . "\n";
-
         $template = $node['template'];
 
         if (isset($node['data_source']) && isset($node['variable'])) {
-            echo "DEBUG: Using includeWith\n";
             // Include with data mapping
             $dataSource = $this->compileVariableAccess([
                 'name' => explode('.', $node['data_source'])[0],
@@ -204,11 +202,9 @@ PHP;
             ]);
 
             $code = "echo \$renderer->includeWith('{$template}', '{$node['variable']}', {$dataSource});\n";
-            echo "DEBUG GENERATED CODE: " . $code . "\n";
             return $code;
         }
 
-        echo "DEBUG: Using simple include\n";
         // Simple include
         return "echo \$renderer->include('{$template}');\n";
     }

@@ -15,8 +15,10 @@ class TemplatingServiceProvider
 
     public function __construct(
         private readonly ServiceContainer $container,
-        private readonly Application $app,
-    ) {}
+        private readonly Application      $app,
+    )
+    {
+    }
 
     /**
      * Erstellt Standard-Konfigurationsdatei
@@ -140,45 +142,6 @@ PHP;
     }
 
     /**
-     * Registriert Template Engine
-     */
-    private function registerEngine(): void
-    {
-        $this->container->singleton(TemplateEngine::class, function (ServiceContainer $container) {
-            $config = $this->loadTemplatingConfig();
-
-            $engine = new TemplateEngine(
-                parser: $container->get(TemplateParser::class),
-                compiler: $container->get(TemplateCompiler::class),
-                cache: $container->get(TemplateCache::class),
-                debug: $config['debug']
-            );
-
-            // Add template paths
-            foreach ($config['paths'] as $namespace => $path) {
-                $fullPath = $this->app->getBasePath() . '/' . $path;
-                $engine->addPath($fullPath, $namespace);
-            }
-
-            // Add global variables
-            foreach ($config['globals'] as $name => $value) {
-                $engine->addGlobal($name, $value);
-            }
-
-            return $engine;
-        });
-    }
-
-    /**
-     * Bindet Interfaces (für zukünftige Erweiterungen)
-     */
-    private function bindInterfaces(): void
-    {
-        // Placeholder für Template-Interfaces
-        // $this->container->bind(TemplateEngineInterface::class, TemplateEngine::class);
-    }
-
-    /**
      * Lädt Templating-Konfiguration
      */
     private function loadTemplatingConfig(): array
@@ -217,5 +180,44 @@ PHP;
             'globals' => [],
             'file_extension' => '.html',
         ];
+    }
+
+    /**
+     * Registriert Template Engine
+     */
+    private function registerEngine(): void
+    {
+        $this->container->singleton(TemplateEngine::class, function (ServiceContainer $container) {
+            $config = $this->loadTemplatingConfig();
+
+            $engine = new TemplateEngine(
+                parser: $container->get(TemplateParser::class),
+                compiler: $container->get(TemplateCompiler::class),
+                cache: $container->get(TemplateCache::class),
+                debug: $config['debug']
+            );
+
+            // Add template paths
+            foreach ($config['paths'] as $namespace => $path) {
+                $fullPath = $this->app->getBasePath() . '/' . $path;
+                $engine->addPath($fullPath, $namespace);
+            }
+
+            // Add global variables
+            foreach ($config['globals'] as $name => $value) {
+                $engine->addGlobal($name, $value);
+            }
+
+            return $engine;
+        });
+    }
+
+    /**
+     * Bindet Interfaces (für zukünftige Erweiterungen)
+     */
+    private function bindInterfaces(): void
+    {
+        // Placeholder für Template-Interfaces
+        // $this->container->bind(TemplateEngineInterface::class, TemplateEngine::class);
     }
 }
