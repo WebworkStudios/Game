@@ -168,6 +168,9 @@ PHP;
                 $engine->addGlobal($name, $value);
             }
 
+            // Register translation functions if localization is available
+            $this->registerTranslationFunctions($engine, $container);
+
             return $engine;
         });
     }
@@ -179,5 +182,91 @@ PHP;
     {
         // Placeholder für Template-Interfaces
         // $this->container->bind(TemplateEngineInterface::class, TemplateEngine::class);
+    }
+
+    /**
+     * Registriert Translation-Funktionen im Template Engine
+     */
+    private function registerTranslationFunctions(TemplateEngine $engine, ServiceContainer $container): void
+    {
+        // Check if localization services are available
+        if (!$container->has(\Framework\Localization\Translator::class)) {
+            return; // Localization not registered yet
+        }
+
+        try {
+            // Register translation helper functions
+            $engine->addGlobal('t', function(string $key, array $parameters = []) use ($container): string {
+                return $this->translate($key, $parameters, $container);
+            });
+
+            $engine->addGlobal('t_plural', function(string $key, int $count, array $parameters = []) use ($container): string {
+                return $this->translatePlural($key, $count, $parameters, $container);
+            });
+
+            $engine->addGlobal('locale', function() use ($container): string {
+                return $this->getCurrentLocale($container);
+            });
+
+            $engine->addGlobal('locales', function() use ($container): array {
+                return $this->getSupportedLocales($container);
+            });
+
+        } catch (\Throwable) {
+            // Silently fail if localization services are not available
+            // Templates will work without translation functions
+        }
+    }
+
+    /**
+     * Helper: Translate function for templates
+     */
+    private function translate(string $key, array $parameters, ServiceContainer $container): string
+    {
+        try {
+            $translator = $container->get(\Framework\Localization\Translator::class);
+            return $translator->translate($key, $parameters);
+        } catch (\Throwable) {
+            return $key; // Fallback to key if translation fails
+        }
+    }
+
+    /**
+     * Helper: Translate plural function for templates
+     */
+    private function translatePlural(string $key, int $count, array $parameters, ServiceContainer $container): string
+    {
+        try {
+            $translator = $container->get(\Framework\Localization\Translator::class);
+            return $translator->translatePlural($key, $count, $parameters);
+        } catch (\Throwable) {
+            return $key; // Fallback to key if translation fails
+        }
+    }
+
+    /**
+     * Helper: Get current locale
+     */
+    private function getCurrentLocale(ServiceContainer $container): string
+    {
+        try {
+            $translator = $container->get(\Framework\Localization\Translator::class);
+            return $translator->getLocale();
+        } catch (\Throwable) {
+            return 'de'; // Fallback to default
+        }
+    }
+
+    /**
+     * Helper: Get supported locales
+     */
+    private function getSupportedLocales(ServiceContainer $container): array
+    {
+        try {
+            $translator = $container->get(\Framework\Localization\Translator::class);
+            return $translator->getSupportedLocales();
+        } catch (\Throwable) {
+            return ['de', 'en', 'fr', 'es']; // Fallback to defaults
+        }
     }
 }

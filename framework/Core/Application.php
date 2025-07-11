@@ -53,11 +53,12 @@ class Application
     private function bootstrap(): void
     {
         $this->setupEnvironment();
-        $this->loadAppConfig(); // ← NEU
+        $this->loadAppConfig();
         $this->registerCoreServices();
         $this->registerDatabaseServices();
         $this->registerSecurityServices();
         $this->registerValidationServices();
+        $this->registerLocalizationServices(); // ← NEU: Vor Templating
         $this->registerTemplatingServices();
         $this->setupRouter();
     }
@@ -185,6 +186,15 @@ class Application
     private function registerValidationServices(): void
     {
         $provider = new ValidationServiceProvider($this->container, $this);
+        $provider->register();
+    }
+
+    /**
+     * Registriert Localization-Services
+     */
+    private function registerLocalizationServices(): void
+    {
+        $provider = new \Framework\Localization\LocalizationServiceProvider($this->container, $this);
         $provider->register();
     }
 
@@ -576,9 +586,6 @@ class Application
     /**
      * Installiert Framework (erstellt Verzeichnisse und Konfigurationen)
      */
-// framework/Core/Application.php
-
-
     public function install(): bool
     {
         $success = true;
@@ -597,6 +604,11 @@ class Application
             'app/Views/layouts',
             'app/Views/components',
             'app/Views/pages',
+            'app/Languages', // ← NEU für Localization
+            'app/Languages/de',
+            'app/Languages/en',
+            'app/Languages/fr',
+            'app/Languages/es',
         ];
 
         foreach ($directories as $dir) {
@@ -612,6 +624,7 @@ class Application
             'App' => [$this, 'createAppConfig'],
             'Database' => [DatabaseServiceProvider::class, 'publishConfig'],
             'Security' => [SecurityServiceProvider::class, 'publishConfig'],
+            'Localization' => [\Framework\Localization\LocalizationServiceProvider::class, 'publishConfig'], // ← NEU
             'Templating' => [TemplatingServiceProvider::class, 'publishConfig'],
         ];
 

@@ -84,6 +84,34 @@ class TemplateRenderer
     }
 
     /**
+     * Translate helper function (callable from templates)
+     */
+    public function t(string $key, array $parameters = []): string
+    {
+        $translator = $this->getTranslator();
+
+        if (!$translator) {
+            return $key; // Fallback if no translator available
+        }
+
+        return $translator->translate($key, $parameters);
+    }
+
+    /**
+     * Translate plural helper function (callable from templates)
+     */
+    public function tPlural(string $key, int $count, array $parameters = []): string
+    {
+        $translator = $this->getTranslator();
+
+        if (!$translator) {
+            return $key; // Fallback if no translator available
+        }
+
+        return $translator->translatePlural($key, $count, $parameters);
+    }
+
+    /**
      * Set variable in data (for loops)
      */
     public function set(string $key, mixed $value): void
@@ -147,6 +175,8 @@ class TemplateRenderer
             'currency' => $this->filterCurrency($value, $params[0] ?? '€', $params[1] ?? 'right'),
             'rating' => $this->filterRating($value, (int)($params[0] ?? 10)),
             'plural' => $this->filterPlural($value, $params[0] ?? '', $params[1] ?? 's'),
+            't' => $this->filterTranslate($value, $params),
+            't_plural' => $this->filterTranslatePlural($value, $params),
             default => throw new RuntimeException("Unknown filter: {$filter}")
         };
     }
@@ -339,6 +369,61 @@ class TemplateRenderer
         }
 
         return $plural;
+    }
+
+    /**
+     * Translation filter - translate using key
+     */
+    private function filterTranslate(mixed $value, array $params = []): string
+    {
+        $translator = $this->getTranslator();
+
+        if (!$translator) {
+            return (string)$value; // Fallback if no translator available
+        }
+
+        $key = (string)$value;
+        $parameters = $params[0] ?? [];
+
+        if (!is_array($parameters)) {
+            $parameters = [];
+        }
+
+        return $translator->translate($key, $parameters);
+    }
+
+    /**
+     * Translation plural filter - translate with pluralization
+     */
+    private function filterTranslatePlural(mixed $value, array $params = []): string
+    {
+        $translator = $this->getTranslator();
+
+        if (!$translator) {
+            return (string)$value; // Fallback if no translator available
+        }
+
+        $key = (string)$value;
+        $count = (int)($params[0] ?? 1);
+        $parameters = $params[1] ?? [];
+
+        if (!is_array($parameters)) {
+            $parameters = [];
+        }
+
+        return $translator->translatePlural($key, $count, $parameters);
+    }
+
+    /**
+     * Get translator instance from engine
+     */
+    private function getTranslator(): ?\Framework\Localization\Translator
+    {
+        try {
+            return \Framework\Core\ServiceRegistry::get(\Framework\Localization\Translator::class);
+        } catch (\Throwable) {
+            return null;
+        }
     }
 
     /**
