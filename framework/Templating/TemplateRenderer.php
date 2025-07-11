@@ -4,18 +4,19 @@ declare(strict_types=1);
 namespace Framework\Templating;
 
 use Countable;
+use Framework\Templating\Compiler\TemplateCompiler;
 use RuntimeException;
 use Throwable;
 
 class TemplateRenderer
 {
-    public array $data; // Public für For-Loop Zugriff
-    private array $blocks = []; // Block storage
-    private array $parentBlocks = []; // Parent blocks for inheritance
+    public array $data;
+    private array $blocks = [];
+    private array $parentBlocks = [];
 
     public function __construct(
         private readonly TemplateEngine $engine,
-        array                           $data
+        array                           $data = []
     )
     {
         $this->data = $data;
@@ -119,9 +120,6 @@ class TemplateRenderer
     }
 
     /**
-     * Apply filter to value
-     */
-    /**
      * Apply filter to value - OPTIMIZED VERSION
      */
     public function applyFilter(string $filter, mixed $value, array $params = []): mixed
@@ -169,9 +167,10 @@ class TemplateRenderer
             'filterTruncate' => $this->filterTruncate($value, (int)($params[0] ?? 50)),
             'filterCurrency' => $this->filterCurrency($value, $params[0] ?? '€', $params[1] ?? 'right'),
             'filterRating' => $this->filterRating($value, (int)($params[0] ?? 10)),
-            'filterPlural' => $this->filterPlural($value, $params[0] ?? '', $params[1] ?? 's'),
+            'filterPlural' => $this->filterPlural($value, $params[0] ?? '', $params[1] ?? ''),
             'filterTranslate' => $this->filterTranslate($value, $params),
             'filterTranslatePlural' => $this->filterTranslatePlural($value, $params),
+            default => $value,
         };
     }
 
@@ -472,7 +471,7 @@ class TemplateRenderer
     }
 
     /**
-     * Get translator instance from engine
+     * Get translator instance from ServiceRegistry
      */
     private function getTranslator(): ?\Framework\Localization\Translator
     {

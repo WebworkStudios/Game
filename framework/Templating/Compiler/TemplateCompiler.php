@@ -74,7 +74,14 @@ PHP;
 
         // Define child blocks as closures with proper scope
         foreach ($this->blocks as $blockName => $block) {
-            $blockCode = $this->compileNodes($block['body']);
+            // FIX: Null Safety für block body
+            $blockBody = $block['body'] ?? $block['content'] ?? [];
+
+            if (!is_array($blockBody)) {
+                $blockBody = [];
+            }
+
+            $blockCode = $this->compileNodes($blockBody);
             $code .= "\$_childBlocks['{$blockName}'] = function() use (\$renderer) {\n";
             $code .= "ob_start();\n";
             $code .= "try {\n";
@@ -114,8 +121,8 @@ PHP;
         return match ($node['type']) {
             'text' => $this->compileText($node),
             'variable' => $this->compileVariable($node),
-            'literal' => $this->compileLiteral($node), // NEW
-            'function' => $this->compileFunction($node),
+            'literal' => $this->compileLiteral($node),
+            // 'function' => REMOVED - No longer supported!
             'extends' => $this->compileExtends($node),
             'block' => $this->compileBlock($node),
             'if' => $this->compileIf($node),
@@ -260,179 +267,6 @@ PHP;
         return "echo \$renderer->escape({$code});\n";
     }
 
-    /**
-     * Compile function call
-     */
-    private function compileFunction(array $node): string
-    {
-        $functionName = $node['name'];
-        $params = $node['params'] ?? [];
-        $filters = $node['filters'] ?? [];
-
-        $functionCall = match ($functionName) {
-            't' => $this->compileTranslateFunction($params),
-            't_plural' => $this->compileTranslatePluralFunction($params),
-            'locale' => "\$renderer->getCurrentLocale()",
-            'locales' => "\$renderer->getSupportedLocales()",
-            default => throw new RuntimeException("Unknown function: {$functionName}")
-        };
-
-        // Apply filters if present
-        if (!empty($filters)) {
-            foreach ($filters as $filter) {
-                $filterName = $filter['name'];
-                $filterParams = $filter['params'] ?? [];
-
-                if (empty($filterParams)) {
-                    $functionCall = "\$renderer->applyFilter('{$filterName}', {$functionCall})";
-                } else {
-                    $paramsJson = json_encode($filterParams, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-                    $functionCall = "\$renderer->applyFilter('{$filterName}', {$functionCall}, {$paramsJson})";
-                }
-            }
-        }
-
-        return "echo \$renderer->escape({$functionCall});\n";
-    }
-
-    /**
-     * Compile translate function
-     */
-    private function compileTranslateFunction(array $params): string
-    {
-        if (empty($params)) {
-            throw new RuntimeException("Function t() requires at least one parameter");
-        }
-
-        $key = $this->compileParameter($params[0]);
-
-        if (count($params) > 1) {
-            $parametersParam = $this->compileParameter($params[1]);
-            return "\$renderer->t({$key}, {$parametersParam})";
-        }
-
-        return "\$renderer->t({$key})";
-    }
-
-    /**
-     * Compile function parameter
-     */
-    private function compileParameter(array $param): string
-    {
-        return match ($param['type']) {
-            'string' => "'" . str_replace("'", "\\'", $param['value']) . "'",
-            'number' => (string)$param['value'],
-            'object' => $this->compileObjectParameter($param['value']),
-            'variable' => "\$renderer->get('" . $param['value'] . "')",
-            default => throw new RuntimeException("Unknown parameter type: {$param['type']}")
-        };
-    }
-
-    /**
-     * Compile object parameter (basic JSON object)
-     */
-    private function compileObjectParameter(string $objectString): string
-    {
-        // Simple object parsing: {key: 'value', key2: 'value2'}
-        $objectString = trim($objectString, '{}');
-
-        if (empty($objectString)) {
-            return '[]';
-        }
-
-        $pairs = [];
-        $current = '';
-        $inQuotes = false;
-        $quoteChar = null;
-        $braceLevel = 0;
-
-        // Parse object string properly respecting quotes and braces
-        for ($i = 0; $i < strlen($objectString); $i++) {
-            $char = $objectString[$i];
-
-            if (!$inQuotes && ($char === '"' || $char === "'")) {
-                $inQuotes = true;
-                $quoteChar = $char;
-                $current .= $char;
-                continue;
-            }
-
-            if ($inQuotes && $char === $quoteChar) {
-                $inQuotes = false;
-                $quoteChar = null;
-                $current .= $char;
-                continue;
-            }
-
-            if (!$inQuotes && $char === '{') {
-                $braceLevel++;
-            }
-
-            if (!$inQuotes && $char === '}') {
-                $braceLevel--;
-            }
-
-            if (!$inQuotes && $char === ',' && $braceLevel === 0) {
-                // Split here
-                $pair = trim($current);
-                if (!empty($pair)) {
-                    $pairs[] = $pair;
-                }
-                $current = '';
-                continue;
-            }
-
-            $current .= $char;
-        }
-
-        // Add last pair
-        $pair = trim($current);
-        if (!empty($pair)) {
-            $pairs[] = $pair;
-        }
-
-        $phpArray = [];
-
-        foreach ($pairs as $pair) {
-            if (str_contains($pair, ':')) {
-                $parts = explode(':', $pair, 2);
-                $key = trim($parts[0], '\'" ');
-                $value = trim($parts[1]);
-
-                // Remove quotes from value if present
-                if ((str_starts_with($value, '"') && str_ends_with($value, '"')) ||
-                    (str_starts_with($value, "'") && str_ends_with($value, "'"))) {
-                    $value = substr($value, 1, -1);
-                }
-
-                $phpArray[$key] = $value;
-            }
-        }
-
-        // Return as PHP array syntax, not JSON
-        return var_export($phpArray, true);
-    }
-
-    /**
-     * Compile translate plural function
-     */
-    private function compileTranslatePluralFunction(array $params): string
-    {
-        if (count($params) < 2) {
-            throw new RuntimeException("Function t_plural() requires at least two parameters");
-        }
-
-        $key = $this->compileParameter($params[0]);
-        $count = $this->compileParameter($params[1]);
-
-        if (count($params) > 2) {
-            $parametersParam = $this->compileParameter($params[2]);
-            return "\$renderer->tPlural({$key}, {$count}, {$parametersParam})";
-        }
-
-        return "\$renderer->tPlural({$key}, {$count})";
-    }
-
     private function compileExtends(array $node): string
     {
         // Extends is handled in extractExtendsAndBlocks, return empty string
@@ -448,13 +282,20 @@ PHP;
             return ''; // Blocks in extending templates are handled in compileExtendingTemplate
         }
 
+        // FIX: Null Safety für block body/content
+        $blockBody = $node['body'] ?? $node['content'] ?? [];
+
+        if (!is_array($blockBody)) {
+            $blockBody = [];
+        }
+
         // In base templates, render block with potential child override
         $code = "// Block: {$blockName}\n";
         $code .= "if (\$renderer->hasBlock('{$blockName}')) {\n";
         $code .= "echo \$renderer->renderBlock('{$blockName}');\n";
         $code .= "} else {\n";
         $code .= "// Default block content\n";
-        $code .= $this->compileNodes($node['body']);
+        $code .= $this->compileNodes($blockBody);
         $code .= "}\n";
 
         return $code;
@@ -463,13 +304,21 @@ PHP;
     private function compileIf(array $node): string
     {
         $condition = $this->compileCondition($node['condition']);
-        $body = $this->compileNodes($node['body']);
+
+        // FIX: Null Safety für if body/content
+        $ifBody = $node['body'] ?? $node['content'] ?? [];
+        if (!is_array($ifBody)) {
+            $ifBody = [];
+        }
+
+        $body = $this->compileNodes($ifBody);
 
         $code = "if ({$condition}) {\n{$body}";
 
         if (!empty($node['else'])) {
-            $elseBody = $this->compileNodes($node['else']);
-            $code .= "} else {\n{$elseBody}";
+            $elseBody = is_array($node['else']) ? $node['else'] : [];
+            $elseCode = $this->compileNodes($elseBody);
+            $code .= "} else {\n{$elseCode}";
         }
 
         $code .= "}\n";
@@ -492,7 +341,6 @@ PHP;
         return "!empty({$access})";
     }
 
-
     private function compileComparison(array $condition): string
     {
         $left = $this->compileVariableAccess($condition['left']);
@@ -508,7 +356,14 @@ PHP;
     {
         $array = $node['array'];
         $item = $node['item'];
-        $body = $this->compileNodes($node['body']);
+
+        // FIX: Null Safety für for body/content
+        $forBody = $node['body'] ?? $node['content'] ?? [];
+        if (!is_array($forBody)) {
+            $forBody = [];
+        }
+
+        $body = $this->compileNodes($forBody);
 
         // Handle dot notation in array access
         if (str_contains($array, '.')) {

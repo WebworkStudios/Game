@@ -1,25 +1,65 @@
 {% extends "layouts/base.html" %}
 
-{% block title %} Template Functions Test {% endblock %}
+{% block title %}Template Functions Test - Filter-Only{% endblock %}
 
 {% block content %}
-<h2>🧪 Template Functions Test</h2>
+<h2>🧪 Template Functions Test - Filter-Only Syntax</h2>
 
 <div class="test-section">
-    <h3>Translation Functions</h3>
+    <h3>Translation Filters</h3>
     <ul>
-        <li>Simple: {{ t('common.welcome') }}</li>
-        <li>With params: {{ t('match.goal_scored', {player: 'Messi', minute: 90}) }}</li>
-        <li>Plural: {{ t_plural('game.goals', 3) }}</li>
+        <li><strong>Simple:</strong> {{ 'common.welcome' | t }}</li>
+        <li><strong>With params:</strong> {{ 'match.goal_scored' | t:{player: 'Messi', minute: 90} }}</li>
+        <li><strong>Plural:</strong> {{ 'game.goals' | t_plural:3 }}</li>
+        <li><strong>Complex Plural:</strong> {{ 'game.players' | t_plural:11:{team: 'Barcelona'} }}</li>
     </ul>
 </div>
 
 <div class="test-section">
-    <h3>Locale Functions</h3>
+    <h3>Locale Information</h3>
     <ul>
-        <li>Current: {{ locale() }}</li>
-        <li>Supported: {{ locales() }}</li>
+        <li><strong>Current Locale:</strong> {{ current_locale | default:'de' }}</li>
+        <li><strong>Welcome Message:</strong> {{ 'common.welcome' | t }}</li>
+        <li><strong>Navigation Home:</strong> {{ 'common.navigation.home' | t }}</li>
     </ul>
+</div>
+
+<div class="test-section">
+    <h3>Filter Combinations</h3>
+    <ul>
+        <li><strong>Upper + Translate:</strong> {{ 'auth.login' | t | upper }}</li>
+        <li><strong>Translate + Truncate:</strong> {{ 'match.match_description' | t | truncate:50 }}</li>
+        <li><strong>Default + Translate:</strong> {{ missing_key | default:'common.error' | t }}</li>
+    </ul>
+</div>
+
+<div class="test-section">
+    <h3>Dynamic Data</h3>
+    <ul>
+        <li><strong>Player Name:</strong> {{ test_data.player | default:'Unknown Player' }}</li>
+        <li><strong>Goal at Minute:</strong> {{ 'match.goal_scored' | t:{player: test_data.player, minute: test_data.minute} }}</li>
+        <li><strong>Goals Count:</strong> {{ 'game.goals' | t_plural:test_data.goals }}</li>
+    </ul>
+</div>
+
+<div class="test-section">
+    <h3>Performance Notes</h3>
+    <div class="performance-info">
+        <p><strong>✅ Optimized:</strong> Filter-only syntax is now optimized with:</p>
+        <ul>
+            <li>Static filter map for O(1) lookup</li>
+            <li>No function compilation overhead</li>
+            <li>Single translation logic path</li>
+            <li>Consistent error handling</li>
+        </ul>
+
+        <p><strong>🔄 Migration:</strong> Old function syntax is no longer supported:</p>
+        <ul>
+            <li><del>{{ "t('key')" }}</del> → {{ "'key' | t" }}</li>
+            <li><del>{{ "t_plural('key', count)" }}</del> → {{ "'key' | t_plural:count" }}</li>
+            <li><del>{{ "locale()" }}</del> → Use {{ "current_locale" }} variable</li>
+        </ul>
+    </div>
 </div>
 
 <style>
@@ -28,6 +68,29 @@
         padding: 15px;
         border: 1px solid #ddd;
         border-radius: 5px;
+        background: #f8f9fa;
+    }
+
+    .performance-info {
+        background: #e7f3ff;
+        padding: 15px;
+        border-left: 4px solid #007bff;
+        margin: 10px 0;
+    }
+
+    .performance-info del {
+        color: #dc3545;
+        background: #f8d7da;
+        padding: 2px 4px;
+        border-radius: 3px;
+    }
+
+    .performance-info ul {
+        margin: 10px 0;
+    }
+
+    .performance-info li {
+        margin: 5px 0;
     }
 </style>
 {% endblock %}

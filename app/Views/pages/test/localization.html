@@ -1,13 +1,14 @@
+<!-- app/Views/pages/test/localization.html -->
 {% extends "layouts/base.html" %}
 
-{% block title %}{{ t('common.welcome') }} - Localization Demo{% endblock %}
+{% block title %}{{ 'common.welcome' | t }} - Localization Demo{% endblock %}
 
 {% block content %}
-<h2>🌍 {{ t('common.welcome') }} - Localization Demo</h2>
+<h2>🌍 {{ 'common.welcome' | t }} - Localization Demo</h2>
 
 <!-- Current Language Info -->
 <div class="alert alert-success">
-    <h4>{{ t('common.navigation.home') }} - Current Language: {{ locale() }}</h4>
+    <h4>{{ 'common.navigation.home' | t }} - Current Language: {{ current_locale }}</h4>
     <p><strong>Detected Locale:</strong> {{ current_locale }}</p>
     <p><strong>Available Languages:</strong> Deutsch, English, Français, Español</p>
 </div>
@@ -27,91 +28,71 @@
     </form>
 </div>
 
-<!-- Translation Functions Demo -->
+<!-- Translation Filters Demo -->
 <section>
-    <h3>🎨 Translation Functions</h3>
+    <h3>🎨 Translation Filters</h3>
     <div class="demo-section">
-        <h4>Function Syntax:</h4>
+        <h4>Basic Translation:</h4>
         <ul>
-            <li><strong>Welcome:</strong> {{ t('common.welcome') }}</li>
-            <li><strong>Login:</strong> {{ t('auth.login') }}</li>
-            <li><strong>Password:</strong> {{ t('auth.password') }}</li>
-            <li><strong>Home:</strong> {{ t('common.navigation.home') }}</li>
-            <li><strong>Team:</strong> {{ t('common.navigation.team') }}</li>
-        </ul>
-
-        <h4>Filter Syntax:</h4>
-        <ul>
-            <li><strong>Welcome Filter:</strong> {{ 'common.welcome'|t }}</li>
-            <li><strong>Login Filter:</strong> {{ 'auth.login'|t }}</li>
-            <li><strong>Password Filter:</strong> {{ 'auth.password'|t }}</li>
-            <li><strong>Home Filter:</strong> {{ 'common.navigation.home'|t }}</li>
-            <li><strong>Team Filter:</strong> {{ 'common.navigation.team'|t }}</li>
+            <li><strong>Welcome:</strong> {{ 'common.welcome' | t }}</li>
+            <li><strong>Login:</strong> {{ 'auth.login' | t }}</li>
+            <li><strong>Password:</strong> {{ 'auth.password' | t }}</li>
+            <li><strong>Home:</strong> {{ 'common.navigation.home' | t }}</li>
+            <li><strong>Team:</strong> {{ 'common.navigation.team' | t }}</li>
         </ul>
 
         <h4>Plural Translations:</h4>
         <ul>
-            <li><strong>1 Goal (Function):</strong> {{ t_plural('game.goals', 1) }}</li>
-            <li><strong>3 Goals (Function):</strong> {{ t_plural('game.goals', 3) }}</li>
-            <li><strong>1 Player (Filter):</strong> {{ 'game.players'|t_plural:1 }}</li>
-            <li><strong>11 Players (Filter):</strong> {{ 'game.players'|t_plural:11 }}</li>
+            <li><strong>1 Goal:</strong> {{ 'game.goals' | t_plural:1 }}</li>
+            <li><strong>3 Goals:</strong> {{ 'game.goals' | t_plural:3 }}</li>
+            <li><strong>1 Player:</strong> {{ 'game.players' | t_plural:1 }}</li>
+            <li><strong>11 Players:</strong> {{ 'game.players' | t_plural:11 }}</li>
         </ul>
 
         <h4>With Parameters:</h4>
         <ul>
-            <li><strong>Messi Goal:</strong> {{ t('match.goal_scored', {player: 'Messi', minute: 90}) }}</li>
-            <li><strong>Ronaldo Goal:</strong> {{ t('match.goal_scored', {player: 'Cristiano', minute: 78}) }}</li>
+            <li><strong>Messi Goal:</strong> {{ 'match.goal_scored' | t:{player: 'Messi', minute: 90} }}</li>
+            <li><strong>Ronaldo Goal:</strong> {{ 'match.goal_scored' | t:{player: 'Cristiano', minute: 78} }}</li>
         </ul>
 
-        <h4>System Functions:</h4>
+        <h4>System Info:</h4>
         <ul>
-            <li><strong>Current Locale:</strong> {{ locale() }}</li>
-            <li><strong>Match Started:</strong> {{ t('match.match_started') }}</li>
-            <li><strong>Live Ticker:</strong> {{ 'match.live_ticker'|t }}</li>
+            <li><strong>Current Locale:</strong> {{ current_locale }}</li>
+            <li><strong>Match Started:</strong> {{ 'match.match_started' | t }}</li>
+            <li><strong>Live Ticker:</strong> {{ 'match.live_ticker' | t }}</li>
         </ul>
     </div>
 </section>
 
-<!-- Syntax Comparison -->
+<!-- Syntax Examples -->
 <section>
-    <h3>📝 Syntax Comparison</h3>
+    <h3>📝 Filter Syntax Examples</h3>
     <div class="demo-section">
         <div class="syntax-grid">
             <div class="syntax-item">
-                <h5>Function Syntax Examples</h5>
+                <h5>Basic Translation Filter</h5>
                 <div class="example-box">
-                    <strong>Basic Translation:</strong><br>
-                    <span class="syntax">t('common.welcome')</span><br>
-                    <span class="result">Result: {{ t('common.welcome') }}</span>
-                </div>
-                <div class="example-box">
-                    <strong>Plural Translation:</strong><br>
-                    <span class="syntax">t_plural('game.goals', 3)</span><br>
-                    <span class="result">Result: {{ t_plural('game.goals', 3) }}</span>
-                </div>
-                <div class="example-box">
-                    <strong>With Parameters:</strong><br>
-                    <span class="syntax">t('match.goal_scored', {player: 'Messi'})</span><br>
-                    <span class="result">Result: {{ t('match.goal_scored', {player: 'Messi', minute: 90}) }}</span>
+                    <strong>Syntax:</strong><br>
+                    <span class="syntax">'common.welcome' | t</span><br>
+                    <span class="result">Result: {{ 'common.welcome' | t }}</span>
                 </div>
             </div>
 
             <div class="syntax-item">
-                <h5>Filter Syntax Examples</h5>
+                <h5>Plural Translation Filter</h5>
                 <div class="example-box">
-                    <strong>Basic Translation:</strong><br>
-                    <span class="syntax">'common.welcome'|t</span><br>
-                    <span class="result">Result: {{ 'common.welcome'|t }}</span>
+                    <strong>Syntax:</strong><br>
+                    <span class="syntax">'game.goals' | t_plural:3</span><br>
+                    <span class="result">Result: {{ 'game.goals' | t_plural:3 }}</span>
                 </div>
+            </div>
+
+            <div class="syntax-item">
+                <h5>Translation with Parameters</h5>
                 <div class="example-box">
-                    <strong>Plural Translation:</strong><br>
-                    <span class="syntax">'game.goals'|t_plural:3</span><br>
-                    <span class="result">Result: {{ 'game.goals'|t_plural:3 }}</span>
-                </div>
-                <div class="example-box">
-                    <strong>System Function:</strong><br>
-                    <span class="syntax">locale()</span><br>
-                    <span class="result">Result: {{ locale() }}</span>
+                    <strong>Syntax:</strong><br>
+                    <span class="syntax">'match.goal_scored' | t:{player: 'Messi', minute: 90}</span><br>
+                    <span class="result">Result: {{ 'match.goal_scored' | t:{player: 'Messi', minute: 90} }}</span>
                 </div>
             </div>
         </div>
@@ -119,10 +100,10 @@
         <div class="usage-note">
             <h5>📋 Usage Guidelines:</h5>
             <ul>
-                <li><strong>Function Syntax:</strong> Best for complex translations with parameters</li>
-                <li><strong>Filter Syntax:</strong> Cleaner for simple key-based translations</li>
-                <li><strong>Parameters:</strong> Only supported in function syntax</li>
-                <li><strong>System Functions:</strong> locale() has no filter equivalent</li>
+                <li><strong>Filter Syntax:</strong> Clean and consistent with other template filters</li>
+                <li><strong>Parameters:</strong> Use object syntax {key: 'value'} for complex parameters</li>
+                <li><strong>Pluralization:</strong> First parameter is count, second is optional parameters</li>
+                <li><strong>Performance:</strong> Filters are optimized for better template compilation</li>
             </ul>
         </div>
     </div>
@@ -173,7 +154,7 @@
 
         <details>
             <summary>Full Detection Info</summary>
-            <pre>{{ detection_info|json }}</pre>
+            <pre>{{ detection_info | json }}</pre>
         </details>
     </div>
 </section>
@@ -212,118 +193,42 @@
 
     .syntax-item {
         background: white;
-        padding: 20px;
-        border-radius: 8px;
+        padding: 15px;
         border: 1px solid #dee2e6;
-    }
-
-    .syntax-item h5 {
-        margin-top: 0;
-        color: #495057;
-        border-bottom: 2px solid #e9ecef;
-        padding-bottom: 10px;
+        border-radius: 5px;
     }
 
     .example-box {
-        margin: 15px 0;
-        padding: 12px;
         background: #f8f9fa;
+        padding: 10px;
         border-left: 4px solid #007bff;
-        border-radius: 4px;
+        margin: 10px 0;
     }
 
     .syntax {
-        font-family: 'Courier New', monospace;
-        background: #e9ecef;
-        padding: 4px 8px;
-        border-radius: 4px;
-        font-size: 14px;
-        color: #495057;
+        font-family: monospace;
+        color: #e83e8c;
+        font-weight: bold;
     }
 
     .result {
         color: #28a745;
-        font-weight: 500;
-        font-size: 14px;
+        font-weight: bold;
     }
 
     .usage-note {
         background: #fff3cd;
         border: 1px solid #ffeaa7;
         padding: 15px;
-        border-radius: 8px;
-        margin-top: 20px;
-    }
-
-    .usage-note h5 {
-        margin-top: 0;
-        color: #856404;
-    }
-
-    .usage-note ul {
-        margin-bottom: 0;
-    }
-
-    .usage-note li {
-        color: #856404;
-        margin: 5px 0;
+        border-radius: 5px;
+        margin: 20px 0;
     }
 
     .stat-item {
-        background: white;
-        padding: 15px;
         margin: 10px 0;
-        border-left: 4px solid #667eea;
-        border-radius: 4px;
-    }
-
-    .singular {
-        color: #28a745;
-    }
-
-    .plural {
-        color: #007bff;
-    }
-
-    section {
-        margin: 30px 0;
-    }
-
-    select {
         padding: 10px;
-        font-size: 16px;
-    }
-
-    details {
-        margin: 15px 0;
-    }
-
-    pre {
-        background: #f5f5f5;
-        padding: 15px;
+        background: white;
         border-radius: 5px;
-        overflow-x: auto;
-        font-size: 12px;
-    }
-
-    ul {
-        margin: 10px 0;
-    }
-
-    li {
-        margin: 5px 0;
-    }
-
-    h4 {
-        color: #495057;
-        margin-top: 20px;
-        margin-bottom: 10px;
-    }
-
-    @media (max-width: 768px) {
-        .syntax-grid {
-            grid-template-columns: 1fr;
-        }
     }
 </style>
 {% endblock %}
