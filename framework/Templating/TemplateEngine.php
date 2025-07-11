@@ -12,7 +12,12 @@ class TemplateEngine
 {
     private array $globals = [];
     private array $paths = [];
-    private array $templateCache = []; // ← NEU: Template-Pfad-Cache
+
+    // Unified cache for both template paths AND compiled paths
+    private array $pathCache = [
+        'templates' => [],    // template name -> full template path
+        'compiled' => [],     // template path -> compiled path
+    ];
 
     public function __construct(
         private readonly TemplateCache $cache,
@@ -32,8 +37,8 @@ class TemplateEngine
 
         $this->paths[$namespace] = rtrim($path, '/');
 
-        // Cache invalidieren wenn Pfade sich ändern
-        $this->templateCache = [];
+        // Clear both caches when paths change
+        $this->clearPathCache();
     }
 
     public function addGlobal(string $name, mixed $value): void
@@ -44,7 +49,7 @@ class TemplateEngine
     public function render(string $template, array $data = []): string
     {
         $templatePath = $this->findTemplate($template);
-        $compiledPath = $this->cache->get($templatePath);
+        $compiledPath = $this->getCompiledPath($templatePath);
 
         // Merge globals with data
         $data = array_merge($this->globals, $data);
@@ -52,25 +57,61 @@ class TemplateEngine
         return $this->executeTemplate($compiledPath, $data);
     }
 
+    /**
+     * Find template with unified caching - OPTIMIZED VERSION
+     */
     private function findTemplate(string $template): string
     {
-        // ← NEU: Cache-Lookup zuerst
-        if (isset($this->templateCache[$template])) {
-            $cachedPath = $this->templateCache[$template];
+        // Check template cache first
+        if (isset($this->pathCache['templates'][$template])) {
+            $cachedPath = $this->pathCache['templates'][$template];
             // Verify cached path still exists
             if (file_exists($cachedPath)) {
                 return $cachedPath;
             }
             // Remove invalid cache entry
-            unset($this->templateCache[$template]);
+            unset($this->pathCache['templates'][$template]);
         }
 
         $resolvedPath = $this->resolveTemplatePath($template);
 
-        // ← NEU: Erfolgreiche Auflösung cachen
-        $this->templateCache[$template] = $resolvedPath;
+        // Cache successful resolution
+        $this->pathCache['templates'][$template] = $resolvedPath;
+
+        // Prevent cache from growing too large
+        if (count($this->pathCache['templates']) > 100) {
+            $this->pathCache['templates'] = array_slice(
+                $this->pathCache['templates'], -50, null, true
+            );
+        }
 
         return $resolvedPath;
+    }
+
+    /**
+     * Get compiled path with unified caching - NEW METHOD
+     */
+    private function getCompiledPath(string $templatePath): string
+    {
+        // Check compiled path cache
+        if (isset($this->pathCache['compiled'][$templatePath])) {
+            return $this->pathCache['compiled'][$templatePath];
+        }
+
+        // Get compiled path from TemplateCache
+        $compiledPath = $this->cache->get($templatePath);
+
+        // Cache the compiled path
+        $this->pathCache['compiled'][$templatePath] = $compiledPath;
+
+        // Prevent cache from growing too large
+        if (count($this->pathCache['compiled']) > 50) {
+            $this->pathCache['compiled'] = array_slice(
+                $this->pathCache['compiled'], -25, null, true
+            );
+        }
+
+        return $compiledPath;
     }
 
     private function resolveTemplatePath(string $template): string
@@ -86,7 +127,7 @@ class TemplateEngine
 
             $path = $this->paths[$namespace] . '/' . $template;
         } else {
-            // ← OPTIMIERT: Nur default namespace checken statt alle
+            // Only check default namespace
             if (!isset($this->paths[''])) {
                 throw new InvalidArgumentException("No default template path configured");
             }
@@ -111,10 +152,10 @@ class TemplateEngine
 
         ob_start();
         try {
-            // ← VERBESSERT: Bessere Block-Verwaltung
+            // Better block management
             $_parentBlocks = $_parentBlocks ?? [];
 
-            // Falls Parent-Blocks existieren, an Renderer weitergeben
+            // If parent blocks exist, pass them to renderer
             if (!empty($_parentBlocks)) {
                 $renderer->setParentBlocks($_parentBlocks);
             }
@@ -137,7 +178,7 @@ class TemplateEngine
     public function renderWithRenderer(string $template, TemplateRenderer $renderer): string
     {
         $templatePath = $this->findTemplate($template);
-        $compiledPath = $this->cache->get($templatePath);
+        $compiledPath = $this->getCompiledPath($templatePath);
 
         ob_start();
         try {
@@ -153,25 +194,38 @@ class TemplateEngine
         }
     }
 
+    /**
+     * Clear compiled cache and path cache - UNIFIED METHOD
+     */
     public function clearCompiledCache(): void
     {
         $this->cache->clear();
-        $this->clearTemplateCache();
+        $this->clearPathCache();
     }
 
     /**
-     * ← NEU: Cache-Verwaltung
+     * Clear path cache - UNIFIED METHOD
      */
-    public function clearTemplateCache(): void
+    public function clearPathCache(): void
     {
-        $this->templateCache = [];
+        $this->pathCache = [
+            'templates' => [],
+            'compiled' => [],
+        ];
     }
 
-    public function getTemplateCacheStats(): array
+    /**
+     * Get unified cache statistics - IMPROVED VERSION
+     */
+    public function getCacheStats(): array
     {
         return [
-            'cached_templates' => count($this->templateCache),
-            'cache_entries' => array_keys($this->templateCache)
+            'template_cache_size' => count($this->pathCache['templates']),
+            'compiled_cache_size' => count($this->pathCache['compiled']),
+            'cached_templates' => array_keys($this->pathCache['templates']),
+            'paths_configured' => count($this->paths),
+            'namespaces' => array_keys($this->paths),
+            'file_cache_stats' => $this->cache->getStats(),
         ];
     }
 }

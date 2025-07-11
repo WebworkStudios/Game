@@ -129,12 +129,14 @@ PHP;
     {
         $content = $node['content'];
 
-        // Escape only quotes and backslashes, preserve UTF-8 characters
-        $escaped = str_replace(
-            ['\\', '"', "\n", "\r", "\t"],
-            ['\\\\', '\\"', '\\n', '\\r', '\\t'],
-            $content
-        );
+        // Use strtr() instead of str_replace() - up to 4x faster for multiple replacements
+        $escaped = strtr($content, [
+            '\\' => '\\\\',
+            '"' => '\\"',
+            "\n" => '\\n',
+            "\r" => '\\r',
+            "\t" => '\\t'
+        ]);
 
         return "echo \"{$escaped}\";\n";
     }

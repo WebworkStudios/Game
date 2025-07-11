@@ -10,9 +10,6 @@ class TemplateCache
 {
     private const string CACHE_EXTENSION = '.php';
 
-    // ← NEU: Cache für kompilierte Pfade
-    private array $compiledPathCache = [];
-
     public function __construct(
         private readonly TemplateCompiler $compiler,
         private readonly string           $cacheDir,
@@ -32,13 +29,7 @@ class TemplateCache
 
     public function get(string $templatePath): string
     {
-        // ← NEU: Cache für getCompiledPath
-        if (isset($this->compiledPathCache[$templatePath])) {
-            $compiledPath = $this->compiledPathCache[$templatePath];
-        } else {
-            $compiledPath = $this->getCompiledPath($templatePath);
-            $this->compiledPathCache[$templatePath] = $compiledPath;
-        }
+        $compiledPath = $this->getCompiledPath($templatePath);
 
         if ($this->needsRecompile($templatePath, $compiledPath)) {
             $this->compile($templatePath, $compiledPath);
@@ -47,9 +38,12 @@ class TemplateCache
         return $compiledPath;
     }
 
+    /**
+     * Get compiled path - SIMPLIFIED VERSION (no caching here)
+     */
     private function getCompiledPath(string $templatePath): string
     {
-        // ← OPTIMIERT: xxh3 ist schneller als md5/sha1
+        // Use xxh3 for fast hashing
         $hash = hash('xxh3', $templatePath);
         $filename = basename($templatePath, '.html') . '_' . $hash . self::CACHE_EXTENSION;
 
@@ -62,7 +56,7 @@ class TemplateCache
             return true;
         }
 
-        // ← OPTIMIERT: Nur ein filemtime() Call pro Check
+        // Only one filemtime() call per check
         static $lastCheckTimes = [];
         $now = time();
 
@@ -106,6 +100,9 @@ class TemplateCache
         }
     }
 
+    /**
+     * Clear cache - SIMPLIFIED VERSION
+     */
     public function clear(): bool
     {
         $files = glob($this->cacheDir . '/*' . self::CACHE_EXTENSION);
@@ -116,14 +113,11 @@ class TemplateCache
             }
         }
 
-        // ← NEU: Interne Caches auch leeren
-        $this->compiledPathCache = [];
-
         return true;
     }
 
     /**
-     * ← NEU: Cache-Statistiken
+     * Cache statistics - SIMPLIFIED VERSION
      */
     public function getStats(): array
     {
@@ -131,7 +125,7 @@ class TemplateCache
             'cache_dir' => $this->cacheDir,
             'debug_mode' => $this->debug,
             'check_interval' => $this->checkInterval,
-            'compiled_path_cache_size' => count($this->compiledPathCache),
+            'cached_files_count' => count(glob($this->cacheDir . '/*' . self::CACHE_EXTENSION)),
         ];
     }
 }
