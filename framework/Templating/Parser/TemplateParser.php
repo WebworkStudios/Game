@@ -190,7 +190,7 @@ class TemplateParser
 
     private function parseVariable(string $expression): array
     {
-        // Check for filters: variable|filter:param1:param2|filter2
+        // Check for filters first
         if (str_contains($expression, '|')) {
             $parts = explode('|', $expression);
             $variablePart = trim($parts[0]);
@@ -199,12 +199,9 @@ class TemplateParser
             $filters = [];
             foreach ($filterStrings as $filterString) {
                 if (str_contains($filterString, ':')) {
-                    // Split filter name from parameters
                     $colonPos = strpos($filterString, ':');
                     $filterName = substr($filterString, 0, $colonPos);
                     $paramString = substr($filterString, $colonPos + 1);
-
-                    // Parse parameters - handle quoted strings properly
                     $params = $this->parseFilterParameters($paramString);
 
                     $filters[] = [
@@ -219,8 +216,12 @@ class TemplateParser
                 }
             }
 
-            $variableParts = explode('.', $variablePart);
+            // Check if variablePart is a function call
+            if ($this->isFunctionCall($variablePart)) {
+                return $this->parseFunctionCall($variablePart, $filters);
+            }
 
+            $variableParts = explode('.', $variablePart);
             return [
                 'type' => 'variable',
                 'name' => $variableParts[0],
@@ -229,13 +230,152 @@ class TemplateParser
             ];
         }
 
-        // No filters - original logic
+        // Check if this is a function call
+        if ($this->isFunctionCall($expression)) {
+            return $this->parseFunctionCall($expression);
+        }
+
+        // Regular variable access
         $parts = explode('.', $expression);
         return [
             'type' => 'variable',
             'name' => $parts[0],
             'path' => array_slice($parts, 1),
             'filters' => []
+        ];
+    }
+
+    /**
+     * Check if expression is a function call
+     */
+    private function isFunctionCall(string $expression): bool
+    {
+        return preg_match('/^(t|t_plural|locale|locales)\s*\(/', $expression) === 1;
+    }
+
+    /**
+     * Parse function call with parameters
+     */
+    private function parseFunctionCall(string $expression, array $filters = []): array
+    {
+        // Parse function syntax: t('key', {param: value})
+        if (preg_match('/^(\w+)\s*\(\s*(.+?)\s*\)$/', $expression, $matches)) {
+            $functionName = $matches[1];
+            $paramString = $matches[2];
+
+            $params = $this->parseFunctionParameters($paramString);
+
+            return [
+                'type' => 'function',
+                'name' => $functionName,
+                'params' => $params,
+                'filters' => $filters
+            ];
+        }
+
+        // Simple function call without parameters: locale()
+        if (preg_match('/^(\w+)\s*\(\s*\)$/', $expression, $matches)) {
+            return [
+                'type' => 'function',
+                'name' => $matches[1],
+                'params' => [],
+                'filters' => $filters
+            ];
+        }
+
+        throw new \RuntimeException("Invalid function call syntax: {$expression}");
+    }
+
+    /**
+     * Parse function parameters
+     */
+    private function parseFunctionParameters(string $paramString): array
+    {
+        $params = [];
+        $current = '';
+        $inQuotes = false;
+        $quoteChar = null;
+        $braceLevel = 0;
+
+        for ($i = 0; $i < strlen($paramString); $i++) {
+            $char = $paramString[$i];
+
+            if (!$inQuotes && ($char === '"' || $char === "'")) {
+                $inQuotes = true;
+                $quoteChar = $char;
+                continue;
+            }
+
+            if ($inQuotes && $char === $quoteChar) {
+                $inQuotes = false;
+                $quoteChar = null;
+                continue;
+            }
+
+            if (!$inQuotes && $char === '{') {
+                $braceLevel++;
+            }
+
+            if (!$inQuotes && $char === '}') {
+                $braceLevel--;
+            }
+
+            if (!$inQuotes && $char === ',' && $braceLevel === 0) {
+                $param = trim($current);
+                if ($param !== '') {
+                    $params[] = $this->parseParameter($param);
+                }
+                $current = '';
+                continue;
+            }
+
+            $current .= $char;
+        }
+
+        // Add last parameter
+        $param = trim($current);
+        if ($param !== '') {
+            $params[] = $this->parseParameter($param);
+        }
+
+        return $params;
+    }
+
+    /**
+     * Parse individual parameter
+     */
+    private function parseParameter(string $param): array
+    {
+        $param = trim($param);
+
+        // String parameter
+        if (preg_match('/^["\'](.+)["\']$/', $param, $matches)) {
+            return [
+                'type' => 'string',
+                'value' => $matches[1]
+            ];
+        }
+
+        // Number parameter
+        if (is_numeric($param)) {
+            return [
+                'type' => 'number',
+                'value' => str_contains($param, '.') ? (float)$param : (int)$param
+            ];
+        }
+
+        // Object parameter (basic support)
+        if (str_starts_with($param, '{') && str_ends_with($param, '}')) {
+            return [
+                'type' => 'object',
+                'value' => $param // Will be handled in compiler
+            ];
+        }
+
+        // Variable parameter
+        return [
+            'type' => 'variable',
+            'value' => $param
         ];
     }
 

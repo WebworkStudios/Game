@@ -1,0 +1,33 @@
+{% extends "layouts/base.html" %}
+
+{% block title %}Template Functions Test{% endblock %}
+
+{% block content %}
+<h2>🧪 Template Functions Test</h2>
+
+<div class="test-section">
+    <h3>Translation Functions</h3>
+    <ul>
+        <li>Simple: {{ t('common.welcome') }}</li>
+        <li>With params: {{ t('match.goal_scored', {player: 'Messi', minute: 90}) }}</li>
+        <li>Plural: {{ t_plural('game.goals', 3) }}</li>
+    </ul>
+</div>
+
+<div class="test-section">
+    <h3>Locale Functions</h3>
+    <ul>
+        <li>Current: {{ locale() }}</li>
+        <li>Supported: {{ locales() }}</li>
+    </ul>
+</div>
+
+<style>
+    .test-section {
+        margin: 20px 0;
+        padding: 15px;
+        border: 1px solid #ddd;
+        border-radius: 5px;
+    }
+</style>
+{% endblock %}

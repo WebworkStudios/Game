@@ -82,35 +82,7 @@ class TemplateRenderer
     {
         return $this->data[$key] ?? null;
     }
-
-    /**
-     * Translate helper function (callable from templates)
-     */
-    public function t(string $key, array $parameters = []): string
-    {
-        $translator = $this->getTranslator();
-
-        if (!$translator) {
-            return $key; // Fallback if no translator available
-        }
-
-        return $translator->translate($key, $parameters);
-    }
-
-    /**
-     * Translate plural helper function (callable from templates)
-     */
-    public function tPlural(string $key, int $count, array $parameters = []): string
-    {
-        $translator = $this->getTranslator();
-
-        if (!$translator) {
-            return $key; // Fallback if no translator available
-        }
-
-        return $translator->translatePlural($key, $count, $parameters);
-    }
-
+    
     /**
      * Set variable in data (for loops)
      */
@@ -438,5 +410,76 @@ class TemplateRenderer
         $childRenderer->setParentBlocks($this->blocks);
 
         return $this->engine->renderWithRenderer($template, $childRenderer);
+    }
+
+    /**
+     * Get current locale (callable from templates)
+     */
+    public function getCurrentLocale(): string
+    {
+        $translator = $this->getTranslator();
+        return $translator?->getLocale() ?? 'de';
+    }
+
+    /**
+     * Get supported locales (callable from templates)
+     */
+    public function getSupportedLocales(): array
+    {
+        $translator = $this->getTranslator();
+        return $translator?->getSupportedLocales() ?? ['de', 'en', 'fr', 'es'];
+    }
+
+    /**
+     * Enhanced translate function with proper parameter handling
+     */
+    public function t(string $key, mixed $parameters = []): string
+    {
+        $translator = $this->getTranslator();
+
+        if (!$translator) {
+            return $key; // Fallback if no translator available
+        }
+
+        // Handle different parameter types
+        if (is_string($parameters)) {
+            // Try to decode JSON string
+            $decoded = json_decode($parameters, true);
+            $parameters = $decoded ?? [];
+        }
+
+        if (!is_array($parameters)) {
+            $parameters = [];
+        }
+
+        return $translator->translate($key, $parameters);
+    }
+
+    /**
+     * Enhanced translate plural function with proper parameter handling
+     */
+    public function tPlural(string $key, int $count, mixed $parameters = []): string
+    {
+        $translator = $this->getTranslator();
+
+        if (!$translator) {
+            return $key; // Fallback if no translator available
+        }
+
+        // Handle different parameter types
+        if (is_string($parameters)) {
+            // Try to decode JSON string
+            $decoded = json_decode($parameters, true);
+            $parameters = $decoded ?? [];
+        }
+
+        if (!is_array($parameters)) {
+            $parameters = [];
+        }
+
+        // Add count to parameters
+        $parameters['count'] = $count;
+
+        return $translator->translatePlural($key, $count, $parameters);
     }
 }

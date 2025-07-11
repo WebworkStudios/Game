@@ -641,6 +641,22 @@ class Application
     }
 
     /**
+     * Clear all caches (for development)
+     */
+    public function clearCaches(): void
+    {
+        if ($this->debug) {
+            // Clear template cache
+            $this->getTemplateEngine()->clearCompiledCache();
+
+            // Clear route cache
+            $this->getRouter()->clearCache();
+
+            echo "✅ All caches cleared!\n";
+        }
+    }
+
+    /**
      * Erstellt App-Konfiguration
      */
     private function createAppConfig(string $basePath): bool

@@ -161,6 +161,12 @@ class TemplateEngine
         $this->templateCache = [];
     }
 
+    public function clearCompiledCache(): void
+    {
+        $this->cache->clear();
+        $this->clearTemplateCache();
+    }
+
     public function getTemplateCacheStats(): array
     {
         return [
