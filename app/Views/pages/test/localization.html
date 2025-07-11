@@ -1,4 +1,3 @@
-<!-- app/Views/pages/test/localization.html -->
 {% extends "layouts/base.html" %}
 
 {% block title %}{{ t('common.welcome') }} - Localization Demo{% endblock %}
@@ -10,188 +9,185 @@
 <div class="alert alert-success">
     <h4>{{ t('common.navigation.home') }} - Current Language: {{ locale() }}</h4>
     <p><strong>Detected Locale:</strong> {{ current_locale }}</p>
-    <p><strong>Available Languages:</strong>
-        {% for supported_locales as code %}
-        {{ demo_data.language_names[code] }}{% if not loop.last %}, {% endif %}
-        {% endfor %}
-    </p>
+    <p><strong>Available Languages:</strong> Deutsch, English, Français, Español</p>
 </div>
 
 <!-- Language Switcher -->
 <div class="language-switcher">
     <h3>🔄 Change Language</h3>
-    <form method="POST" style="display: inline-block;">
+    <form method="POST">
         <input name="_token" type="hidden" value="{{ csrf_token }}">
         <input name="change_language" type="hidden" value="1">
-        <select name="locale" onchange="this.form.submit()" style="padding: 10px; font-size: 16px;">
-            {% for supported_locales as code %}
-            <option %} %}selected{% code== current_locale endif if value="{{ code }}" {%>
-                {{ demo_data.language_names[code] }}
-            </option>
-            {% endfor %}
+        <select name="locale" onchange="this.form.submit()">
+            <option value="de">Deutsch</option>
+            <option value="en">English</option>
+            <option value="fr">Français</option>
+            <option value="es">Español</option>
         </select>
     </form>
 </div>
 
-<!-- Navigation Translations -->
+<!-- Translation Functions Demo -->
 <section>
-    <h3>🧭 {{ t('common.navigation.home') }} - Navigation</h3>
+    <h3>🎨 Translation Functions</h3>
     <div class="demo-section">
+        <h4>Function Syntax:</h4>
         <ul>
-            {% for demo_data.navigation as nav %}
-            <li><strong>{{ nav.key }}:</strong> {{ nav.translated }}</li>
-            {% endfor %}
+            <li><strong>Welcome:</strong> {{ t('common.welcome') }}</li>
+            <li><strong>Login:</strong> {{ t('auth.login') }}</li>
+            <li><strong>Password:</strong> {{ t('auth.password') }}</li>
+            <li><strong>Home:</strong> {{ t('common.navigation.home') }}</li>
+            <li><strong>Team:</strong> {{ t('common.navigation.team') }}</li>
         </ul>
-    </div>
-</section>
-
-<!-- Authentication Translations -->
-<section>
-    <h3>🔐 Authentication</h3>
-    <div class="demo-section">
-        <ul>
-            {% for demo_data.auth as auth %}
-            <li><strong>{{ auth.key }}:</strong> {{ auth.translated }}</li>
-            {% endfor %}
-        </ul>
-    </div>
-</section>
-
-<!-- Game Statistics with Pluralization -->
-<section>
-    <h3>⚽ Game Statistics (Pluralization Demo)</h3>
-    <div class="demo-section">
-        {% for demo_data.game_stats as stat %}
-        <div class="plural-demo">
-            <strong>{{ stat.key }}:</strong><br>
-            <span class="singular">Singular (1): {{ stat.singular }}</span><br>
-            <span class="plural">Plural ({{ stat.count }}): {{ stat.plural }}</span>
-        </div>
-        {% endfor %}
-    </div>
-</section>
-
-<!-- Match Events with Parameters -->
-<section>
-    <h3>🏟️ {{ t('match.live_ticker') }} - Match Events</h3>
-    <div class="demo-section">
-        {% for demo_data.match_events as event %}
-        <div class="match-event">
-            <strong>{{ event.key }}:</strong><br>
-            <span class="event-text">{{ event.translated }}</span>
-        </div>
-        {% endfor %}
-    </div>
-</section>
-
-<!-- Template Function Examples -->
-<section>
-    <h3>🎨 Template Function Examples</h3>
-    <div class="demo-section">
-        <h4>Global Functions:</h4>
-        <table class="demo-table">
-            <tr>
-                <td><code>{{ "{{ t('common.welcome') }}" }}</code></td>
-                <td>→</td>
-                <td><strong>{{ t('common.welcome') }}</strong></td>
-            </tr>
-            <tr>
-                <td><code>{{ "{{ t('auth.login') }}" }}</code></td>
-                <td>→</td>
-                <td><strong>{{ t('auth.login') }}</strong></td>
-            </tr>
-            <tr>
-                <td><code>{{ "{{ t_plural('game.goals', 3) }}" }}</code></td>
-                <td>→</td>
-                <td><strong>{{ t_plural('game.goals', 3) }}</strong></td>
-            </tr>
-            <tr>
-                <td><code>{{ "{{ locale() }}" }}</code></td>
-                <td>→</td>
-                <td><strong>{{ locale() }}</strong></td>
-            </tr>
-        </table>
 
         <h4>Filter Syntax:</h4>
-        <table class="demo-table">
-            <tr>
-                <td><code>{{ "{{ 'common.welcome'|t }}" }}</code></td>
-                <td>→</td>
-                <td><strong>{{ 'common.welcome'|t }}</strong></td>
-            </tr>
-            <tr>
-                <td><code>{{ "{{ 'auth.password'|t }}" }}</code></td>
-                <td>→</td>
-                <td><strong>{{ 'auth.password'|t }}</strong></td>
-            </tr>
-            <tr>
-                <td><code>{{ "{{ 'game.assists'|t_plural:7 }}" }}</code></td>
-                <td>→</td>
-                <td><strong>{{ 'game.assists'|t_plural:7:{count: 7} }}</strong></td>
-            </tr>
-        </table>
+        <ul>
+            <li><strong>Welcome Filter:</strong> {{ 'common.welcome'|t }}</li>
+            <li><strong>Login Filter:</strong> {{ 'auth.login'|t }}</li>
+            <li><strong>Password Filter:</strong> {{ 'auth.password'|t }}</li>
+            <li><strong>Home Filter:</strong> {{ 'common.navigation.home'|t }}</li>
+            <li><strong>Team Filter:</strong> {{ 'common.navigation.team'|t }}</li>
+        </ul>
+
+        <h4>Plural Translations:</h4>
+        <ul>
+            <li><strong>1 Goal (Function):</strong> {{ t_plural('game.goals', 1) }}</li>
+            <li><strong>3 Goals (Function):</strong> {{ t_plural('game.goals', 3) }}</li>
+            <li><strong>1 Player (Filter):</strong> {{ 'game.players'|t_plural:1 }}</li>
+            <li><strong>11 Players (Filter):</strong> {{ 'game.players'|t_plural:11 }}</li>
+        </ul>
 
         <h4>With Parameters:</h4>
-        <div class="parameter-example">
-            <code>{{ "{{ t('match.goal_scored', {player: 'Messi', minute: 90}) }}" }}</code><br>
-            <strong>Result:</strong> {{ t('match.goal_scored', {player: 'Messi', minute: 90}) }}
+        <ul>
+            <li><strong>Messi Goal:</strong> {{ t('match.goal_scored', {player: 'Messi', minute: 90}) }}</li>
+            <li><strong>Ronaldo Goal:</strong> {{ t('match.goal_scored', {player: 'Cristiano', minute: 78}) }}</li>
+        </ul>
+
+        <h4>System Functions:</h4>
+        <ul>
+            <li><strong>Current Locale:</strong> {{ locale() }}</li>
+            <li><strong>Match Started:</strong> {{ t('match.match_started') }}</li>
+            <li><strong>Live Ticker:</strong> {{ 'match.live_ticker'|t }}</li>
+        </ul>
+    </div>
+</section>
+
+<!-- Syntax Comparison -->
+<section>
+    <h3>📝 Syntax Comparison</h3>
+    <div class="demo-section">
+        <div class="syntax-grid">
+            <div class="syntax-item">
+                <h5>Function Syntax Examples</h5>
+                <div class="example-box">
+                    <strong>Basic Translation:</strong><br>
+                    <span class="syntax">t('common.welcome')</span><br>
+                    <span class="result">Result: {{ t('common.welcome') }}</span>
+                </div>
+                <div class="example-box">
+                    <strong>Plural Translation:</strong><br>
+                    <span class="syntax">t_plural('game.goals', 3)</span><br>
+                    <span class="result">Result: {{ t_plural('game.goals', 3) }}</span>
+                </div>
+                <div class="example-box">
+                    <strong>With Parameters:</strong><br>
+                    <span class="syntax">t('match.goal_scored', {player: 'Messi'})</span><br>
+                    <span class="result">Result: {{ t('match.goal_scored', {player: 'Messi', minute: 90}) }}</span>
+                </div>
+            </div>
+
+            <div class="syntax-item">
+                <h5>Filter Syntax Examples</h5>
+                <div class="example-box">
+                    <strong>Basic Translation:</strong><br>
+                    <span class="syntax">'common.welcome'|t</span><br>
+                    <span class="result">Result: {{ 'common.welcome'|t }}</span>
+                </div>
+                <div class="example-box">
+                    <strong>Plural Translation:</strong><br>
+                    <span class="syntax">'game.goals'|t_plural:3</span><br>
+                    <span class="result">Result: {{ 'game.goals'|t_plural:3 }}</span>
+                </div>
+                <div class="example-box">
+                    <strong>System Function:</strong><br>
+                    <span class="syntax">locale()</span><br>
+                    <span class="result">Result: {{ locale() }}</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="usage-note">
+            <h5>📋 Usage Guidelines:</h5>
+            <ul>
+                <li><strong>Function Syntax:</strong> Best for complex translations with parameters</li>
+                <li><strong>Filter Syntax:</strong> Cleaner for simple key-based translations</li>
+                <li><strong>Parameters:</strong> Only supported in function syntax</li>
+                <li><strong>System Functions:</strong> locale() has no filter equivalent</li>
+            </ul>
         </div>
     </div>
 </section>
 
-<!-- Live Template Demonstration -->
+<!-- Data Display -->
 <section>
-    <h3>🔥 Live Template Demonstration</h3>
+    <h3>📊 Translation Data</h3>
     <div class="demo-section">
-        <div class="live-demo">
-            <!-- Direct template function calls -->
-            <p><strong>Welcome Message:</strong> {{ t('common.welcome') }}</p>
-            <p><strong>Login Action:</strong> {{ t('auth.login') }}</p>
-            <p><strong>Team Page:</strong> {{ t('common.navigation.team') }}</p>
+        <h4>Navigation Translations:</h4>
+        {% for demo_data.navigation as nav %}
+        <p><strong>{{ nav.key }}:</strong> {{ nav.translated }}</p>
+        {% endfor %}
 
-            <!-- Pluralization in action -->
-            <p><strong>Goals:</strong> {{ t_plural('game.goals', 1) }} vs {{ t_plural('game.goals', 5) }}</p>
-            <p><strong>Players:</strong> {{ t_plural('game.players', 1) }} vs {{ t_plural('game.players', 11) }}</p>
+        <h4>Authentication Translations:</h4>
+        {% for demo_data.auth as auth %}
+        <p><strong>{{ auth.key }}:</strong> {{ auth.translated }}</p>
+        {% endfor %}
 
-            <!-- With parameters -->
-            <p><strong>Match Event:</strong> {{ t('match.goal_scored', {player: 'Cristiano Ronaldo', minute: 78}) }}</p>
+        <h4>Game Statistics:</h4>
+        {% for demo_data.game_stats as stat %}
+        <div class="stat-item">
+            <strong>{{ stat.key }}:</strong><br>
+            <span class="singular">Singular: {{ stat.singular }}</span><br>
+            <span class="plural">Plural: {{ stat.plural }}</span>
         </div>
+        {% endfor %}
     </div>
 </section>
 
-<!-- Detection Information -->
+<!-- Debug Information -->
 <section>
-    <h3>🔍 Language Detection Debug Info</h3>
+    <h3>🔍 Debug Information</h3>
     <div class="demo-section">
+        <h4>Language Detection:</h4>
+        <ul>
+            <li><strong>Detected:</strong> {{ detection_info.detected_locale }}</li>
+            <li><strong>From Header:</strong> {{ detection_info.accept_header }}</li>
+            <li><strong>Default:</strong> {{ detection_info.default_locale }}</li>
+        </ul>
+
+        <h4>Translator Stats:</h4>
+        <ul>
+            <li><strong>Current:</strong> {{ translator_stats.current_locale }}</li>
+            <li><strong>Loaded Namespaces:</strong> {{ translator_stats.loaded_namespaces }}</li>
+            <li><strong>Cached Translations:</strong> {{ translator_stats.cached_translations }}</li>
+        </ul>
+
         <details>
-            <summary>Click to show detection details</summary>
-            <pre style="background: #f5f5f5; padding: 15px; border-radius: 5px; overflow-x: auto;">{{ detection_info|json }}</pre>
+            <summary>Full Detection Info</summary>
+            <pre>{{ detection_info|json }}</pre>
         </details>
     </div>
 </section>
 
-<!-- Translation Cache Stats -->
-<section>
-    <h3>📊 Translation Cache Statistics</h3>
-    <div class="demo-section">
-        <div class="stats-grid">
-            <div class="stat-box">
-                <div class="stat-number">{{ translator_stats.current_locale }}</div>
-                <div class="stat-label">Current Locale</div>
-            </div>
-            <div class="stat-box">
-                <div class="stat-number">{{ translator_stats.loaded_namespaces }}</div>
-                <div class="stat-label">Loaded Namespaces</div>
-            </div>
-            <div class="stat-box">
-                <div class="stat-number">{{ translator_stats.cached_translations }}</div>
-                <div class="stat-label">Cached Translations</div>
-            </div>
-        </div>
-    </div>
-</section>
-
 <style>
+    .alert-success {
+        background: #d4edda;
+        color: #155724;
+        border: 1px solid #c3e6cb;
+        padding: 15px;
+        border-radius: 5px;
+        margin: 20px 0;
+    }
+
     .language-switcher {
         background: #e8f4fd;
         padding: 20px;
@@ -207,25 +203,73 @@
         margin: 15px 0;
     }
 
-    .demo-table {
-        width: 100%;
-        border-collapse: collapse;
-        margin: 10px 0;
+    .syntax-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+        margin: 20px 0;
     }
 
-    .demo-table td {
-        padding: 8px;
-        border-bottom: 1px solid #ddd;
+    .syntax-item {
+        background: white;
+        padding: 20px;
+        border-radius: 8px;
+        border: 1px solid #dee2e6;
     }
 
-    .demo-table code {
-        background: #f0f0f0;
-        padding: 3px 6px;
-        border-radius: 3px;
-        font-family: monospace;
+    .syntax-item h5 {
+        margin-top: 0;
+        color: #495057;
+        border-bottom: 2px solid #e9ecef;
+        padding-bottom: 10px;
     }
 
-    .plural-demo, .match-event {
+    .example-box {
+        margin: 15px 0;
+        padding: 12px;
+        background: #f8f9fa;
+        border-left: 4px solid #007bff;
+        border-radius: 4px;
+    }
+
+    .syntax {
+        font-family: 'Courier New', monospace;
+        background: #e9ecef;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 14px;
+        color: #495057;
+    }
+
+    .result {
+        color: #28a745;
+        font-weight: 500;
+        font-size: 14px;
+    }
+
+    .usage-note {
+        background: #fff3cd;
+        border: 1px solid #ffeaa7;
+        padding: 15px;
+        border-radius: 8px;
+        margin-top: 20px;
+    }
+
+    .usage-note h5 {
+        margin-top: 0;
+        color: #856404;
+    }
+
+    .usage-note ul {
+        margin-bottom: 0;
+    }
+
+    .usage-note li {
+        color: #856404;
+        margin: 5px 0;
+    }
+
+    .stat-item {
         background: white;
         padding: 15px;
         margin: 10px 0;
@@ -241,62 +285,45 @@
         color: #007bff;
     }
 
-    .event-text {
-        font-style: italic;
-        color: #495057;
+    section {
+        margin: 30px 0;
     }
 
-    .live-demo {
-        background: white;
-        padding: 20px;
-        border-radius: 8px;
-        border: 2px solid #667eea;
+    select {
+        padding: 10px;
+        font-size: 16px;
     }
 
-    .live-demo p {
-        margin: 10px 0;
-        padding: 8px;
-        background: #f8f9fa;
-        border-radius: 4px;
-    }
-
-    .parameter-example {
-        background: white;
-        padding: 15px;
-        margin: 10px 0;
-        border-radius: 5px;
-        border-left: 4px solid #ffc107;
-    }
-
-    .stats-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-        gap: 15px;
+    details {
         margin: 15px 0;
     }
 
-    .stat-box {
-        text-align: center;
-        padding: 20px;
-        background: white;
-        border-radius: 8px;
-        border: 1px solid #ddd;
+    pre {
+        background: #f5f5f5;
+        padding: 15px;
+        border-radius: 5px;
+        overflow-x: auto;
+        font-size: 12px;
     }
 
-    .stat-number {
-        font-size: 1.5em;
-        font-weight: bold;
-        color: #667eea;
+    ul {
+        margin: 10px 0;
     }
 
-    .stat-label {
-        color: #666;
-        margin-top: 5px;
-        font-size: 0.9em;
+    li {
+        margin: 5px 0;
     }
 
-    section {
-        margin: 30px 0;
+    h4 {
+        color: #495057;
+        margin-top: 20px;
+        margin-bottom: 10px;
+    }
+
+    @media (max-width: 768px) {
+        .syntax-grid {
+            grid-template-columns: 1fr;
+        }
     }
 </style>
 {% endblock %}

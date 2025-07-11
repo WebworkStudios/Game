@@ -157,18 +157,18 @@ class TemplateParser
                 }
             }
 
+            // FIX: Check if variablePart is a string literal
+            if ($this->isStringLiteral($variablePart)) {
+                return $this->parseStringLiteral($variablePart, $filters);
+            }
+
             // Check if variablePart is a function call
             if ($this->isFunctionCall($variablePart)) {
                 return $this->parseFunctionCall($variablePart, $filters);
             }
 
-            $variableParts = explode('.', $variablePart);
-            return [
-                'type' => 'variable',
-                'name' => $variableParts[0],
-                'path' => array_slice($variableParts, 1),
-                'filters' => $filters
-            ];
+            // Regular variable with filters
+            return $this->parseComplexVariable($variablePart, $filters);
         }
 
         // Check if this is a function call
@@ -176,15 +176,16 @@ class TemplateParser
             return $this->parseFunctionCall($expression);
         }
 
+        // Check if this is a string literal
+        if ($this->isStringLiteral($expression)) {
+            return $this->parseStringLiteral($expression);
+        }
+
         // Regular variable access
-        $parts = explode('.', $expression);
-        return [
-            'type' => 'variable',
-            'name' => $parts[0],
-            'path' => array_slice($parts, 1),
-            'filters' => []
-        ];
+        return $this->parseComplexVariable($expression);
     }
+
+// NEW: Check if expression is a string literal
 
     /**
      * Parse filter parameters respecting quotes
@@ -233,6 +234,8 @@ class TemplateParser
         return $params;
     }
 
+// NEW: Parse string literal with optional filters
+
     /**
      * Convert parameter to appropriate type
      */
@@ -243,6 +246,36 @@ class TemplateParser
         }
 
         return $param;
+    }
+
+
+// NEW: Better complex variable parsing
+
+    private function isStringLiteral(string $expression): bool
+    {
+        $expression = trim($expression);
+        return (str_starts_with($expression, "'") && str_ends_with($expression, "'")) ||
+            (str_starts_with($expression, '"') && str_ends_with($expression, '"'));
+    }
+
+    private function parseStringLiteral(string $expression, array $filters = []): array
+    {
+        $expression = trim($expression);
+
+        // Remove quotes
+        if (str_starts_with($expression, "'") && str_ends_with($expression, "'")) {
+            $value = substr($expression, 1, -1);
+        } elseif (str_starts_with($expression, '"') && str_ends_with($expression, '"')) {
+            $value = substr($expression, 1, -1);
+        } else {
+            $value = $expression;
+        }
+
+        return [
+            'type' => 'literal',
+            'value' => $value,
+            'filters' => $filters
+        ];
     }
 
     /**
@@ -379,6 +412,33 @@ class TemplateParser
         return [
             'type' => 'variable',
             'value' => $param
+        ];
+    }
+
+    private function parseComplexVariable(string $expression, array $filters = []): array
+    {
+        // Handle array access like demo_data.language_names[code]
+        if (preg_match('/^(\w+(?:\.\w+)*)\[(\w+)\]$/', $expression, $matches)) {
+            $basePath = $matches[1];
+            $arrayKey = $matches[2];
+
+            $parts = explode('.', $basePath);
+            return [
+                'type' => 'variable',
+                'name' => $parts[0],
+                'path' => array_merge(array_slice($parts, 1), [$arrayKey]),
+                'filters' => $filters,
+                'is_dynamic_key' => true
+            ];
+        }
+
+        // Regular dot notation
+        $parts = explode('.', $expression);
+        return [
+            'type' => 'variable',
+            'name' => $parts[0],
+            'path' => array_slice($parts, 1),
+            'filters' => $filters
         ];
     }
 

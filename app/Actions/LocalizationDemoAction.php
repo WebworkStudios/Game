@@ -16,10 +16,10 @@ use Framework\Routing\Route;
  */
 #[Route(path: '/test/localization', methods: ['GET', 'POST'], name: 'test.localization')]
 #[Route(path: '/test/i18n', methods: ['GET', 'POST'], name: 'test.i18n')]
-class LocalizationDemoAction
+readonly class LocalizationDemoAction
 {
     public function __construct(
-        private readonly Application $app
+        private Application $app
     )
     {
     }

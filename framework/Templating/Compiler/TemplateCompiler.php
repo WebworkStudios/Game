@@ -114,7 +114,8 @@ PHP;
         return match ($node['type']) {
             'text' => $this->compileText($node),
             'variable' => $this->compileVariable($node),
-            'function' => $this->compileFunction($node), // NEU
+            'literal' => $this->compileLiteral($node), // NEW
+            'function' => $this->compileFunction($node),
             'extends' => $this->compileExtends($node),
             'block' => $this->compileBlock($node),
             'if' => $this->compileIf($node),
@@ -146,18 +147,52 @@ PHP;
 
     private function compileVariableAccess(array $node): string
     {
+        // Handle literal values
+        if ($node['type'] === 'literal') {
+            $value = $node['value'];
+            $code = "'" . str_replace("'", "\\'", $value) . "'";
+
+            // Apply filters if present
+            if (!empty($node['filters'])) {
+                foreach ($node['filters'] as $filter) {
+                    $filterName = $filter['name'];
+                    $params = $filter['params'] ?? [];
+
+                    if (empty($params)) {
+                        $code = "\$renderer->applyFilter('{$filterName}', {$code})";
+                    } else {
+                        $paramsJson = json_encode($params, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                        $code = "\$renderer->applyFilter('{$filterName}', {$code}, {$paramsJson})";
+                    }
+                }
+            }
+
+            return $code;
+        }
+
         $name = $node['name'];
         $path = $node['path'] ?? [];
+        $isDynamicKey = $node['is_dynamic_key'] ?? false;
 
-        // Für einfache Variablen ohne Pfad
+        // If name contains quotes or template syntax, treat as literal
+        if (str_contains($name, '"') || str_contains($name, "'") || str_contains($name, '{{')) {
+            // This is a malformed variable, return as escaped string
+            $cleaned = str_replace(['{{', '}}', '"', "'"], '', $name);
+            return "'" . addslashes($cleaned) . "'";
+        }
+
+        // For simple variables without path
         if (empty($path)) {
             $code = "\$renderer->get('{$name}')";
         } else {
-            // Für verschachtelte Zugriffe: variable.property.subproperty
+            // For nested accesses
             $code = "\$renderer->get('{$name}')";
 
-            foreach ($path as $property) {
-                if (is_numeric($property)) {
+            foreach ($path as $index => $property) {
+                if ($isDynamicKey && $index === count($path) - 1) {
+                    // Last element is dynamic (from variable)
+                    $code = "is_array({$code}) ? ({$code})[\$renderer->get('{$property}')] ?? null : null";
+                } elseif (is_numeric($property)) {
                     $code = "is_array({$code}) ? ({$code})[{$property}] ?? null : null";
                 } else {
                     $code = "is_array({$code}) ? ({$code})['{$property}'] ?? null : null";
@@ -174,14 +209,9 @@ PHP;
                 if (empty($params)) {
                     $code = "\$renderer->applyFilter('{$filterName}', {$code})";
                 } else {
-                    // Clean up any escaped quotes in parameters before encoding
                     $cleanParams = array_map(function ($param) {
                         if (is_string($param)) {
-                            // Remove any remaining escape slashes and quotes
-                            $cleaned = str_replace(['\\\'', '\\"', '\\\\'], ["'", '"', '\\'], $param);
-                            // Remove any wrapping quotes that might still be there
-                            $cleaned = trim($cleaned, '\'"');
-                            return $cleaned;
+                            return str_replace(['\\\'', '\\"', '\\\\'], ["'", '"', '\\'], trim($param, '\'"'));
                         }
                         return $param;
                     }, $params);
@@ -193,6 +223,39 @@ PHP;
         }
 
         return $code;
+    }
+
+    private function compileLiteral(array $node): string
+    {
+        $value = $node['value'];
+        $filters = $node['filters'] ?? [];
+
+        // Start with literal string
+        $code = "'" . str_replace("'", "\\'", $value) . "'";
+
+        // Apply filters if present
+        if (!empty($filters)) {
+            foreach ($filters as $filter) {
+                $filterName = $filter['name'];
+                $params = $filter['params'] ?? [];
+
+                if (empty($params)) {
+                    $code = "\$renderer->applyFilter('{$filterName}', {$code})";
+                } else {
+                    $cleanParams = array_map(function ($param) {
+                        if (is_string($param)) {
+                            return str_replace(['\\\'', '\\"', '\\\\'], ["'", '"', '\\'], trim($param, '\'"'));
+                        }
+                        return $param;
+                    }, $params);
+
+                    $paramsJson = json_encode($cleanParams, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                    $code = "\$renderer->applyFilter('{$filterName}', {$code}, {$paramsJson})";
+                }
+            }
+        }
+
+        return "echo \$renderer->escape({$code});\n";
     }
 
     /**
@@ -427,12 +490,13 @@ PHP;
         return "!empty({$access})";
     }
 
+
     private function compileComparison(array $condition): string
     {
         $left = $this->compileVariableAccess($condition['left']);
         $operator = $condition['operator'];
         $right = is_string($condition['right'])
-            ? "'{$condition['right']}'"
+            ? "'" . str_replace("'", "\\'", $condition['right']) . "'"
             : $condition['right'];
 
         return "({$left}) {$operator} {$right}";
