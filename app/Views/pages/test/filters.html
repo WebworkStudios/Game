@@ -114,10 +114,27 @@
         border: 1px solid #ddd;
     }
 
-    .rating[data-percentage="100"] { background: #28a745; color: white; }
-    .rating[data-percentage^="9"], .rating[data-percentage^="8"] { background: #17a2b8; color: white; }
-    .rating[data-percentage^="7"], .rating[data-percentage^="6"] { background: #ffc107; }
-    .rating[data-percentage^="5"], .rating[data-percentage^="4"] { background: #fd7e14; }
-    .rating[data-percentage^="3"], .rating[data-percentage^="2"], .rating[data-percentage^="1"] { background: #dc3545; color: white; }
+    .rating[data-percentage="100"] {
+        background: #28a745;
+        color: white;
+    }
+
+    .rating[data-percentage^="9"], .rating[data-percentage^="8"] {
+        background: #17a2b8;
+        color: white;
+    }
+
+    .rating[data-percentage^="7"], .rating[data-percentage^="6"] {
+        background: #ffc107;
+    }
+
+    .rating[data-percentage^="5"], .rating[data-percentage^="4"] {
+        background: #fd7e14;
+    }
+
+    .rating[data-percentage^="3"], .rating[data-percentage^="2"], .rating[data-percentage^="1"] {
+        background: #dc3545;
+        color: white;
+    }
 </style>
 {% endblock %}

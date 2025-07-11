@@ -176,15 +176,6 @@ PHP;
     }
 
     /**
-     * Bindet Interfaces (für zukünftige Erweiterungen)
-     */
-    private function bindInterfaces(): void
-    {
-        // Placeholder für Template-Interfaces
-        // $this->container->bind(TemplateEngineInterface::class, TemplateEngine::class);
-    }
-
-    /**
      * Registriert Translation-Funktionen im Template Engine
      */
     private function registerTranslationFunctions(TemplateEngine $engine, ServiceContainer $container): void
@@ -196,19 +187,19 @@ PHP;
 
         try {
             // Register translation helper functions
-            $engine->addGlobal('t', function(string $key, array $parameters = []) use ($container): string {
+            $engine->addGlobal('t', function (string $key, array $parameters = []) use ($container): string {
                 return $this->translate($key, $parameters, $container);
             });
 
-            $engine->addGlobal('t_plural', function(string $key, int $count, array $parameters = []) use ($container): string {
+            $engine->addGlobal('t_plural', function (string $key, int $count, array $parameters = []) use ($container): string {
                 return $this->translatePlural($key, $count, $parameters, $container);
             });
 
-            $engine->addGlobal('locale', function() use ($container): string {
+            $engine->addGlobal('locale', function () use ($container): string {
                 return $this->getCurrentLocale($container);
             });
 
-            $engine->addGlobal('locales', function() use ($container): array {
+            $engine->addGlobal('locales', function () use ($container): array {
                 return $this->getSupportedLocales($container);
             });
 
@@ -268,5 +259,14 @@ PHP;
         } catch (\Throwable) {
             return ['de', 'en', 'fr', 'es']; // Fallback to defaults
         }
+    }
+
+    /**
+     * Bindet Interfaces (für zukünftige Erweiterungen)
+     */
+    private function bindInterfaces(): void
+    {
+        // Placeholder für Template-Interfaces
+        // $this->container->bind(TemplateEngineInterface::class, TemplateEngine::class);
     }
 }

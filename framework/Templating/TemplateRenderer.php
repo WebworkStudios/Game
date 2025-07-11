@@ -76,14 +76,6 @@ class TemplateRenderer
     }
 
     /**
-     * Get variable from data with dot notation support
-     */
-    public function get(string $key): mixed
-    {
-        return $this->data[$key] ?? null;
-    }
-    
-    /**
      * Set variable in data (for loops)
      */
     public function set(string $key, mixed $value): void
@@ -365,6 +357,26 @@ class TemplateRenderer
     }
 
     /**
+     * Get translator instance from engine
+     */
+    private function getTranslator(): ?\Framework\Localization\Translator
+    {
+        try {
+            return \Framework\Core\ServiceRegistry::get(\Framework\Localization\Translator::class);
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    /**
+     * Get variable from data with dot notation support
+     */
+    public function get(string $key): mixed
+    {
+        return $this->data[$key] ?? null;
+    }
+
+    /**
      * Translation plural filter - translate with pluralization
      */
     private function filterTranslatePlural(mixed $value, array $params = []): string
@@ -384,18 +396,6 @@ class TemplateRenderer
         }
 
         return $translator->translatePlural($key, $count, $parameters);
-    }
-
-    /**
-     * Get translator instance from engine
-     */
-    private function getTranslator(): ?\Framework\Localization\Translator
-    {
-        try {
-            return \Framework\Core\ServiceRegistry::get(\Framework\Localization\Translator::class);
-        } catch (\Throwable) {
-            return null;
-        }
     }
 
     /**

@@ -129,6 +129,63 @@ class TemplateParser
         return $ast;
     }
 
+    private function parseVariable(string $expression): array
+    {
+        // Check for filters first
+        if (str_contains($expression, '|')) {
+            $parts = explode('|', $expression);
+            $variablePart = trim($parts[0]);
+            $filterStrings = array_map('trim', array_slice($parts, 1));
+
+            $filters = [];
+            foreach ($filterStrings as $filterString) {
+                if (str_contains($filterString, ':')) {
+                    $colonPos = strpos($filterString, ':');
+                    $filterName = substr($filterString, 0, $colonPos);
+                    $paramString = substr($filterString, $colonPos + 1);
+                    $params = $this->parseFilterParameters($paramString);
+
+                    $filters[] = [
+                        'name' => $filterName,
+                        'params' => $params
+                    ];
+                } else {
+                    $filters[] = [
+                        'name' => $filterString,
+                        'params' => []
+                    ];
+                }
+            }
+
+            // Check if variablePart is a function call
+            if ($this->isFunctionCall($variablePart)) {
+                return $this->parseFunctionCall($variablePart, $filters);
+            }
+
+            $variableParts = explode('.', $variablePart);
+            return [
+                'type' => 'variable',
+                'name' => $variableParts[0],
+                'path' => array_slice($variableParts, 1),
+                'filters' => $filters
+            ];
+        }
+
+        // Check if this is a function call
+        if ($this->isFunctionCall($expression)) {
+            return $this->parseFunctionCall($expression);
+        }
+
+        // Regular variable access
+        $parts = explode('.', $expression);
+        return [
+            'type' => 'variable',
+            'name' => $parts[0],
+            'path' => array_slice($parts, 1),
+            'filters' => []
+        ];
+    }
+
     /**
      * Parse filter parameters respecting quotes
      */
@@ -186,63 +243,6 @@ class TemplateParser
         }
 
         return $param;
-    }
-
-    private function parseVariable(string $expression): array
-    {
-        // Check for filters first
-        if (str_contains($expression, '|')) {
-            $parts = explode('|', $expression);
-            $variablePart = trim($parts[0]);
-            $filterStrings = array_map('trim', array_slice($parts, 1));
-
-            $filters = [];
-            foreach ($filterStrings as $filterString) {
-                if (str_contains($filterString, ':')) {
-                    $colonPos = strpos($filterString, ':');
-                    $filterName = substr($filterString, 0, $colonPos);
-                    $paramString = substr($filterString, $colonPos + 1);
-                    $params = $this->parseFilterParameters($paramString);
-
-                    $filters[] = [
-                        'name' => $filterName,
-                        'params' => $params
-                    ];
-                } else {
-                    $filters[] = [
-                        'name' => $filterString,
-                        'params' => []
-                    ];
-                }
-            }
-
-            // Check if variablePart is a function call
-            if ($this->isFunctionCall($variablePart)) {
-                return $this->parseFunctionCall($variablePart, $filters);
-            }
-
-            $variableParts = explode('.', $variablePart);
-            return [
-                'type' => 'variable',
-                'name' => $variableParts[0],
-                'path' => array_slice($variableParts, 1),
-                'filters' => $filters
-            ];
-        }
-
-        // Check if this is a function call
-        if ($this->isFunctionCall($expression)) {
-            return $this->parseFunctionCall($expression);
-        }
-
-        // Regular variable access
-        $parts = explode('.', $expression);
-        return [
-            'type' => 'variable',
-            'name' => $parts[0],
-            'path' => array_slice($parts, 1),
-            'filters' => []
-        ];
     }
 
     /**
@@ -303,11 +303,13 @@ class TemplateParser
             if (!$inQuotes && ($char === '"' || $char === "'")) {
                 $inQuotes = true;
                 $quoteChar = $char;
+                $current .= $char; // Keep the quote
                 continue;
             }
 
             if ($inQuotes && $char === $quoteChar) {
                 $inQuotes = false;
+                $current .= $char; // Keep the closing quote
                 $quoteChar = null;
                 continue;
             }
@@ -348,11 +350,12 @@ class TemplateParser
     {
         $param = trim($param);
 
-        // String parameter
-        if (preg_match('/^["\'](.+)["\']$/', $param, $matches)) {
+        // String parameter - check for quotes at start and end
+        if ((str_starts_with($param, '"') && str_ends_with($param, '"')) ||
+            (str_starts_with($param, "'") && str_ends_with($param, "'"))) {
             return [
                 'type' => 'string',
-                'value' => $matches[1]
+                'value' => substr($param, 1, -1) // Remove quotes
             ];
         }
 
@@ -368,11 +371,11 @@ class TemplateParser
         if (str_starts_with($param, '{') && str_ends_with($param, '}')) {
             return [
                 'type' => 'object',
-                'value' => $param // Will be handled in compiler
+                'value' => $param
             ];
         }
 
-        // Variable parameter
+        // Variable parameter (anything else without quotes)
         return [
             'type' => 'variable',
             'value' => $param

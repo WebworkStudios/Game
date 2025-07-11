@@ -26,44 +26,6 @@ class LanguageDetector
     }
 
     /**
-     * Detect language from request with priority order:
-     * 1. Explicit URL parameter (?lang=en)
-     * 2. User session preference
-     * 3. Cookie preference
-     * 4. Accept-Language header
-     * 5. Default locale
-     */
-    public function detectLocale(Request $request): string
-    {
-        // 1. URL Parameter (highest priority)
-        $urlLocale = $this->getLocaleFromUrl($request);
-        if ($urlLocale !== null) {
-            return $urlLocale;
-        }
-
-        // 2. Session preference
-        $sessionLocale = $this->getLocaleFromSession();
-        if ($sessionLocale !== null) {
-            return $sessionLocale;
-        }
-
-        // 3. Cookie preference
-        $cookieLocale = $this->getLocaleFromCookie($request);
-        if ($cookieLocale !== null) {
-            return $cookieLocale;
-        }
-
-        // 4. Accept-Language header
-        $headerLocale = $this->getLocaleFromHeader($request);
-        if ($headerLocale !== null) {
-            return $headerLocale;
-        }
-
-        // 5. Default fallback
-        return $this->defaultLocale;
-    }
-
-    /**
      * Set user's locale preference (stores in session and cookie)
      */
     public function setUserLocale(string $locale): void
@@ -88,11 +50,33 @@ class LanguageDetector
     }
 
     /**
+     * Check if locale is supported
+     */
+    public function isValidLocale(string $locale): bool
+    {
+        return in_array($locale, $this->supportedLocales, true);
+    }
+
+    /**
      * Get user's preferred locale from session
      */
     public function getUserLocale(): ?string
     {
         return $this->getLocaleFromSession();
+    }
+
+    /**
+     * Get locale from session
+     */
+    private function getLocaleFromSession(): ?string
+    {
+        $locale = $this->session->get(self::SESSION_KEY);
+
+        if ($locale && $this->isValidLocale($locale)) {
+            return $locale;
+        }
+
+        return null;
     }
 
     /**
@@ -112,23 +96,6 @@ class LanguageDetector
     }
 
     /**
-     * Get best match from Accept-Language header
-     */
-    public function getBestMatchFromHeader(string $acceptLanguage): ?string
-    {
-        $languages = $this->parseAcceptLanguage($acceptLanguage);
-
-        foreach ($languages as $language) {
-            $locale = $this->normalizeLocale($language['locale']);
-            if ($this->isValidLocale($locale)) {
-                return $locale;
-            }
-        }
-
-        return null;
-    }
-
-    /**
      * Get all supported locales
      */
     public function getSupportedLocales(): array
@@ -137,11 +104,23 @@ class LanguageDetector
     }
 
     /**
-     * Check if locale is supported
+     * Get detection statistics for debugging
      */
-    public function isValidLocale(string $locale): bool
+    public function getDetectionInfo(Request $request): array
     {
-        return in_array($locale, $this->supportedLocales, true);
+        return [
+            'url_param' => $this->getLocaleFromUrl($request),
+            'session' => $this->getLocaleFromSession(),
+            'cookie' => $this->getLocaleFromCookie($request),
+            'accept_header' => $this->getLocaleFromHeader($request),
+            'raw_accept_header' => $request->getHeader('accept-language'),
+            'parsed_languages' => $request->getHeader('accept-language')
+                ? $this->parseAcceptLanguage($request->getHeader('accept-language'))
+                : null,
+            'detected_locale' => $this->detectLocale($request),
+            'supported_locales' => $this->supportedLocales,
+            'default_locale' => $this->defaultLocale,
+        ];
     }
 
     /**
@@ -150,20 +129,6 @@ class LanguageDetector
     private function getLocaleFromUrl(Request $request): ?string
     {
         $locale = $request->input('lang');
-
-        if ($locale && $this->isValidLocale($locale)) {
-            return $locale;
-        }
-
-        return null;
-    }
-
-    /**
-     * Get locale from session
-     */
-    private function getLocaleFromSession(): ?string
-    {
-        $locale = $this->session->get(self::SESSION_KEY);
 
         if ($locale && $this->isValidLocale($locale)) {
             return $locale;
@@ -199,6 +164,23 @@ class LanguageDetector
         }
 
         return $this->getBestMatchFromHeader($acceptLanguage);
+    }
+
+    /**
+     * Get best match from Accept-Language header
+     */
+    public function getBestMatchFromHeader(string $acceptLanguage): ?string
+    {
+        $languages = $this->parseAcceptLanguage($acceptLanguage);
+
+        foreach ($languages as $language) {
+            $locale = $this->normalizeLocale($language['locale']);
+            if ($this->isValidLocale($locale)) {
+                return $locale;
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -252,22 +234,40 @@ class LanguageDetector
     }
 
     /**
-     * Get detection statistics for debugging
+     * Detect language from request with priority order:
+     * 1. Explicit URL parameter (?lang=en)
+     * 2. User session preference
+     * 3. Cookie preference
+     * 4. Accept-Language header
+     * 5. Default locale
      */
-    public function getDetectionInfo(Request $request): array
+    public function detectLocale(Request $request): string
     {
-        return [
-            'url_param' => $this->getLocaleFromUrl($request),
-            'session' => $this->getLocaleFromSession(),
-            'cookie' => $this->getLocaleFromCookie($request),
-            'accept_header' => $this->getLocaleFromHeader($request),
-            'raw_accept_header' => $request->getHeader('accept-language'),
-            'parsed_languages' => $request->getHeader('accept-language')
-                ? $this->parseAcceptLanguage($request->getHeader('accept-language'))
-                : null,
-            'detected_locale' => $this->detectLocale($request),
-            'supported_locales' => $this->supportedLocales,
-            'default_locale' => $this->defaultLocale,
-        ];
+        // 1. URL Parameter (highest priority)
+        $urlLocale = $this->getLocaleFromUrl($request);
+        if ($urlLocale !== null) {
+            return $urlLocale;
+        }
+
+        // 2. Session preference
+        $sessionLocale = $this->getLocaleFromSession();
+        if ($sessionLocale !== null) {
+            return $sessionLocale;
+        }
+
+        // 3. Cookie preference
+        $cookieLocale = $this->getLocaleFromCookie($request);
+        if ($cookieLocale !== null) {
+            return $cookieLocale;
+        }
+
+        // 4. Accept-Language header
+        $headerLocale = $this->getLocaleFromHeader($request);
+        if ($headerLocale !== null) {
+            return $headerLocale;
+        }
+
+        // 5. Default fallback
+        return $this->defaultLocale;
     }
 }

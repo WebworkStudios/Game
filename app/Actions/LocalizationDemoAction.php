@@ -134,20 +134,6 @@ class LocalizationDemoAction
     }
 
     /**
-     * Get translator statistics manually
-     */
-    private function getTranslatorStats(Translator $translator): array
-    {
-        return [
-            'current_locale' => $translator->getLocale(),
-            'fallback_locale' => $translator->getLocale(), // Fallback not exposed, use current
-            'supported_locales' => count($translator->getSupportedLocales()),
-            'loaded_namespaces' => 'N/A', // Not exposed in public API
-            'cached_translations' => 'N/A', // Not exposed in public API
-        ];
-    }
-
-    /**
      * Get example translations for template demonstration
      */
     private function getExampleTranslations(Translator $translator): array
@@ -175,6 +161,20 @@ class LocalizationDemoAction
                     'result' => $translator->t('match.goal_scored', ['player' => 'Messi', 'minute' => 90])
                 ],
             ],
+        ];
+    }
+
+    /**
+     * Get translator statistics manually
+     */
+    private function getTranslatorStats(Translator $translator): array
+    {
+        return [
+            'current_locale' => $translator->getLocale(),
+            'fallback_locale' => $translator->getLocale(), // Fallback not exposed, use current
+            'supported_locales' => count($translator->getSupportedLocales()),
+            'loaded_namespaces' => 'N/A', // Not exposed in public API
+            'cached_translations' => 'N/A', // Not exposed in public API
         ];
     }
 }

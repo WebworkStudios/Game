@@ -24,6 +24,76 @@ class LocalizationServiceProvider
     }
 
     /**
+     * Registriert alle Localization Services
+     */
+    public function register(): void
+    {
+        $this->registerTranslator();
+        $this->registerLanguageDetector();
+        $this->bindInterfaces();
+    }
+
+    /**
+     * Registriert Translator als Singleton
+     */
+    private function registerTranslator(): void
+    {
+        $this->container->singleton(Translator::class, function () {
+            $config = $this->loadLocalizationConfig();
+
+            $languagesPath = $this->app->getBasePath() . '/' . $config['languages_path'];
+
+            // Create language directories and files if they don't exist
+            $this->ensureLanguageFiles($languagesPath, $config['supported_locales']);
+
+            $translator = new Translator($languagesPath);
+
+            // Set default and fallback locales
+            $translator->setLocale($config['default_locale']);
+            $translator->setFallbackLocale($config['fallback_locale']);
+
+            return $translator;
+        });
+    }
+
+    /**
+     * Lädt Localization-Konfiguration mit Caching
+     */
+    private function loadLocalizationConfig(): array
+    {
+        static $config = null;
+
+        if ($config !== null) {
+            return $config;
+        }
+
+        $configPath = $this->app->getBasePath() . '/' . self::DEFAULT_CONFIG_PATH;
+
+        // Create config file if it doesn't exist
+        if (!file_exists($configPath)) {
+            if (!self::publishConfig($this->app->getBasePath())) {
+                throw new InvalidArgumentException("Failed to create localization config at: {$configPath}");
+            }
+        }
+
+        $config = require $configPath;
+
+        if (!is_array($config)) {
+            throw new InvalidArgumentException('Localization config must return array');
+        }
+
+        // Validate required config keys
+        $required = ['default_locale', 'fallback_locale', 'supported_locales', 'languages_path'];
+        foreach ($required as $key) {
+            if (!isset($config[$key])) {
+                throw new InvalidArgumentException("Missing required config key: {$key}");
+            }
+        }
+
+        return $config;
+    }
+
+    /**
      * Erstellt Standard-Konfigurationsdatei
      */
     public static function publishConfig(string $basePath): bool
@@ -81,102 +151,6 @@ return [
 PHP;
 
         return file_put_contents($configPath, $content) !== false;
-    }
-
-    /**
-     * Registriert alle Localization Services
-     */
-    public function register(): void
-    {
-        $this->registerTranslator();
-        $this->registerLanguageDetector();
-        $this->bindInterfaces();
-    }
-
-    /**
-     * Registriert Translator als Singleton
-     */
-    private function registerTranslator(): void
-    {
-        $this->container->singleton(Translator::class, function () {
-            $config = $this->loadLocalizationConfig();
-
-            $languagesPath = $this->app->getBasePath() . '/' . $config['languages_path'];
-
-            // Create language directories and files if they don't exist
-            $this->ensureLanguageFiles($languagesPath, $config['supported_locales']);
-
-            $translator = new Translator($languagesPath);
-
-            // Set default and fallback locales
-            $translator->setLocale($config['default_locale']);
-            $translator->setFallbackLocale($config['fallback_locale']);
-
-            return $translator;
-        });
-    }
-
-    /**
-     * Registriert Language Detector
-     */
-    private function registerLanguageDetector(): void
-    {
-        $this->container->singleton(LanguageDetector::class, function (ServiceContainer $container) {
-            $config = $this->loadLocalizationConfig();
-
-            return new LanguageDetector(
-                session: $container->get(Session::class),
-                supportedLocales: array_keys($config['supported_locales']),
-                defaultLocale: $config['default_locale']
-            );
-        });
-    }
-
-    /**
-     * Bindet Interfaces (für zukünftige Erweiterungen)
-     */
-    private function bindInterfaces(): void
-    {
-        // Placeholder für Localization-Interfaces
-        // $this->container->bind(TranslatorInterface::class, Translator::class);
-        // $this->container->bind(LanguageDetectorInterface::class, LanguageDetector::class);
-    }
-
-    /**
-     * Lädt Localization-Konfiguration mit Caching
-     */
-    private function loadLocalizationConfig(): array
-    {
-        static $config = null;
-
-        if ($config !== null) {
-            return $config;
-        }
-
-        $configPath = $this->app->getBasePath() . '/' . self::DEFAULT_CONFIG_PATH;
-
-        // Create config file if it doesn't exist
-        if (!file_exists($configPath)) {
-            if (!self::publishConfig($this->app->getBasePath())) {
-                throw new InvalidArgumentException("Failed to create localization config at: {$configPath}");
-            }
-        }
-
-        $config = require $configPath;
-
-        if (!is_array($config)) {
-            throw new InvalidArgumentException('Localization config must return array');
-        }
-
-        // Validate required config keys
-        $required = ['default_locale', 'fallback_locale', 'supported_locales', 'languages_path'];
-        foreach ($required as $key) {
-            if (!isset($config[$key])) {
-                throw new InvalidArgumentException("Missing required config key: {$key}");
-            }
-        }
-
-        return $config;
     }
 
     /**
@@ -425,5 +399,31 @@ PHP;
             ],
             default => [],
         };
+    }
+
+    /**
+     * Registriert Language Detector
+     */
+    private function registerLanguageDetector(): void
+    {
+        $this->container->singleton(LanguageDetector::class, function (ServiceContainer $container) {
+            $config = $this->loadLocalizationConfig();
+
+            return new LanguageDetector(
+                session: $container->get(Session::class),
+                supportedLocales: array_keys($config['supported_locales']),
+                defaultLocale: $config['default_locale']
+            );
+        });
+    }
+
+    /**
+     * Bindet Interfaces (für zukünftige Erweiterungen)
+     */
+    private function bindInterfaces(): void
+    {
+        // Placeholder für Localization-Interfaces
+        // $this->container->bind(TranslatorInterface::class, Translator::class);
+        // $this->container->bind(LanguageDetectorInterface::class, LanguageDetector::class);
     }
 }

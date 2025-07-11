@@ -153,18 +153,18 @@ class TemplateEngine
         }
     }
 
+    public function clearCompiledCache(): void
+    {
+        $this->cache->clear();
+        $this->clearTemplateCache();
+    }
+
     /**
      * ← NEU: Cache-Verwaltung
      */
     public function clearTemplateCache(): void
     {
         $this->templateCache = [];
-    }
-
-    public function clearCompiledCache(): void
-    {
-        $this->cache->clear();
-        $this->clearTemplateCache();
     }
 
     public function getTemplateCacheStats(): array

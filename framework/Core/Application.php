@@ -482,14 +482,6 @@ class Application
     }
 
     /**
-     * Holt Router
-     */
-    public function getRouter(): Router
-    {
-        return $this->router;
-    }
-
-    /**
      * Holt Base Path
      */
     public function getBasePath(): string
@@ -654,6 +646,14 @@ class Application
 
             echo "✅ All caches cleared!\n";
         }
+    }
+
+    /**
+     * Holt Router
+     */
+    public function getRouter(): Router
+    {
+        return $this->router;
     }
 
     /**

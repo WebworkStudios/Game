@@ -50,6 +50,18 @@ class TranslationFunctions
     }
 
     /**
+     * Get translator instance
+     */
+    private static function getTranslator(): ?Translator
+    {
+        try {
+            return ServiceRegistry::get(Translator::class);
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    /**
      * Translate plural function for templates
      */
     public static function translatePlural(string $key, int $count, array $parameters = []): string
@@ -79,17 +91,5 @@ class TranslationFunctions
     {
         $translator = self::getTranslator();
         return $translator?->getSupportedLocales() ?? ['de', 'en', 'fr', 'es'];
-    }
-
-    /**
-     * Get translator instance
-     */
-    private static function getTranslator(): ?Translator
-    {
-        try {
-            return ServiceRegistry::get(Translator::class);
-        } catch (\Throwable) {
-            return null;
-        }
     }
 }

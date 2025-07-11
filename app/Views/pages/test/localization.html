@@ -21,11 +21,11 @@
 <div class="language-switcher">
     <h3>🔄 Change Language</h3>
     <form method="POST" style="display: inline-block;">
-        <input type="hidden" name="_token" value="{{ csrf_token }}">
-        <input type="hidden" name="change_language" value="1">
+        <input name="_token" type="hidden" value="{{ csrf_token }}">
+        <input name="change_language" type="hidden" value="1">
         <select name="locale" onchange="this.form.submit()" style="padding: 10px; font-size: 16px;">
             {% for supported_locales as code %}
-            <option value="{{ code }}" {% if code == current_locale %}selected{% endif %}>
+            <option %} %}selected{% code== current_locale endif if value="{{ code }}" {%>
                 {{ demo_data.language_names[code] }}
             </option>
             {% endfor %}
@@ -233,8 +233,13 @@
         border-radius: 4px;
     }
 
-    .singular { color: #28a745; }
-    .plural { color: #007bff; }
+    .singular {
+        color: #28a745;
+    }
+
+    .plural {
+        color: #007bff;
+    }
 
     .event-text {
         font-style: italic;

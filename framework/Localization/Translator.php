@@ -48,6 +48,14 @@ class Translator
     }
 
     /**
+     * Check if locale is valid
+     */
+    private function isValidLocale(string $locale): bool
+    {
+        return in_array($locale, self::SUPPORTED_LOCALES, true);
+    }
+
+    /**
      * Get current locale
      */
     public function getLocale(): string
@@ -69,6 +77,14 @@ class Translator
     }
 
     /**
+     * Alias for translate (shorter syntax)
+     */
+    public function t(string $key, array $parameters = []): string
+    {
+        return $this->translate($key, $parameters);
+    }
+
+    /**
      * Translate a key
      */
     public function translate(string $key, array $parameters = []): string
@@ -80,76 +96,6 @@ class Translator
         }
 
         return $this->interpolate($translation, $parameters);
-    }
-
-    /**
-     * Alias for translate (shorter syntax)
-     */
-    public function t(string $key, array $parameters = []): string
-    {
-        return $this->translate($key, $parameters);
-    }
-
-    /**
-     * Translate with pluralization
-     */
-    public function translatePlural(string $key, int $count, array $parameters = []): string
-    {
-        $pluralKey = $count === 1 ? "{$key}.singular" : "{$key}.plural";
-
-        $translation = $this->getTranslation($pluralKey);
-
-        if ($translation === null) {
-            // Fallback to regular translation
-            $translation = $this->getTranslation($key);
-            if ($translation === null) {
-                return $key;
-            }
-        }
-
-        $parameters['count'] = $count;
-        return $this->interpolate($translation, $parameters);
-    }
-
-    /**
-     * Check if translation exists
-     */
-    public function has(string $key): bool
-    {
-        return $this->getTranslation($key) !== null;
-    }
-
-    /**
-     * Get all supported locales
-     */
-    public function getSupportedLocales(): array
-    {
-        return self::SUPPORTED_LOCALES;
-    }
-
-    /**
-     * Load translations for namespace
-     */
-    public function loadNamespace(string $namespace): void
-    {
-        $cacheKey = "{$this->currentLocale}.{$namespace}";
-
-        if (isset($this->loadedNamespaces[$cacheKey])) {
-            return; // Already loaded
-        }
-
-        $translations = $this->loadTranslationFile($this->currentLocale, $namespace);
-
-        if (empty($translations) && $this->currentLocale !== $this->fallbackLocale) {
-            // Load fallback translations
-            $translations = $this->loadTranslationFile($this->fallbackLocale, $namespace);
-        }
-
-        if (!empty($translations)) {
-            $this->translations[$cacheKey] = $translations;
-        }
-
-        $this->loadedNamespaces[$cacheKey] = true;
     }
 
     /**
@@ -203,21 +149,28 @@ class Translator
     }
 
     /**
-     * Get nested value from array using dot notation
+     * Load translations for namespace
      */
-    private function getNestedValue(array $array, string $key): ?string
+    public function loadNamespace(string $namespace): void
     {
-        $keys = explode('.', $key);
-        $current = $array;
+        $cacheKey = "{$this->currentLocale}.{$namespace}";
 
-        foreach ($keys as $k) {
-            if (!is_array($current) || !isset($current[$k])) {
-                return null;
-            }
-            $current = $current[$k];
+        if (isset($this->loadedNamespaces[$cacheKey])) {
+            return; // Already loaded
         }
 
-        return is_string($current) ? $current : null;
+        $translations = $this->loadTranslationFile($this->currentLocale, $namespace);
+
+        if (empty($translations) && $this->currentLocale !== $this->fallbackLocale) {
+            // Load fallback translations
+            $translations = $this->loadTranslationFile($this->fallbackLocale, $namespace);
+        }
+
+        if (!empty($translations)) {
+            $this->translations[$cacheKey] = $translations;
+        }
+
+        $this->loadedNamespaces[$cacheKey] = true;
     }
 
     /**
@@ -246,6 +199,24 @@ class Translator
     }
 
     /**
+     * Get nested value from array using dot notation
+     */
+    private function getNestedValue(array $array, string $key): ?string
+    {
+        $keys = explode('.', $key);
+        $current = $array;
+
+        foreach ($keys as $k) {
+            if (!is_array($current) || !isset($current[$k])) {
+                return null;
+            }
+            $current = $current[$k];
+        }
+
+        return is_string($current) ? $current : null;
+    }
+
+    /**
      * Interpolate parameters into translation
      */
     private function interpolate(string $translation, array $parameters): string
@@ -264,11 +235,40 @@ class Translator
     }
 
     /**
-     * Check if locale is valid
+     * Translate with pluralization
      */
-    private function isValidLocale(string $locale): bool
+    public function translatePlural(string $key, int $count, array $parameters = []): string
     {
-        return in_array($locale, self::SUPPORTED_LOCALES, true);
+        $pluralKey = $count === 1 ? "{$key}.singular" : "{$key}.plural";
+
+        $translation = $this->getTranslation($pluralKey);
+
+        if ($translation === null) {
+            // Fallback to regular translation
+            $translation = $this->getTranslation($key);
+            if ($translation === null) {
+                return $key;
+            }
+        }
+
+        $parameters['count'] = $count;
+        return $this->interpolate($translation, $parameters);
+    }
+
+    /**
+     * Check if translation exists
+     */
+    public function has(string $key): bool
+    {
+        return $this->getTranslation($key) !== null;
+    }
+
+    /**
+     * Get all supported locales
+     */
+    public function getSupportedLocales(): array
+    {
+        return self::SUPPORTED_LOCALES;
     }
 
     /**
