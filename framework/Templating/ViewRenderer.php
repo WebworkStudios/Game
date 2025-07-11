@@ -4,8 +4,11 @@ declare(strict_types=1);
 
 namespace Framework\Templating;
 
+use Framework\Core\Application;
+use Framework\Core\ServiceRegistry;
 use Framework\Http\HttpStatus;
 use Framework\Http\Response;
+use Throwable;
 
 class ViewRenderer
 {
@@ -48,7 +51,7 @@ class ViewRenderer
 
             return new Response($status, $headers, $content);
 
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             // In Development: Show template error
             if ($this->isDebugMode()) {
                 return $this->renderTemplateError($e, $template, $data);
@@ -67,10 +70,10 @@ class ViewRenderer
         // Check if Application is available and in debug mode
         try {
             if (class_exists('\Framework\Core\ServiceRegistry')) {
-                $app = \Framework\Core\ServiceRegistry::get(\Framework\Core\Application::class);
+                $app = ServiceRegistry::get(Application::class);
                 return $app->isDebug();
             }
-        } catch (\Throwable) {
+        } catch (Throwable) {
             // Fallback: assume production mode
         }
 
@@ -80,7 +83,7 @@ class ViewRenderer
     /**
      * Debug template error page
      */
-    private function renderTemplateError(\Throwable $e, string $template, array $data): Response
+    private function renderTemplateError(Throwable $e, string $template, array $data): Response
     {
         $html = "
         <!DOCTYPE html>

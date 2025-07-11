@@ -239,7 +239,6 @@ class TemplateParser
         ];
     }
 
-
     private function parseBlock(string $expression, array $tokens, int $currentIndex): array
     {
         $parts = explode(' ', trim($expression), 2);
@@ -407,10 +406,9 @@ class TemplateParser
                             $body[] = $node['node'];
                         }
                         $i = $node['nextIndex'] - 1; // -1 because loop will increment
-                    } else {
-                        // Skip closing tags that belong to nested blocks
-                        // They will be handled by their respective block parsers
                     }
+                    // Note: Closing tags that belong to nested blocks are intentionally skipped
+                    // They are handled by their respective block parsers
                 } else {
                     // Handle text and variable tokens normally
                     $node = $this->parseTokenToNode($token, $tokens, $i);
@@ -503,7 +501,8 @@ class TemplateParser
                         $body[] = $node['node'];
                         $i = $node['nextIndex'] - 1; // -1 because loop will increment
                     }
-                    // Skip closing tags that belong to nested blocks
+                    // Note: Closing tags that belong to nested blocks are intentionally skipped
+                    // They are handled by their respective block parsers
                 } else {
                     // Handle text and variable tokens normally
                     $node = $this->parseTokenToNode($token, $tokens, $i);
@@ -528,11 +527,8 @@ class TemplateParser
 
     private function parseIncludeBlock(string $args, array $tokens, int $currentIndex): array
     {
-
         // Parse: "template.html" with data.source as variable
         if (preg_match('/^["\'](.+?)["\'](?:\s+with\s+(.+?)\s+as\s+(\w+))?$/', trim($args), $matches)) {
-
-
             $template = $matches[1];
             $dataSource = $matches[2] ?? null;
             $variable = $matches[3] ?? null;

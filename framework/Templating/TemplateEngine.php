@@ -6,11 +6,13 @@ namespace Framework\Templating;
 use Framework\Templating\Cache\TemplateCache;
 use InvalidArgumentException;
 use RuntimeException;
+use Throwable;
 
 class TemplateEngine
 {
     private array $globals = [];
     private array $paths = [];
+    private array $templateCache = []; // ← NEU: Template-Pfad-Cache
 
     public function __construct(
         private readonly TemplateCache $cache,
@@ -29,6 +31,9 @@ class TemplateEngine
         }
 
         $this->paths[$namespace] = rtrim($path, '/');
+
+        // Cache invalidieren wenn Pfade sich ändern
+        $this->templateCache = [];
     }
 
     public function addGlobal(string $name, mixed $value): void
@@ -40,6 +45,7 @@ class TemplateEngine
     {
         $templatePath = $this->findTemplate($template);
         $compiledPath = $this->cache->get($templatePath);
+
         // Merge globals with data
         $data = array_merge($this->globals, $data);
 
@@ -48,7 +54,27 @@ class TemplateEngine
 
     private function findTemplate(string $template): string
     {
+        // ← NEU: Cache-Lookup zuerst
+        if (isset($this->templateCache[$template])) {
+            $cachedPath = $this->templateCache[$template];
+            // Verify cached path still exists
+            if (file_exists($cachedPath)) {
+                return $cachedPath;
+            }
+            // Remove invalid cache entry
+            unset($this->templateCache[$template]);
+        }
 
+        $resolvedPath = $this->resolveTemplatePath($template);
+
+        // ← NEU: Erfolgreiche Auflösung cachen
+        $this->templateCache[$template] = $resolvedPath;
+
+        return $resolvedPath;
+    }
+
+    private function resolveTemplatePath(string $template): string
+    {
         // Handle namespaced templates (@namespace/template.html)
         if (str_starts_with($template, '@')) {
             [$namespace, $template] = explode('/', $template, 2);
@@ -60,6 +86,10 @@ class TemplateEngine
 
             $path = $this->paths[$namespace] . '/' . $template;
         } else {
+            // ← OPTIMIERT: Nur default namespace checken statt alle
+            if (!isset($this->paths[''])) {
+                throw new InvalidArgumentException("No default template path configured");
+            }
             $path = $this->paths[''] . '/' . $template;
         }
 
@@ -81,12 +111,17 @@ class TemplateEngine
 
         ob_start();
         try {
-            // Make blocks available globally
+            // ← VERBESSERT: Bessere Block-Verwaltung
             $_parentBlocks = $_parentBlocks ?? [];
+
+            // Falls Parent-Blocks existieren, an Renderer weitergeben
+            if (!empty($_parentBlocks)) {
+                $renderer->setParentBlocks($_parentBlocks);
+            }
 
             include $compiledPath;
             return ob_get_clean();
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             ob_end_clean();
             throw new RuntimeException(
                 "Template execution failed: {$e->getMessage()}",
@@ -108,7 +143,7 @@ class TemplateEngine
         try {
             include $compiledPath;
             return ob_get_clean();
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             ob_end_clean();
             throw new RuntimeException(
                 "Template execution failed: {$e->getMessage()}",
@@ -116,5 +151,21 @@ class TemplateEngine
                 $e
             );
         }
+    }
+
+    /**
+     * ← NEU: Cache-Verwaltung
+     */
+    public function clearTemplateCache(): void
+    {
+        $this->templateCache = [];
+    }
+
+    public function getTemplateCacheStats(): array
+    {
+        return [
+            'cached_templates' => count($this->templateCache),
+            'cache_entries' => array_keys($this->templateCache)
+        ];
     }
 }

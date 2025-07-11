@@ -1,13 +1,17 @@
 <?php
-
 declare(strict_types=1);
 
 namespace Framework\Templating;
 
+use Countable;
+use RuntimeException;
+use Throwable;
+
 class TemplateRenderer
 {
     public array $data; // Public für For-Loop Zugriff
-    private array $blocks = []; // Add blocks storage
+    private array $blocks = []; // Block storage
+    private array $parentBlocks = []; // Parent blocks for inheritance
 
     public function __construct(
         private readonly TemplateEngine $engine,
@@ -18,34 +22,57 @@ class TemplateRenderer
     }
 
     /**
-     * Check if block exists
+     * Set blocks for template inheritance
+     * ← VERBESSERT: Merge mit Parent-Blocks
      */
-    public function hasBlock(string $name): bool
+    public function setBlocks(array $blocks): void
     {
-        return isset($this->blocks[$name]);
+        // Child blocks überschreiben Parent blocks
+        $this->blocks = array_merge($this->parentBlocks, $blocks);
     }
 
     /**
      * Render block
+     * ← VERBESSERT: Fehlerbehandlung und Parent-Block-Support
      */
     public function renderBlock(string $name): string
     {
-        if (isset($this->blocks[$name])) {
-            return $this->blocks[$name]();
-        }
-        return '';
-    }
-
-    /**
-     * Escape output for HTML
-     */
-    public function escape(mixed $value): string
-    {
-        if ($value === null) {
+        if (!$this->hasBlock($name)) {
             return '';
         }
 
-        return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8');
+        try {
+            $blockFunction = $this->blocks[$name];
+            return (string)$blockFunction();
+        } catch (Throwable $e) {
+            throw new RuntimeException("Error rendering block '{$name}': " . $e->getMessage(), 0, $e);
+        }
+    }
+
+    /**
+     * Check if block exists
+     * ← VERBESSERT: Bessere Block-Existenz-Prüfung
+     */
+    public function hasBlock(string $name): bool
+    {
+        return isset($this->blocks[$name]) && is_callable($this->blocks[$name]);
+    }
+
+    /**
+     * ← NEU: Render parent block (für block inheritance mit parent() calls)
+     */
+    public function renderParentBlock(string $name): string
+    {
+        if (isset($this->parentBlocks[$name]) && is_callable($this->parentBlocks[$name])) {
+            try {
+                $parentFunction = $this->parentBlocks[$name];
+                return (string)$parentFunction();
+            } catch (Throwable $e) {
+                throw new RuntimeException("Error rendering parent block '{$name}': " . $e->getMessage(), 0, $e);
+            }
+        }
+
+        return '';
     }
 
     /**
@@ -74,36 +101,29 @@ class TemplateRenderer
 
     /**
      * Include another template
+     * ← VERBESSERT: Block-Vererbung bei Includes
      */
     public function include(string $template, array $data = []): string
     {
         $mergedData = array_merge($this->data, $data);
 
-        // Create new renderer with same blocks but merged data
+        // Create new renderer with merged data
         $childRenderer = new TemplateRenderer($this->engine, $mergedData);
-        $childRenderer->setBlocks($this->blocks); // Wichtig: Blocks weitergeben!
+
+        // ← WICHTIG: Parent-Blocks an Child-Renderer weitergeben
+        $childRenderer->setParentBlocks($this->blocks);
 
         return $this->engine->renderWithRenderer($template, $childRenderer);
     }
 
     /**
-     * Set blocks for template inheritance
+     * ← NEU: Set parent blocks (for nested inheritance)
      */
-    public function setBlocks(array $blocks): void
+    public function setParentBlocks(array $parentBlocks): void
     {
-        $this->blocks = array_merge($this->blocks, $blocks);
-    }
-
-    /**
-     * Raw output (unescaped)
-     */
-    public function raw(mixed $value): string
-    {
-        if ($value === null) {
-            return '';
-        }
-
-        return (string)$value;
+        $this->parentBlocks = $parentBlocks;
+        // Re-merge mit aktuellen blocks
+        $this->blocks = array_merge($this->parentBlocks, $this->blocks);
     }
 
     /**
@@ -127,7 +147,7 @@ class TemplateRenderer
             'currency' => $this->filterCurrency($value, $params[0] ?? '€', $params[1] ?? 'right'),
             'rating' => $this->filterRating($value, (int)($params[0] ?? 10)),
             'plural' => $this->filterPlural($value, $params[0] ?? '', $params[1] ?? 's'),
-            default => throw new \RuntimeException("Unknown filter: {$filter}")
+            default => throw new RuntimeException("Unknown filter: {$filter}")
         };
     }
 
@@ -136,7 +156,7 @@ class TemplateRenderer
      */
     private function filterLength(mixed $value): int
     {
-        if (is_array($value) || $value instanceof \Countable) {
+        if (is_array($value) || $value instanceof Countable) {
             return count($value);
         }
 
@@ -186,6 +206,7 @@ class TemplateRenderer
 
         return (string)$value;
     }
+
     /**
      * Enhanced number format with parameters
      */
@@ -219,6 +240,30 @@ class TemplateRenderer
         return mb_strlen($string) > $length
             ? mb_substr($string, 0, $length) . '...'
             : $string;
+    }
+
+    /**
+     * Escape output for HTML
+     */
+    public function escape(mixed $value): string
+    {
+        if ($value === null) {
+            return '';
+        }
+
+        return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8');
+    }
+
+    /**
+     * Raw output (unescaped)
+     */
+    public function raw(mixed $value): string
+    {
+        if ($value === null) {
+            return '';
+        }
+
+        return (string)$value;
     }
 
     /**
@@ -296,13 +341,17 @@ class TemplateRenderer
         return $plural;
     }
 
-
     /**
      * Include template with variable mapping
+     * ← VERBESSERT: Block-Vererbung auch hier
      */
     public function includeWith(string $template, string $variable, mixed $data): string
     {
         $templateData = array_merge($this->data, [$variable => $data]);
-        return $this->engine->render($template, $templateData);
+
+        $childRenderer = new TemplateRenderer($this->engine, $templateData);
+        $childRenderer->setParentBlocks($this->blocks);
+
+        return $this->engine->renderWithRenderer($template, $childRenderer);
     }
 }

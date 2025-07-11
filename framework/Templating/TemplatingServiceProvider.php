@@ -8,6 +8,7 @@ use Framework\Core\ServiceContainer;
 use Framework\Templating\Cache\TemplateCache;
 use Framework\Templating\Compiler\TemplateCompiler;
 use Framework\Templating\Parser\TemplateParser;
+use InvalidArgumentException;
 
 class TemplatingServiceProvider
 {
@@ -131,13 +132,13 @@ PHP;
         $configPath = $this->app->getBasePath() . '/' . self::DEFAULT_CONFIG_PATH;
 
         if (!file_exists($configPath)) {
-            throw new \InvalidArgumentException("Templating config not found: {$configPath}");
+            throw new InvalidArgumentException("Templating config not found: {$configPath}");
         }
 
         $config = require $configPath;
 
         if (!is_array($config)) {
-            throw new \InvalidArgumentException('Templating config must return array');
+            throw new InvalidArgumentException('Templating config must return array');
         }
 
         return $config; // ← Kein Merge mit Defaults mehr

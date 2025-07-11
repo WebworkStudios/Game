@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace Framework\Templating\Compiler;
 
 use Framework\Templating\Parser\TemplateParser;
+use RuntimeException;
 
 class TemplateCompiler
 {
@@ -68,23 +69,30 @@ PHP;
     {
         $code = '';
 
-        // Define child blocks BEFORE including parent
+        // 1. Child-Blocks als Closures definieren BEVOR Parent-Include
         $code .= "\$_childBlocks = [];\n";
 
-        // Define child blocks as closures
+        // Define child blocks as closures with proper scope
         foreach ($this->blocks as $blockName => $block) {
             $blockCode = $this->compileNodes($block['body']);
             $code .= "\$_childBlocks['{$blockName}'] = function() use (\$renderer) {\n";
             $code .= "ob_start();\n";
+            $code .= "try {\n";
             $code .= $blockCode;
             $code .= "return ob_get_clean();\n";
+            $code .= "} catch (\\Throwable \$e) {\n";
+            $code .= "ob_end_clean();\n";
+            $code .= "throw \$e;\n";
+            $code .= "}\n";
             $code .= "};\n";
         }
 
-        // Set blocks in renderer BEFORE including parent
+        // 2. Blocks in renderer setzen BEVOR Parent-Template geladen wird
+        $code .= "if (!empty(\$_childBlocks)) {\n";
         $code .= "\$renderer->setBlocks(\$_childBlocks);\n";
+        $code .= "}\n";
 
-        // Include parent template (which will now see the blocks)
+        // 3. Parent-Template includen - sieht jetzt die Child-Blocks
         $code .= "echo \$renderer->include('{$this->extendsTemplate}');\n";
 
         return $code;
@@ -111,7 +119,7 @@ PHP;
             'if' => $this->compileIf($node),
             'for' => $this->compileFor($node),
             'include' => $this->compileInclude($node),
-            default => throw new \RuntimeException("Unknown node type: {$node['type']}")
+            default => throw new RuntimeException("Unknown node type: {$node['type']}")
         };
     }
 
@@ -166,7 +174,7 @@ PHP;
                     $code = "\$renderer->applyFilter('{$filterName}', {$code})";
                 } else {
                     // Clean up any escaped quotes in parameters before encoding
-                    $cleanParams = array_map(function($param) {
+                    $cleanParams = array_map(function ($param) {
                         if (is_string($param)) {
                             // Remove any remaining escape slashes and quotes
                             $cleaned = str_replace(['\\\'', '\\"', '\\\\'], ["'", '"', '\\'], $param);
@@ -201,10 +209,12 @@ PHP;
             return ''; // Blocks in extending templates are handled in compileExtendingTemplate
         }
 
-        // In base templates, render block with potential override
-        $code = "if (\$renderer->hasBlock('{$blockName}')) {\n";
+        // In base templates, render block with potential child override
+        $code = "// Block: {$blockName}\n";
+        $code .= "if (\$renderer->hasBlock('{$blockName}')) {\n";
         $code .= "echo \$renderer->renderBlock('{$blockName}');\n";
         $code .= "} else {\n";
+        $code .= "// Default block content\n";
         $code .= $this->compileNodes($node['body']);
         $code .= "}\n";
 
@@ -233,7 +243,7 @@ PHP;
         return match ($condition['type']) {
             'variable' => $this->compileVariableCondition($condition['expression']),
             'comparison' => $this->compileComparison($condition),
-            default => throw new \RuntimeException("Unknown condition type: {$condition['type']}")
+            default => throw new RuntimeException("Unknown condition type: {$condition['type']}")
         };
     }
 
