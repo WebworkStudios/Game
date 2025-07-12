@@ -8,7 +8,7 @@ namespace Framework\Templating;
 use RuntimeException;
 
 /**
- * Template Engine - Twig-ähnliche Syntax mit Variables, Controls und Inheritance
+ * Template Engine - Twig-ähnliche Syntax mit Variables, Controls, Inheritance und Filtern
  */
 class TemplateEngine
 {
@@ -16,10 +16,12 @@ class TemplateEngine
     private array $data = [];
     private array $blocks = [];
     private ?string $parentTemplate = null;
+    private FilterManager $filterManager;
 
     public function __construct(array $templatePaths = [])
     {
         $this->paths = $templatePaths;
+        $this->filterManager = new FilterManager();
     }
 
     /**
@@ -76,53 +78,6 @@ class TemplateEngine
     }
 
     /**
-     * First pass: Extract extends and blocks from child template
-     */
-    private function extractExtendsAndBlocks(array $tokens): void
-    {
-        $i = 0;
-        $count = count($tokens);
-
-        while ($i < $count) {
-            $token = $tokens[$i];
-
-            if ($token['type'] === 'extends') {
-                $this->parentTemplate = $token['template'];
-                error_log("Found extends: " . $this->parentTemplate);
-            } elseif ($token['type'] === 'block') {
-                $blockName = $token['name'];
-                $blockData = $this->extractBlock($tokens, $i);
-                $this->blocks[$blockName] = $blockData['content'];
-                error_log("Extracted child block '$blockName' with " . count($blockData['content']) . " tokens");
-
-                // Debug: Zeige ersten Token des Blocks
-                if (!empty($blockData['content'])) {
-                    $firstToken = $blockData['content'][0];
-                    error_log("First token in block '$blockName': " . json_encode($firstToken));
-                }
-
-                $i = $blockData['endIndex'];
-            }
-
-            $i++;
-        }
-    }
-
-    /**
-     * Render with inheritance - load parent and inject blocks
-     */
-    private function renderWithInheritance(): string
-    {
-        // Load parent template
-        $parentPath = $this->findTemplate($this->parentTemplate);
-        $parentContent = file_get_contents($parentPath);
-        $parentTokens = $this->parseTemplate($parentContent);
-
-        // Render parent with child blocks
-        return $this->renderParsed($parentTokens);
-    }
-
-    /**
      * Findet Template-Datei in den konfigurierten Pfaden
      */
     private function findTemplate(string $template): string
@@ -149,7 +104,7 @@ class TemplateEngine
     }
 
     /**
-     * Parst Template-Content in AST-ähnliche Struktur
+     * Parst Template-Content in AST-ähnliche Struktur mit Filter-Support
      */
     private function parseTemplate(string $content): array
     {
@@ -194,7 +149,7 @@ class TemplateEngine
                 }
 
                 $variable = trim(substr($content, $nextPos + 2, $endPos - $nextPos - 2));
-                $tokens[] = ['type' => 'variable', 'name' => $variable];
+                $tokens[] = $this->parseVariableWithFilters($variable);
                 $offset = $endPos + 2;
 
             } elseif ($nextTag === 'control') {
@@ -210,6 +165,64 @@ class TemplateEngine
         }
 
         return $tokens;
+    }
+
+    /**
+     * Parst Variable mit Filtern
+     */
+    private function parseVariableWithFilters(string $expression): array
+    {
+        // Prüfe auf Filter-Syntax: variable|filter:param1:param2
+        if (!str_contains($expression, '|')) {
+            return ['type' => 'variable', 'name' => $expression];
+        }
+
+        $parts = explode('|', $expression, 2);
+        $variableName = trim($parts[0]);
+        $filterChain = trim($parts[1]);
+
+        // Parse Filter-Chain
+        $filters = $this->parseFilterChain($filterChain);
+
+        return [
+            'type' => 'variable',
+            'name' => $variableName,
+            'filters' => $filters
+        ];
+    }
+
+    /**
+     * Parst Filter-Chain
+     */
+    private function parseFilterChain(string $filterChain): array
+    {
+        $filters = [];
+        $filterParts = explode('|', $filterChain);
+
+        foreach ($filterParts as $filterExpr) {
+            $filterExpr = trim($filterExpr);
+
+            if (str_contains($filterExpr, ':')) {
+                $parts = explode(':', $filterExpr);
+                $filterName = array_shift($parts);
+                $parameters = array_map('trim', $parts);
+
+                // Remove quotes from string parameters
+                $parameters = array_map(function ($param) {
+                    return trim($param, '\'"');
+                }, $parameters);
+            } else {
+                $filterName = $filterExpr;
+                $parameters = [];
+            }
+
+            $filters[] = [
+                'name' => $filterName,
+                'parameters' => $parameters
+            ];
+        }
+
+        return $filters;
     }
 
     /**
@@ -236,6 +249,74 @@ class TemplateEngine
     }
 
     /**
+     * First pass: Extract extends and blocks from child template
+     */
+    private function extractExtendsAndBlocks(array $tokens): void
+    {
+        $i = 0;
+        $count = count($tokens);
+
+        while ($i < $count) {
+            $token = $tokens[$i];
+
+            if ($token['type'] === 'extends') {
+                $this->parentTemplate = $token['template'];
+                error_log("Found extends: " . $this->parentTemplate);
+            } elseif ($token['type'] === 'block') {
+                $blockName = $token['name'];
+                $blockData = $this->extractBlock($tokens, $i);
+                $this->blocks[$blockName] = $blockData['content'];
+                error_log("Extracted child block '$blockName' with " . count($blockData['content']) . " tokens");
+                $i = $blockData['endIndex'];
+            }
+
+            $i++;
+        }
+    }
+
+    /**
+     * Extrahiert Block-Content zwischen block und endblock
+     */
+    private function extractBlock(array $tokens, int $startIndex): array
+    {
+        $content = [];
+        $blockDepth = 1;
+        $i = $startIndex + 1;
+
+        while ($i < count($tokens) && $blockDepth > 0) {
+            $token = $tokens[$i];
+
+            if ($token['type'] === 'block') {
+                $blockDepth++;
+            } elseif ($token['type'] === 'endblock') {
+                $blockDepth--;
+                if ($blockDepth === 0) {
+                    break;
+                }
+            }
+
+            $content[] = $token;
+            $i++;
+        }
+
+        return ['content' => $content, 'endIndex' => $i];
+    }
+
+    /**
+     * Render with inheritance - load parent and inject blocks
+     */
+    private function renderWithInheritance(): string
+    {
+        // Load parent template
+        $parentPath = $this->findTemplate($this->parentTemplate);
+        $parentContent = file_get_contents($parentPath);
+        $parentTokens = $this->parseTemplate($parentContent);
+
+        // Render parent with child blocks
+        return $this->renderParsed($parentTokens);
+    }
+
+    /**
      * Rendert geparste Tokens mit Block-Replacement für Inheritance
      */
     private function renderParsed(array $tokens): string
@@ -253,7 +334,8 @@ class TemplateEngine
                     break;
 
                 case 'variable':
-                    $output .= $this->renderVariable($token['name']);
+                    $filters = $token['filters'] ?? [];
+                    $output .= $this->renderVariable($token['name'], $filters);
                     break;
 
                 case 'extends':
@@ -262,7 +344,6 @@ class TemplateEngine
 
                 case 'block':
                     $blockName = $token['name'];
-                    error_log("Processing block: $blockName");
 
                     if (isset($this->blocks[$blockName])) {
                         // Use child block content (override)
@@ -318,17 +399,43 @@ class TemplateEngine
     }
 
     /**
-     * Rendert Variable mit Dot-Notation Support
+     * Rendert Variable mit Filter-Support
      */
-    private function renderVariable(string $name): string
+    private function renderVariable(string $name, array $filters = []): string
     {
         $value = $this->getValue($name);
 
         if ($value === null) {
-            return '';
+            $value = '';
         }
 
-        return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8');
+        // Wende Filter an
+        foreach ($filters as $filter) {
+            $filterName = $filter['name'];
+            $parameters = $filter['parameters'];
+
+            try {
+                $value = $this->filterManager->apply($filterName, $value, $parameters);
+            } catch (\Throwable $e) {
+                error_log("Filter error: {$e->getMessage()}");
+                // Bei Filter-Fehlern: Original-Wert beibehalten
+            }
+        }
+
+        // Raw-Filter überspringt HTML-Escaping
+        $hasRawFilter = false;
+        foreach ($filters as $filter) {
+            if ($filter['name'] === 'raw') {
+                $hasRawFilter = true;
+                break;
+            }
+        }
+
+        if (!$hasRawFilter) {
+            $value = htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8');
+        }
+
+        return (string)$value;
     }
 
     /**
@@ -354,34 +461,6 @@ class TemplateEngine
         }
 
         return $this->data[$name] ?? null;
-    }
-
-    /**
-     * Extrahiert Block-Content zwischen block und endblock
-     */
-    private function extractBlock(array $tokens, int $startIndex): array
-    {
-        $content = [];
-        $blockDepth = 1;
-        $i = $startIndex + 1;
-
-        while ($i < count($tokens) && $blockDepth > 0) {
-            $token = $tokens[$i];
-
-            if ($token['type'] === 'block') {
-                $blockDepth++;
-            } elseif ($token['type'] === 'endblock') {
-                $blockDepth--;
-                if ($blockDepth === 0) {
-                    break;
-                }
-            }
-
-            $content[] = $token;
-            $i++;
-        }
-
-        return ['content' => $content, 'endIndex' => $i];
     }
 
     /**
@@ -435,7 +514,8 @@ class TemplateEngine
                 if ($token['type'] === 'text') {
                     $output .= $token['content'];
                 } elseif ($token['type'] === 'variable') {
-                    $output .= $this->renderVariable($token['name']);
+                    $filters = $token['filters'] ?? [];
+                    $output .= $this->renderVariable($token['name'], $filters);
                 } elseif ($token['type'] === 'if') {
                     // Handle nested if
                     $nestedResult = $this->renderIf($tokens, $i);
@@ -533,6 +613,29 @@ class TemplateEngine
     }
 
     /**
+     * Findet endfor Position
+     */
+    private function findEndFor(array $tokens, int $startIndex): int
+    {
+        $forDepth = 1;
+        $i = $startIndex + 1;
+
+        while ($i < count($tokens) && $forDepth > 0) {
+            $token = $tokens[$i];
+
+            if ($token['type'] === 'for') {
+                $forDepth++;
+            } elseif ($token['type'] === 'endfor') {
+                $forDepth--;
+            }
+
+            $i++;
+        }
+
+        return $i - 1;
+    }
+
+    /**
      * Extrahiert FOR-Content
      */
     private function extractForContent(array $tokens, int $startIndex): array
@@ -561,29 +664,6 @@ class TemplateEngine
     }
 
     /**
-     * Findet endfor Position
-     */
-    private function findEndFor(array $tokens, int $startIndex): int
-    {
-        $forDepth = 1;
-        $i = $startIndex + 1;
-
-        while ($i < count($tokens) && $forDepth > 0) {
-            $token = $tokens[$i];
-
-            if ($token['type'] === 'for') {
-                $forDepth++;
-            } elseif ($token['type'] === 'endfor') {
-                $forDepth--;
-            }
-
-            $i++;
-        }
-
-        return $i - 1;
-    }
-
-    /**
      * Fügt Template-Pfad hinzu
      */
     public function addPath(string $path): void
@@ -597,6 +677,14 @@ class TemplateEngine
     public function getPaths(): array
     {
         return $this->paths;
+    }
+
+    /**
+     * Holt Filter Manager
+     */
+    public function getFilterManager(): FilterManager
+    {
+        return $this->filterManager;
     }
 
     /**
@@ -618,6 +706,7 @@ class TemplateEngine
             'parent_template' => $this->parentTemplate,
             'blocks' => array_keys($this->blocks),
             'data_keys' => array_keys($this->data),
+            'available_filters' => $this->filterManager->getRegisteredFilters(),
         ];
     }
 }

@@ -15,17 +15,20 @@ readonly class ViewRenderer
 {
     public function __construct(
         private TemplateEngine $engine
-    ) {}
+    )
+    {
+    }
 
     /**
      * Rendert Template zu Response
      */
     public function render(
-        string $template,
-        array $data = [],
+        string     $template,
+        array      $data = [],
         HttpStatus $status = HttpStatus::OK,
-        array $headers = []
-    ): Response {
+        array      $headers = []
+    ): Response
+    {
         $content = $this->engine->render($template, $data);
 
         $headers['Content-Type'] = 'text/html; charset=UTF-8';

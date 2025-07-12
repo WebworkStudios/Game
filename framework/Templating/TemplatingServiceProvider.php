@@ -17,8 +17,10 @@ class TemplatingServiceProvider
 
     public function __construct(
         private readonly ServiceContainer $container,
-        private readonly Application $app,
-    ) {}
+        private readonly Application      $app,
+    )
+    {
+    }
 
     public function register(): void
     {

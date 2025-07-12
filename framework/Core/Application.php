@@ -324,6 +324,7 @@ class Application
     {
         return $this->container->get(ViewRenderer::class);
     }
+
     /**
      * Startet die Anwendung und verarbeitet Request
      */

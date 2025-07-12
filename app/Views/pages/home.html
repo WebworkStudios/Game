@@ -1,4 +1,4 @@
-<!-- app/Views/pages/home.html -->
+<!-- app/Views/pages/home.html - Vollständige Demo -->
 {% extends 'layouts/base' %}
 
 {% block title %}{{ welcome_message }} - {{ app_name }}{% endblock %}
@@ -8,20 +8,37 @@
 
 {% if user %}
 <div style="background: #e8f5e8; padding: 15px; border-radius: 5px; margin: 20px 0;">
-    <strong>Welcome {{ user.name }}!</strong>
+    <strong>Welcome {{ user.name }}!</strong> ({{ user.email }})
     {% if user.team %}
-    You are managing {{ user.team.name }} in {{ user.team.league }}.
+    <br>You are managing <strong>{{ user.team.name }}</strong> in {{ user.team.league }}.
+    {% endif %}
+    {% if user.isAdmin %}
+    <br><em>You have admin privileges</em>
     {% endif %}
 </div>
 {% endif %}
 
-<h2>Features:</h2>
+<div style="background: #f0f8ff; padding: 20px; border-radius: 10px; margin: 20px 0;">
+    <h3>🎨 Template Engine Features Demo</h3>
+    <ul style="list-style: none; padding-left: 0;">
+        <li>✅ <strong>Variables:</strong> {{ user.name }}, {{ app_name }}</li>
+        <li>✅ <strong>Nested Variables:</strong> {{ user.team.name }} in {{ user.team.league }}</li>
+        <li>✅ <strong>Conditionals:</strong> {% if user.isAdmin %}Admin privileges shown{% endif %}</li>
+        <li>✅ <strong>Loops:</strong> {{ features|length }} features rendered below</li>
+        <li>✅ <strong>Inheritance:</strong> This page extends layouts/base.html</li>
+        <li>✅ <strong>Blocks:</strong> title and content blocks override parent</li>
+    </ul>
+</div>
+
+<h2>🎯 Framework Features</h2>
 {% for feature in features %}
-<div style="margin: 15px 0; padding: 15px; background: #f5f5f5; border-radius: 5px;">
+<div style="margin: 15px 0; padding: 20px; background: {% if feature.active %}#f0f8f0{% else %}#f8f8f8{% endif %}; border-radius: 8px; border-left: 4px solid {% if feature.active %}#28a745{% else %}#6c757d{% endif %};">
     <h3>{{ feature.icon }} {{ feature.title }}</h3>
     <p>{{ feature.description }}</p>
     {% if feature.active %}
-    <small style="color: green;">✅ Active</small>
+    <small style="color: #28a745; font-weight: bold;">✅ Active</small>
+    {% else %}
+    <small style="color: #6c757d;">⏳ Coming Soon</small>
     {% endif %}
 </div>
 {% endfor %}

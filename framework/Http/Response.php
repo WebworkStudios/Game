@@ -173,11 +173,12 @@ class Response
      * Template Response Factory
      */
     public static function view(
-        string $template,
-        array $data = [],
+        string     $template,
+        array      $data = [],
         HttpStatus $status = HttpStatus::OK,
-        array $headers = []
-    ): self {
+        array      $headers = []
+    ): self
+    {
         try {
             $viewRenderer = \Framework\Core\ServiceRegistry::get(\Framework\Templating\ViewRenderer::class);
             return $viewRenderer->render($template, $data, $status, $headers);
