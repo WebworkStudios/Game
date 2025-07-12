@@ -32,7 +32,14 @@ class TemplatingServiceProvider
         $this->container->singleton(TemplateEngine::class, function () {
             $config = $this->loadTemplatingConfig();
 
-            $engine = new TemplateEngine();
+            // Create template cache
+            $cacheConfig = $config['cache'] ?? [];
+            $cacheDir = $this->app->getBasePath() . '/' . ($cacheConfig['path'] ?? 'storage/cache/views');
+            $cacheEnabled = $cacheConfig['enabled'] ?? !$this->app->isDebug();
+
+            $cache = new TemplateCache($cacheDir, $cacheEnabled);
+
+            $engine = new TemplateEngine([], $cache);
 
             // Add configured template paths
             foreach ($config['paths'] as $path) {

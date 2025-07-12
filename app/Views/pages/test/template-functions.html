@@ -37,9 +37,7 @@
     <h3>Dynamic Data</h3>
     <ul>
         <li><strong>Player Name:</strong> {{ test_data.player | default:'Unknown Player' }}</li>
-        <li><strong>Goal at Minute:</strong> {{ 'match.goal_scored' | t:{player: test_data.player, minute:
-            test_data.minute} }}
-        </li>
+        <li><strong>Goal at Minute:</strong> {{ 'match.goal_scored' | t:{player: test_data.player, minute: test_data.minute} }}</li>
         <li><strong>Goals Count:</strong> {{ 'game.goals' | t_plural:test_data.goals }}</li>
     </ul>
 </div>
@@ -57,18 +55,9 @@
 
         <p><strong>🔄 Migration:</strong> Old function syntax is no longer supported:</p>
         <ul>
-            <li>
-                <del>{{ "t('key')" }}</del>
-                → {{ "'key' | t" }}
-            </li>
-            <li>
-                <del>{{ "t_plural('key', count)" }}</del>
-                → {{ "'key' | t_plural:count" }}
-            </li>
-            <li>
-                <del>{{ "locale()" }}</del>
-                → Use {{ "current_locale" }} variable
-            </li>
+            <li><del>{{ "t('key')" }}</del> → {{ "'key' | t" }}</li>
+            <li><del>{{ "t_plural('key', count)" }}</del> → {{ "'key' | t_plural:count" }}</li>
+            <li><del>{{ "locale()" }}</del> → Use {{ "current_locale" }} variable</li>
         </ul>
     </div>
 </div>

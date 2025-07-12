@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Framework\Templating;
@@ -6,55 +7,123 @@ namespace Framework\Templating;
 use RuntimeException;
 
 /**
- * Filter Manager - Verwaltet alle Template-Filter
+ * Filter Manager - Verwaltet alle Template-Filter mit Lazy Loading
  */
 class FilterManager
 {
     private array $filters = [];
+    private array $lazyFilters = [];
 
     public function __construct()
     {
-        $this->registerDefaultFilters();
+        // Register lazy filter definitions (no instantiation yet)
+        $this->registerLazyFilters();
     }
 
     /**
-     * Registriert Standard-Filter
+     * Registriert Lazy Filter Definitionen
      */
-    private function registerDefaultFilters(): void
+    private function registerLazyFilters(): void
     {
         // Text/String Filter
-        $this->register('upper', fn(string $value) => strtoupper($value));
-        $this->register('lower', fn(string $value) => strtolower($value));
-        $this->register('capitalize', fn(string $value) => ucfirst(strtolower($value)));
-        $this->register('truncate', [$this, 'truncateFilter']);
-        $this->register('default', [$this, 'defaultFilter']);
-        $this->register('raw', fn(string $value) => $value);
+        $this->lazyFilters['upper'] = fn() => fn(string $value) => strtoupper($value);
+        $this->lazyFilters['lower'] = fn() => fn(string $value) => strtolower($value);
+        $this->lazyFilters['capitalize'] = fn() => fn(string $value) => ucfirst(strtolower($value));
+        $this->lazyFilters['truncate'] = fn() => [$this, 'truncateFilter'];
+        $this->lazyFilters['default'] = fn() => [$this, 'defaultFilter'];
+        $this->lazyFilters['raw'] = fn() => fn(string $value) => $value;
 
         // Number/Format Filter
-        $this->register('number_format', [$this, 'numberFormatFilter']);
-        $this->register('currency', [$this, 'currencyFilter']);
+        $this->lazyFilters['number_format'] = fn() => [$this, 'numberFormatFilter'];
+        $this->lazyFilters['currency'] = fn() => [$this, 'currencyFilter'];
 
         // Date Filter
-        $this->register('date', [$this, 'dateFilter']);
+        $this->lazyFilters['date'] = fn() => [$this, 'dateFilter'];
 
         // Utility Filter
-        $this->register('length', [$this, 'lengthFilter']);
-        $this->register('count', [$this, 'lengthFilter']);
-        $this->register('plural', [$this, 'pluralFilter']);
+        $this->lazyFilters['length'] = fn() => [$this, 'lengthFilter'];
+        $this->lazyFilters['count'] = fn() => [$this, 'lengthFilter'];
+        $this->lazyFilters['plural'] = fn() => [$this, 'pluralFilter'];
 
         // Advanced Text Filter
-        $this->register('slug', [$this, 'slugFilter']);
-        $this->register('nl2br', [$this, 'nl2brFilter']);
-        $this->register('strip_tags', [$this, 'stripTagsFilter']);
+        $this->lazyFilters['slug'] = fn() => [$this, 'slugFilter'];
+        $this->lazyFilters['nl2br'] = fn() => [$this, 'nl2brFilter'];
+        $this->lazyFilters['strip_tags'] = fn() => [$this, 'stripTagsFilter'];
 
         // Advanced Utility Filter
-        $this->register('json', [$this, 'jsonFilter']);
-        $this->register('first', [$this, 'firstFilter']);
-        $this->register('last', [$this, 'lastFilter']);
+        $this->lazyFilters['json'] = fn() => [$this, 'jsonFilter'];
+        $this->lazyFilters['first'] = fn() => [$this, 'firstFilter'];
+        $this->lazyFilters['last'] = fn() => [$this, 'lastFilter'];
+
+        // Translation filters (heavy - definitely lazy load)
+        $this->lazyFilters['t'] = fn() => [$this, 'translateFilter'];
+        $this->lazyFilters['t_plural'] = fn() => [$this, 'translatePluralFilter'];
     }
 
     /**
-     * Registriert einen neuen Filter
+     * Wendet Filter auf Wert an (mit Lazy Loading)
+     */
+    public function apply(string $filterName, mixed $value, array $parameters = []): mixed
+    {
+        // Load filter on-demand
+        if (!isset($this->filters[$filterName])) {
+            $this->loadFilter($filterName);
+        }
+
+        if (!isset($this->filters[$filterName])) {
+            throw new RuntimeException("Unknown filter: {$filterName}");
+        }
+
+        $filter = $this->filters[$filterName];
+        return call_user_func($filter, $value, ...$parameters);
+    }
+
+    /**
+     * Lädt einen Filter bei Bedarf
+     */
+    private function loadFilter(string $filterName): void
+    {
+        if (!isset($this->lazyFilters[$filterName])) {
+            return;
+        }
+
+        // Execute lazy loader
+        $loader = $this->lazyFilters[$filterName];
+        $this->filters[$filterName] = $loader();
+
+        // Performance: Remove lazy definition after loading
+        unset($this->lazyFilters[$filterName]);
+    }
+
+    /**
+     * Prüft ob Filter existiert (inklusive Lazy)
+     */
+    public function has(string $filterName): bool
+    {
+        return isset($this->filters[$filterName]) || isset($this->lazyFilters[$filterName]);
+    }
+
+    /**
+     * Holt alle verfügbaren Filter (ohne sie zu laden)
+     */
+    public function getAvailableFilters(): array
+    {
+        return array_merge(
+            array_keys($this->filters),
+            array_keys($this->lazyFilters)
+        );
+    }
+
+    /**
+     * Holt geladene Filter (für Performance-Monitoring)
+     */
+    public function getLoadedFilters(): array
+    {
+        return array_keys($this->filters);
+    }
+
+    /**
+     * Registriert einen neuen Filter (sofort geladen)
      */
     public function register(string $name, callable $callback): void
     {
@@ -62,34 +131,11 @@ class FilterManager
     }
 
     /**
-     * Wendet Filter auf Wert an
+     * Registriert einen Lazy Filter
      */
-    public function apply(string $filterName, mixed $value, array $parameters = []): mixed
+    public function registerLazy(string $name, callable $loader): void
     {
-        if (!isset($this->filters[$filterName])) {
-            throw new RuntimeException("Unknown filter: {$filterName}");
-        }
-
-        $filter = $this->filters[$filterName];
-
-        // Parameter an Callback übergeben
-        return call_user_func($filter, $value, ...$parameters);
-    }
-
-    /**
-     * Prüft ob Filter existiert
-     */
-    public function has(string $filterName): bool
-    {
-        return isset($this->filters[$filterName]);
-    }
-
-    /**
-     * Holt alle registrierten Filter
-     */
-    public function getRegisteredFilters(): array
-    {
-        return array_keys($this->filters);
+        $this->lazyFilters[$name] = $loader;
     }
 
     /**
@@ -299,5 +345,44 @@ class FilterManager
         }
 
         return null;
+    }
+
+    /**
+     * Translation Filter - Lazy loaded mit ServiceRegistry
+     */
+    private function translateFilter(string $key, mixed ...$args): string
+    {
+        static $translator = null;
+        if ($translator === null) {
+            try {
+                $translator = \Framework\Core\ServiceRegistry::get(\Framework\Localization\Translator::class);
+            } catch (\Throwable) {
+                return $key;
+            }
+        }
+
+        $parameters = [];
+        if (!empty($args) && is_array($args[0])) {
+            $parameters = $args[0];
+        }
+
+        return $translator->translate($key, $parameters);
+    }
+
+    /**
+     * Translation Plural Filter - Lazy loaded
+     */
+    private function translatePluralFilter(string $key, int $count, array $parameters = []): string
+    {
+        static $translator = null;
+        if ($translator === null) {
+            try {
+                $translator = \Framework\Core\ServiceRegistry::get(\Framework\Localization\Translator::class);
+            } catch (\Throwable) {
+                return $key;
+            }
+        }
+
+        return $translator->translatePlural($key, $count, $parameters);
     }
 }

@@ -1,5 +1,4 @@
 <?php
-// framework/Templating/TemplateEngine.php
 
 declare(strict_types=1);
 
@@ -8,7 +7,7 @@ namespace Framework\Templating;
 use RuntimeException;
 
 /**
- * Template Engine - Twig-ähnliche Syntax mit Variables, Controls, Inheritance und Filtern
+ * Template Engine - Twig-ähnliche Syntax mit Variables, Controls, Inheritance, Filtern und Caching
  */
 class TemplateEngine
 {
@@ -17,15 +16,18 @@ class TemplateEngine
     private array $blocks = [];
     private ?string $parentTemplate = null;
     private FilterManager $filterManager;
+    private TemplateCache $cache;
+    private array $loadedTemplates = []; // Track dependencies
 
-    public function __construct(array $templatePaths = [])
+    public function __construct(array $templatePaths = [], ?TemplateCache $cache = null)
     {
         $this->paths = $templatePaths;
         $this->filterManager = new FilterManager();
+        $this->cache = $cache ?? new TemplateCache(sys_get_temp_dir() . '/template_cache', false);
     }
 
     /**
-     * Rendert Template mit Daten
+     * Rendert Template mit Caching-Support
      */
     public function render(string $template, array $data = []): string
     {
@@ -35,9 +37,27 @@ class TemplateEngine
         $this->data = $data;
         $this->blocks = [];
         $this->parentTemplate = null;
+        $this->loadedTemplates = []; // Reset dependency tracking
 
         try {
             $templatePath = $this->findTemplate($template);
+            $this->loadedTemplates[] = $templatePath;
+
+            // Try to load from cache first
+            if ($this->cache->isValid($template, $this->loadedTemplates)) {
+                error_log("Loading from cache: $template");
+                $compiled = $this->cache->load($template);
+
+                if ($compiled !== null) {
+                    $result = $this->renderCompiled($compiled);
+                    error_log("Cache hit - result length: " . strlen($result));
+                    error_log("=== TemplateEngine::render END (CACHED) ===");
+                    return $result;
+                }
+            }
+
+            // Cache miss - parse and cache
+            error_log("Cache miss - parsing template: $template");
             $content = file_get_contents($templatePath);
 
             error_log("Template content length: " . strlen($content));
@@ -56,14 +76,21 @@ class TemplateEngine
             error_log("Parent template: " . ($this->parentTemplate ?? 'none'));
             error_log("Blocks found: " . implode(', ', array_keys($this->blocks)));
 
-            // Handle inheritance
-            if ($this->parentTemplate) {
-                error_log("Using inheritance");
-                $result = $this->renderWithInheritance();
-            } else {
-                error_log("Rendering without inheritance");
-                $result = $this->renderParsed($parsed);
-            }
+            // Prepare compiled structure
+            $compiled = [
+                'tokens' => $parsed,
+                'blocks' => $this->blocks,
+                'parent_template' => $this->parentTemplate,
+                'template_path' => $templatePath,
+                'dependencies' => $this->loadedTemplates,
+            ];
+
+            // Store in cache
+            $this->cache->store($template, $templatePath, $compiled, $this->loadedTemplates);
+            error_log("Template cached: $template");
+
+            // Render
+            $result = $this->renderCompiled($compiled);
 
             error_log("Final result length: " . strlen($result));
             error_log("=== TemplateEngine::render END ===");
@@ -74,6 +101,27 @@ class TemplateEngine
             error_log("TemplateEngine ERROR: " . $e->getMessage());
             error_log("Error file: " . $e->getFile() . ":" . $e->getLine());
             throw $e;
+        }
+    }
+
+    /**
+     * Render from compiled structure
+     */
+    private function renderCompiled(array $compiled): string
+    {
+        // Restore state from compiled structure
+        $this->blocks = $compiled['blocks'] ?? [];
+        $this->parentTemplate = $compiled['parent_template'] ?? null;
+
+        $tokens = $compiled['tokens'] ?? [];
+
+        // Handle inheritance
+        if ($this->parentTemplate) {
+            error_log("Using inheritance");
+            return $this->renderWithInheritance();
+        } else {
+            error_log("Rendering without inheritance");
+            return $this->renderParsed($tokens);
         }
     }
 
@@ -172,6 +220,9 @@ class TemplateEngine
      */
     private function parseVariableWithFilters(string $expression): array
     {
+        // Debug what we're parsing
+        error_log("Parsing variable expression: '$expression'");
+
         // Prüfe auf Filter-Syntax: variable|filter:param1:param2
         if (!str_contains($expression, '|')) {
             return ['type' => 'variable', 'name' => $expression];
@@ -180,6 +231,9 @@ class TemplateEngine
         $parts = explode('|', $expression, 2);
         $variableName = trim($parts[0]);
         $filterChain = trim($parts[1]);
+
+        // Debug
+        error_log("Variable name: '$variableName', Filter chain: '$filterChain'");
 
         // Parse Filter-Chain
         $filters = $this->parseFilterChain($filterChain);
@@ -192,7 +246,7 @@ class TemplateEngine
     }
 
     /**
-     * Parst Filter-Chain
+     * Parst Filter-Chain mit erweiterten Parameter-Support
      */
     private function parseFilterChain(string $filterChain): array
     {
@@ -203,14 +257,11 @@ class TemplateEngine
             $filterExpr = trim($filterExpr);
 
             if (str_contains($filterExpr, ':')) {
-                $parts = explode(':', $filterExpr);
-                $filterName = array_shift($parts);
-                $parameters = array_map('trim', $parts);
+                $parts = explode(':', $filterExpr, 2);
+                $filterName = trim($parts[0]);
+                $paramString = trim($parts[1]);
 
-                // Remove quotes from string parameters
-                $parameters = array_map(function ($param) {
-                    return trim($param, '\'"');
-                }, $parameters);
+                $parameters = $this->parseFilterParameters($paramString);
             } else {
                 $filterName = $filterExpr;
                 $parameters = [];
@@ -223,6 +274,64 @@ class TemplateEngine
         }
 
         return $filters;
+    }
+
+    /**
+     * Enhanced parameter parsing for object syntax support
+     */
+    private function parseFilterParameters(string $paramString): array
+    {
+        // Handle object syntax: {key: 'value', key2: 'value2'}
+        if (str_starts_with($paramString, '{') && str_ends_with($paramString, '}')) {
+            $parsed = $this->parseObjectParameters($paramString);
+            return [$parsed]; // Wrap in array for filter parameter structure
+        }
+
+        // Handle simple colon-separated parameters
+        $parameters = explode(':', $paramString);
+        return array_map(function ($param) {
+            return trim($param, '\'"');
+        }, $parameters);
+    }
+
+    /**
+     * Parse object-style parameters: {player: 'Messi', minute: 90}
+     */
+    private function parseObjectParameters(string $objectString): array
+    {
+        $parameters = [];
+        $content = trim($objectString, '{}');
+
+        if (empty($content)) {
+            return [];
+        }
+
+        // Debug
+        error_log("Parsing object parameters: '$objectString'");
+
+        // Simple parsing for key:value pairs
+        $pairs = explode(',', $content);
+
+        foreach ($pairs as $pair) {
+            $pair = trim($pair);
+            if (str_contains($pair, ':')) {
+                [$key, $value] = explode(':', $pair, 2);
+                $key = trim($key, '\'" ');
+                $value = trim($value, '\'" ');
+
+                // Convert numeric values
+                if (is_numeric($value)) {
+                    $value = str_contains($value, '.') ? (float)$value : (int)$value;
+                }
+
+                $parameters[$key] = $value;
+            }
+        }
+
+        error_log("Parsed object parameters: " . json_encode($parameters));
+
+        // Return array directly, not wrapped in array
+        return $parameters;
     }
 
     /**
@@ -309,6 +418,12 @@ class TemplateEngine
     {
         // Load parent template
         $parentPath = $this->findTemplate($this->parentTemplate);
+
+        // Track dependency
+        if (!in_array($parentPath, $this->loadedTemplates)) {
+            $this->loadedTemplates[] = $parentPath;
+        }
+
         $parentContent = file_get_contents($parentPath);
         $parentTokens = $this->parseTemplate($parentContent);
 
@@ -403,7 +518,20 @@ class TemplateEngine
      */
     private function renderVariable(string $name, array $filters = []): string
     {
-        $value = $this->getValue($name);
+        // Debug
+        error_log("Rendering variable: name='$name', filters=" . json_encode(array_column($filters, 'name')));
+
+        // Handle string literals in quotes
+        if ((str_starts_with($name, "'") && str_ends_with($name, "'")) ||
+            (str_starts_with($name, '"') && str_ends_with($name, '"'))) {
+            // String literal - remove quotes
+            $value = substr($name, 1, -1);
+            error_log("String literal detected: '$value'");
+        } else {
+            // Regular variable lookup
+            $value = $this->getValue($name);
+            error_log("Variable lookup for '$name': " . json_encode($value));
+        }
 
         if ($value === null) {
             $value = '';
@@ -414,8 +542,11 @@ class TemplateEngine
             $filterName = $filter['name'];
             $parameters = $filter['parameters'];
 
+            error_log("Applying filter '$filterName' with params: " . json_encode($parameters));
+
             try {
                 $value = $this->filterManager->apply($filterName, $value, $parameters);
+                error_log("Filter result: '$value'");
             } catch (\Throwable $e) {
                 error_log("Filter error: {$e->getMessage()}");
                 // Bei Filter-Fehlern: Original-Wert beibehalten
@@ -464,13 +595,19 @@ class TemplateEngine
     }
 
     /**
-     * Rendert Include
+     * Rendert Include mit Dependency Tracking
      */
     private function renderInclude(string $template): string
     {
         $originalData = $this->data; // Backup data
 
         $includePath = $this->findTemplate($template);
+
+        // Track dependency
+        if (!in_array($includePath, $this->loadedTemplates)) {
+            $this->loadedTemplates[] = $includePath;
+        }
+
         $includeContent = file_get_contents($includePath);
         $parsed = $this->parseTemplate($includeContent);
 
@@ -579,13 +716,19 @@ class TemplateEngine
     {
         $expression = $tokens[$startIndex]['expression'];
 
-        // Parse "item in items" syntax
-        if (!preg_match('/(\w+)\s+in\s+([\w.]+)/', $expression, $matches)) {
-            throw new RuntimeException("Invalid for loop syntax: {$expression}");
+        // Parse both syntaxes: "item in items" and "items as item"
+        if (preg_match('/(\w+)\s+in\s+([\w.]+)/', $expression, $matches)) {
+            // Standard syntax: item in items
+            $itemVar = $matches[1];
+            $arrayVar = $matches[2];
+        } elseif (preg_match('/([\w.]+)\s+as\s+(\w+)/', $expression, $matches)) {
+            // Laravel/Twig syntax: items as item
+            $arrayVar = $matches[1];
+            $itemVar = $matches[2];
+        } else {
+            throw new RuntimeException("Invalid for loop syntax: {$expression}. Use 'item in items' or 'items as item'");
         }
 
-        $itemVar = $matches[1];
-        $arrayVar = $matches[2];
         $array = $this->getValue($arrayVar);
 
         if (!is_array($array)) {
@@ -688,16 +831,48 @@ class TemplateEngine
     }
 
     /**
+     * Set template cache
+     */
+    public function setCache(TemplateCache $cache): void
+    {
+        $this->cache = $cache;
+    }
+
+    /**
+     * Get template cache
+     */
+    public function getCache(): TemplateCache
+    {
+        return $this->cache;
+    }
+
+    /**
+     * Clear template cache
+     */
+    public function clearCache(): int
+    {
+        return $this->cache->clearAll();
+    }
+
+    /**
+     * Get cache statistics
+     */
+    public function getCacheStats(): array
+    {
+        return $this->cache->getStats();
+    }
+
+    /**
      * Clear compiled cache (für Development)
      */
     public function clearCompiledCache(): void
     {
-        // Placeholder für Caching-Feature (Schritt 6)
-        error_log("Template cache cleared (placeholder)");
+        $this->cache->clearAll();
+        error_log("Template cache cleared");
     }
 
     /**
-     * Debug-Information
+     * Debug-Information mit Cache-Details
      */
     public function getDebugInfo(): array
     {
@@ -706,7 +881,15 @@ class TemplateEngine
             'parent_template' => $this->parentTemplate,
             'blocks' => array_keys($this->blocks),
             'data_keys' => array_keys($this->data),
-            'available_filters' => $this->filterManager->getRegisteredFilters(),
+            'available_filters' => $this->filterManager->getAvailableFilters(),
+            'loaded_filters' => $this->filterManager->getLoadedFilters(),
+            'filter_stats' => [
+                'available' => count($this->filterManager->getAvailableFilters()),
+                'loaded' => count($this->filterManager->getLoadedFilters()),
+                'lazy_remaining' => count($this->filterManager->getAvailableFilters()) - count($this->filterManager->getLoadedFilters())
+            ],
+            'cache_stats' => $this->getCacheStats(),
+            'loaded_templates' => $this->loadedTemplates,
         ];
     }
 }
