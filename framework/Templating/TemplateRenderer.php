@@ -15,25 +15,100 @@ class TemplateRenderer
 
     public function __construct(
         private readonly TemplateEngine $engine,
-        array                           $data = []
-    )
-    {
+        array $data = []
+    ) {
         $this->data = $data;
     }
 
     /**
+     * Get variable value with support for nested access
+     */
+    public function get(string $name): mixed
+    {
+        return $this->data[$name] ?? null;
+    }
+
+    /**
+     * Set variable in data
+     */
+    public function set(string $key, mixed $value): void
+    {
+        $this->data[$key] = $value;
+    }
+
+    /**
+     * Check if variable exists
+     */
+    public function has(string $key): bool
+    {
+        return isset($this->data[$key]);
+    }
+
+    /**
+     * Escape value for HTML output
+     */
+    public function escape(mixed $value): string
+    {
+        if ($value === null) {
+            return '';
+        }
+
+        return htmlspecialchars((string)$value, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+    }
+
+    /**
+     * Return raw (unescaped) value
+     */
+    public function raw(mixed $value): string
+    {
+        return (string)($value ?? '');
+    }
+
+    /**
+     * Include another template
+     */
+    public function include(string $template, array $data = []): string
+    {
+        return $this->engine->include($template, array_merge($this->data, $data));
+    }
+
+    /**
+     * Include template with data mapping
+     */
+    public function includeWith(string $template, string $variable, mixed $data): string
+    {
+        return $this->engine->includeWith($template, $variable, $data);
+    }
+
+    /**
      * Set blocks for template inheritance
-     * ← VERBESSERT: Merge mit Parent-Blocks
      */
     public function setBlocks(array $blocks): void
     {
-        // Child blocks überschreiben Parent blocks
+        // Child blocks override parent blocks
         $this->blocks = array_merge($this->parentBlocks, $blocks);
     }
 
     /**
+     * Set parent blocks (for nested inheritance)
+     */
+    public function setParentBlocks(array $parentBlocks): void
+    {
+        $this->parentBlocks = $parentBlocks;
+        // Re-merge with current blocks
+        $this->blocks = array_merge($this->parentBlocks, $this->blocks);
+    }
+
+    /**
+     * Check if block exists
+     */
+    public function hasBlock(string $name): bool
+    {
+        return isset($this->blocks[$name]) && is_callable($this->blocks[$name]);
+    }
+
+    /**
      * Render block
-     * ← VERBESSERT: Fehlerbehandlung und Parent-Block-Support
      */
     public function renderBlock(string $name): string
     {
@@ -50,16 +125,7 @@ class TemplateRenderer
     }
 
     /**
-     * Check if block exists
-     * ← VERBESSERT: Bessere Block-Existenz-Prüfung
-     */
-    public function hasBlock(string $name): bool
-    {
-        return isset($this->blocks[$name]) && is_callable($this->blocks[$name]);
-    }
-
-    /**
-     * ← NEU: Render parent block (für block inheritance mit parent() calls)
+     * Render parent block (for block inheritance with parent() calls)
      */
     public function renderParentBlock(string $name): string
     {
@@ -76,554 +142,151 @@ class TemplateRenderer
     }
 
     /**
-     * Set variable in data (for loops)
-     */
-    public function set(string $key, mixed $value): void
-    {
-        $this->data[$key] = $value;
-    }
-
-    /**
-     * Check if variable exists
-     */
-    public function has(string $key): bool
-    {
-        return isset($this->data[$key]);
-    }
-
-    /**
-     * Include another template
-     * ← VERBESSERT: Block-Vererbung bei Includes
-     */
-    public function include(string $template, array $data = []): string
-    {
-        $mergedData = array_merge($this->data, $data);
-
-        // Create new renderer with merged data
-        $childRenderer = new TemplateRenderer($this->engine, $mergedData);
-
-        // ← WICHTIG: Parent-Blocks an Child-Renderer weitergeben
-        $childRenderer->setParentBlocks($this->blocks);
-
-        return $this->engine->renderWithRenderer($template, $childRenderer);
-    }
-
-    /**
-     * ← NEU: Set parent blocks (for nested inheritance)
-     */
-    public function setParentBlocks(array $parentBlocks): void
-    {
-        $this->parentBlocks = $parentBlocks;
-        // Re-merge mit aktuellen blocks
-        $this->blocks = array_merge($this->parentBlocks, $this->blocks);
-    }
-
-    /**
-     * Apply filter to value - OPTIMIZED VERSION
+     * Apply filter to value
      */
     public function applyFilter(string $filter, mixed $value, array $params = []): mixed
     {
-        // Static filter map for O(1) lookup instead of match()
-        static $filterMap = [
-            'length' => 'filterLength',
-            'upper' => 'filterUpper',
-            'lower' => 'filterLower',
-            'capitalize' => 'filterCapitalize',
-            'date' => 'filterDate',
-            'number_format' => 'filterNumberFormat',
-            'default' => 'filterDefault',
-            'truncate' => 'filterTruncate',
-            'escape' => 'escape',
-            'raw' => 'raw',
-            'json' => 'filterJson',
-            'slug' => 'filterSlug',
-            'currency' => 'filterCurrency',
-            'rating' => 'filterRating',
-            'plural' => 'filterPlural',
-            't' => 'filterTranslate',
-            't_plural' => 'filterTranslatePlural',
-        ];
-
-        if (!isset($filterMap[$filter])) {
-            throw new RuntimeException("Unknown filter: {$filter}");
-        }
-
-        $method = $filterMap[$filter];
-
-        // Direct method call - faster than match()
-        return match ($method) {
+        return match ($filter) {
+            'length' => $this->filterLength($value),
+            'upper' => $this->filterUpper($value),
+            'lower' => $this->filterLower($value),
+            'capitalize' => $this->filterCapitalize($value),
+            'date' => $this->filterDate($value, $params[0] ?? 'Y-m-d'),
+            'number_format' => $this->filterNumberFormat($value, $params[0] ?? 0, $params[1] ?? '.', $params[2] ?? ','),
+            'default' => $this->filterDefault($value, $params[0] ?? ''),
+            'truncate' => $this->filterTruncate($value, $params[0] ?? 100, $params[1] ?? '...'),
             'escape' => $this->escape($value),
             'raw' => $this->raw($value),
-            'filterLength' => $this->filterLength($value),
-            'filterUpper' => $this->filterUpper($value),
-            'filterLower' => $this->filterLower($value),
-            'filterCapitalize' => $this->filterCapitalize($value),
-            'filterJson' => $this->filterJson($value),
-            'filterSlug' => $this->filterSlug($value),
-            'filterDate' => $this->filterDate($value, $params[0] ?? 'Y-m-d'),
-            'filterNumberFormat' => $this->filterNumberFormat($value, $params),
-            'filterDefault' => $this->filterDefault($value, $params[0] ?? 'N/A'),
-            'filterTruncate' => $this->filterTruncate($value, (int)($params[0] ?? 50)),
-            'filterCurrency' => $this->filterCurrency($value, $params[0] ?? '€', $params[1] ?? 'right'),
-            'filterRating' => $this->filterRating($value, (int)($params[0] ?? 10)),
-            'filterPlural' => $this->filterPlural($value, $params[0] ?? '', $params[1] ?? ''),
-            'filterTranslate' => $this->filterTranslate($value, $params),
-            'filterTranslatePlural' => $this->filterTranslatePlural($value, $params),
-            default => $value,
+            'json' => $this->filterJson($value),
+            'slug' => $this->filterSlug($value),
+            'currency' => $this->filterCurrency($value, $params[0] ?? 'EUR'),
+            'rating' => $this->filterRating($value),
+            'plural' => $this->filterPlural($value, $params[0] ?? '', $params[1] ?? ''),
+            't' => $this->filterTranslate($value, $params),
+            't_plural' => $this->filterTranslatePlural($value, $params[0] ?? 1, $params),
+            default => throw new RuntimeException("Unknown filter: {$filter}")
         };
     }
 
-    /**
-     * Escape output for HTML
-     */
-    public function escape(mixed $value): string
-    {
-        if ($value === null) {
-            return '';
-        }
-
-        // Fast path for already-string values (most common case)
-        if (is_string($value)) {
-            return htmlspecialchars($value, ENT_QUOTES, 'UTF-8');
-        }
-
-        // Convert to string only when necessary
-        return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8');
-    }
-
-    /**
-     * Raw output (unescaped)
-     */
-    public function raw(mixed $value): string
-    {
-        if ($value === null) {
-            return '';
-        }
-
-        return (string)$value;
-    }
-
-    /**
-     * Length filter - get count of array or string length
-     */
+    // Filter implementations
     private function filterLength(mixed $value): int
     {
-        // Fast path for common types
-        if (is_string($value)) {
-            return mb_strlen($value);
-        }
-
-        if (is_array($value)) {
+        if (is_array($value) || $value instanceof Countable) {
             return count($value);
         }
-
-        if ($value instanceof Countable) {
-            return count($value);
-        }
-
-        return 0;
+        return strlen((string)$value);
     }
 
-    /**
-     * Upper filter - convert to uppercase
-     */
     private function filterUpper(mixed $value): string
     {
-        // Avoid type conversion if already string
-        if (is_string($value)) {
-            return mb_strtoupper($value);
-        }
-        return mb_strtoupper((string)$value);
+        return mb_strtoupper((string)$value, 'UTF-8');
     }
 
-    /**
-     * Lower filter - convert to lowercase
-     */
     private function filterLower(mixed $value): string
     {
-        if (is_string($value)) {
-            return mb_strtolower($value);
-        }
-        return mb_strtolower((string)$value);
+        return mb_strtolower((string)$value, 'UTF-8');
     }
 
-    /**
-     * Capitalize filter - capitalize first letter
-     */
     private function filterCapitalize(mixed $value): string
     {
-        return mb_convert_case((string)$value, MB_CASE_TITLE);
+        return mb_convert_case((string)$value, MB_CASE_TITLE, 'UTF-8');
     }
 
-    /**
-     * JSON filter - encode as JSON
-     */
+    private function filterDate(mixed $value, string $format): string
+    {
+        if ($value instanceof \DateTimeInterface) {
+            return $value->format($format);
+        }
+
+        if (is_string($value)) {
+            $date = \DateTime::createFromFormat('Y-m-d', $value);
+            if ($date === false) {
+                $date = new \DateTime($value);
+            }
+            return $date->format($format);
+        }
+
+        if (is_numeric($value)) {
+            return date($format, (int)$value);
+        }
+
+        return '';
+    }
+
+    private function filterNumberFormat(mixed $value, int $decimals, string $decimalSeparator, string $thousandsSeparator): string
+    {
+        return number_format((float)$value, $decimals, $decimalSeparator, $thousandsSeparator);
+    }
+
+    private function filterDefault(mixed $value, mixed $default): mixed
+    {
+        return $value ?: $default;
+    }
+
+    private function filterTruncate(mixed $value, int $length, string $suffix): string
+    {
+        $str = (string)$value;
+        if (mb_strlen($str, 'UTF-8') <= $length) {
+            return $str;
+        }
+        return mb_substr($str, 0, $length, 'UTF-8') . $suffix;
+    }
+
     private function filterJson(mixed $value): string
     {
-        // Fast path for simple types
-        if (is_string($value)) {
-            return '"' . addslashes($value) . '"';
-        }
-
-        if (is_int($value) || is_float($value)) {
-            return (string)$value;
-        }
-
-        if (is_bool($value)) {
-            return $value ? 'true' : 'false';
-        }
-
-        if ($value === null) {
-            return 'null';
-        }
-
-        // For complex types, use json_encode with optimized flags
-        try {
-            return json_encode(
-                $value,
-                JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR
-            );
-        } catch (\JsonException) {
-            return '{}'; // Fallback for encoding errors
-        }
+        return json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_QUOT | JSON_HEX_TAG);
     }
 
-    /**
-     * Slug filter - create URL-friendly string
-     */
     private function filterSlug(mixed $value): string
     {
-        if (!is_string($value)) {
-            $value = (string)$value;
-        }
-
-        // Faster single regex instead of multiple operations
-        return trim(
-            preg_replace([
-                '/[^a-z0-9\-]/i',  // Remove non-alphanumeric except hyphens
-                '/-+/'             // Collapse multiple hyphens
-            ], [
-                '-',
-                '-'
-            ], mb_strtolower($value)),
-            '-'
-        );
+        $str = (string)$value;
+        $str = mb_strtolower($str, 'UTF-8');
+        $str = preg_replace('/[^a-z0-9\-]/', '-', $str);
+        $str = preg_replace('/-+/', '-', $str);
+        return trim($str, '-');
     }
 
-    /**
-     * Enhanced date filter with format parameter
-     */
-    private function filterDate(mixed $value, string $format = 'Y-m-d'): string
+    private function filterCurrency(mixed $value, string $currency): string
     {
-        if (!is_string($value)) {
-            return (string)$value;
-        }
-
-        // Cache parsed timestamps to avoid repeated strtotime() calls
-        static $timestampCache = [];
-
-        $cacheKey = $value;
-        if (!isset($timestampCache[$cacheKey])) {
-            $timestamp = strtotime($value);
-            if ($timestamp === false) {
-                return $value; // Return original if parsing fails
-            }
-            $timestampCache[$cacheKey] = $timestamp;
-
-            // Prevent cache from growing too large
-            if (count($timestampCache) > 100) {
-                $timestampCache = array_slice($timestampCache, -50, null, true);
-            }
-        }
-
-        return date($format, $timestampCache[$cacheKey]);
+        $amount = number_format((float)$value, 2, ',', '.');
+        return match ($currency) {
+            'EUR' => $amount . ' €',
+            'USD' => '$' . $amount,
+            'GBP' => '£' . $amount,
+            default => $amount . ' ' . $currency
+        };
     }
 
-    /**
-     * Enhanced number format with parameters
-     */
-    private function filterNumberFormat(mixed $value, array $params = []): string
+    private function filterRating(mixed $value): string
     {
-        if (!is_numeric($value)) {
-            return (string)$value;
-        }
-
-        // Pre-validate and set defaults to avoid repeated array access
-        $decimals = isset($params[0]) ? (int)$params[0] : 0;
-        $decimalSep = $params[1] ?? '.';
-        $thousandsSep = $params[2] ?? ',';
-
-        return number_format((float)$value, $decimals, $decimalSep, $thousandsSep);
-    }
-
-    /**
-     * Enhanced default filter with parameter
-     */
-    private function filterDefault(mixed $value, string $default = 'N/A'): mixed
-    {
-        // Fast empty check - avoid complex empty() logic when possible
-        if ($value === null || $value === '' || $value === []) {
-            return $default;
-        }
-
-        // For other cases, use standard empty check
-        return empty($value) ? $default : $value;
-    }
-
-    /**
-     * Truncate filter - limit string length
-     */
-    private function filterTruncate(mixed $value, int $length): string
-    {
-        if (!is_string($value)) {
-            $value = (string)$value;
-        }
-
-        // Fast path: if string is already short enough
-        if (mb_strlen($value) <= $length) {
-            return $value;
-        }
-
-        return mb_substr($value, 0, $length) . '...';
-    }
-
-    /**
-     * Currency filter - format money values
-     */
-    private function filterCurrency(mixed $value, string $symbol = '€', string $position = 'right'): string
-    {
-        if (!is_numeric($value)) {
-            return (string)$value;
-        }
-
-        // Cache decoded symbols to avoid repeated html_entity_decode calls
-        static $symbolCache = [];
-
-        if (!isset($symbolCache[$symbol])) {
-            $symbolCache[$symbol] = html_entity_decode($symbol, ENT_QUOTES, 'UTF-8');
-
-            // Prevent cache from growing indefinitely
-            if (count($symbolCache) > 20) {
-                $symbolCache = array_slice($symbolCache, -10, null, true);
-            }
-        }
-
-        $decodedSymbol = $symbolCache[$symbol];
-        $formatted = number_format((float)$value, 2, ',', '.');
-
-        return $position === 'left'
-            ? $decodedSymbol . ' ' . $formatted
-            : $formatted . ' ' . $decodedSymbol;
-    }
-
-    /**
-     * Rating filter - format rating with stars or numbers
-     */
-    private function filterRating(mixed $value, int $maxRating = 10): string
-    {
-        if (!is_numeric($value)) {
-            return (string)$value;
-        }
-
         $rating = (float)$value;
-        $percentage = min(100, ($rating / $maxRating) * 100); // Cap at 100%
-
-        // Avoid sprintf for better performance
-        return '<span class="rating" data-rating="' . number_format($rating, 1) .
-            '" data-percentage="' . round($percentage) . '">' .
-            number_format($rating, 1) . '/' . $maxRating . '</span>';
+        $stars = str_repeat('⭐', (int)$rating);
+        return $stars . ' (' . number_format($rating, 1) . '/10)';
     }
 
-    /**
-     * Plural filter - handle singular/plural forms
-     */
-    private function filterPlural(mixed $count, string $singular, string $plural): string
+    private function filterPlural(mixed $value, string $singular, string $plural): string
     {
-        $num = is_numeric($count) ? (int)$count : 0;
-
-        if ($num === 1) {
-            return $singular;
-        }
-
-        return $plural;
+        $count = is_numeric($value) ? (int)$value : $this->filterLength($value);
+        return $count === 1 ? $singular : $plural;
     }
 
-    /**
-     * Translation filter - translate using key
-     */
-    private function filterTranslate(mixed $value, array $params = []): string
+    private function filterTranslate(string $key, array $params = []): string
     {
-        $translator = $this->getTranslator();
-
-        if (!$translator) {
-            return (string)$value; // Fallback if no translator available
+        try {
+            $translator = \Framework\Core\ServiceRegistry::get(\Framework\Localization\Translator::class);
+            return $translator->translate($key, $params);
+        } catch (Throwable) {
+            return $key; // Fallback to key if translator not available
         }
-
-        $key = (string)$value;
-        $parameters = [];
-
-        // Handle parameters correctly
-        if (!empty($params)) {
-            $firstParam = $params[0];
-
-            // If it's a JSON string (object syntax), decode it
-            if (is_string($firstParam) && str_starts_with($firstParam, '{')) {
-                $decoded = json_decode($firstParam, true);
-                if ($decoded !== null) {
-                    $parameters = $decoded;
-                }
-            } elseif (is_array($firstParam)) {
-                $parameters = $firstParam;
-            }
-        }
-
-        return $translator->translate($key, $parameters);
     }
 
-    /**
-     * Get translator instance from ServiceRegistry
-     */
-    private function getTranslator(): ?\Framework\Localization\Translator
+    private function filterTranslatePlural(string $key, int $count, array $params = []): string
     {
-        static $translator = null;
-
-        if ($translator === null) {
-            try {
-                $translator = \Framework\Core\ServiceRegistry::get(\Framework\Localization\Translator::class);
-            } catch (\Throwable) {
-                $translator = false; // Cache the failure
-            }
+        try {
+            $translator = \Framework\Core\ServiceRegistry::get(\Framework\Localization\Translator::class);
+            return $translator->translatePlural($key, $count, $params);
+        } catch (Throwable) {
+            return $key; // Fallback to key if translator not available
         }
-
-        return $translator ?: null;
-    }
-
-    /**
-     * Get variable from data with dot notation support
-     */
-    public function get(string $key): mixed
-    {
-        return $this->data[$key] ?? null;
-    }
-
-    /**
-     * Translation plural filter - translate with pluralization
-     */
-    private function filterTranslatePlural(mixed $value, array $params = []): string
-    {
-        $translator = $this->getTranslator();
-
-        if (!$translator) {
-            return (string)$value; // Fallback if no translator available
-        }
-
-        $key = (string)$value;
-        $count = (int)($params[0] ?? 1);
-        $parameters = [];
-
-        // Handle second parameter (additional parameters)
-        if (isset($params[1])) {
-            $secondParam = $params[1];
-
-            if (is_string($secondParam) && str_starts_with($secondParam, '{')) {
-                $decoded = json_decode($secondParam, true);
-                if ($decoded !== null) {
-                    $parameters = $decoded;
-                }
-            } elseif (is_array($secondParam)) {
-                $parameters = $secondParam;
-            }
-        }
-
-        // Add count to parameters
-        $parameters['count'] = $count;
-
-        return $translator->translatePlural($key, $count, $parameters);
-    }
-
-
-    /**
-     * Include template with variable mapping
-     * ← VERBESSERT: Block-Vererbung auch hier
-     */
-    public function includeWith(string $template, string $variable, mixed $data): string
-    {
-        $templateData = array_merge($this->data, [$variable => $data]);
-
-        $childRenderer = new TemplateRenderer($this->engine, $templateData);
-        $childRenderer->setParentBlocks($this->blocks);
-
-        return $this->engine->renderWithRenderer($template, $childRenderer);
-    }
-
-    /**
-     * Get current locale (callable from templates)
-     */
-    public function getCurrentLocale(): string
-    {
-        $translator = $this->getTranslator();
-        return $translator?->getLocale() ?? 'de';
-    }
-
-    /**
-     * Get supported locales (callable from templates)
-     */
-    public function getSupportedLocales(): array
-    {
-        $translator = $this->getTranslator();
-        return $translator?->getSupportedLocales() ?? ['de', 'en', 'fr', 'es'];
-    }
-
-    /**
-     * Enhanced translate function with proper parameter handling
-     */
-    public function t(string $key, mixed $parameters = []): string
-    {
-        $translator = $this->getTranslator();
-
-        if (!$translator) {
-            return $key; // Fallback if no translator available
-        }
-
-        // Handle different parameter types
-        if (is_string($parameters)) {
-            // Try to decode JSON string
-            $decoded = json_decode($parameters, true);
-            $parameters = $decoded ?? [];
-        }
-
-        if (!is_array($parameters)) {
-            $parameters = [];
-        }
-
-        return $translator->translate($key, $parameters);
-    }
-
-    /**
-     * Enhanced translate plural function with proper parameter handling
-     */
-    public function tPlural(string $key, int $count, mixed $parameters = []): string
-    {
-        $translator = $this->getTranslator();
-
-        if (!$translator) {
-            return $key; // Fallback if no translator available
-        }
-
-        // Handle different parameter types
-        if (is_string($parameters)) {
-            // Try to decode JSON string
-            $decoded = json_decode($parameters, true);
-            $parameters = $decoded ?? [];
-        }
-
-        if (!is_array($parameters)) {
-            $parameters = [];
-        }
-
-        // Add count to parameters
-        $parameters['count'] = $count;
-
-        return $translator->translatePlural($key, $count, $parameters);
     }
 }

@@ -179,8 +179,17 @@ class Response
         array      $headers = []
     ): self
     {
-        $viewRenderer = \Framework\Core\ServiceRegistry::get(\Framework\Templating\ViewRenderer::class);
-        return $viewRenderer->render($template, $data, $status, $headers);
+        try {
+            $viewRenderer = \Framework\Core\ServiceRegistry::get(\Framework\Templating\ViewRenderer::class);
+            return $viewRenderer->render($template, $data, $status, $headers);
+        } catch (\Throwable $e) {
+            // Fallback: Use TemplateEngine directly
+            $engine = \Framework\Core\ServiceRegistry::get(\Framework\Templating\TemplateEngine::class);
+            $content = $engine->render($template, $data);
+
+            $headers['Content-Type'] = 'text/html; charset=UTF-8';
+            return new self($status, $headers, $content);
+        }
     }
 
     /**

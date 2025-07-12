@@ -3,9 +3,16 @@ declare(strict_types=1);
 
 namespace Framework\Templating\Compiler;
 
+use Framework\Templating\Parser\TemplateInheritanceParser;
 use Framework\Templating\Parser\TemplateParser;
 use RuntimeException;
 
+/**
+ * Template Compiler - Clean implementation without templatePath dependency
+ *
+ * The templatePath is provided at compile-time, not construction-time.
+ * This allows proper dependency injection while maintaining inheritance support.
+ */
 class TemplateCompiler
 {
     private const string TEMPLATE_HEADER = <<<'PHP'
@@ -19,92 +26,81 @@ if (!isset($renderer)) {
 
 PHP;
 
-    private ?string $extendsTemplate = null;
-    private array $blocks = [];
-
     public function __construct(
         private readonly TemplateParser $parser
-    )
-    {
+    ) {
     }
 
+    /**
+     * Compile template with full inheritance support
+     */
     public function compile(string $content, string $templatePath = ''): string
     {
-        // Reset state for each compilation
-        $this->extendsTemplate = null;
-        $this->blocks = [];
-
-        $ast = $this->parser->parse($content);
-
-        // Extract extends and blocks first
-        $this->extractExtendsAndBlocks($ast);
-
         $header = sprintf(
             self::TEMPLATE_HEADER,
             $templatePath,
             date('Y-m-d H:i:s')
         );
 
-        // If this template extends another, compile differently
-        if ($this->extendsTemplate !== null) {
-            return $header . $this->compileExtendingTemplate($ast);
+        // Use inheritance parser if template contains extends
+        if ($this->hasInheritance($content)) {
+            // Extract base path from template path for inheritance resolution
+            $basePath = $templatePath ? dirname($templatePath) : '';
+            $inheritanceParser = new TemplateInheritanceParser($this->parser, $basePath);
+            $ast = $inheritanceParser->parseWithInheritance($content, $templatePath);
+        } else {
+            // Simple template without inheritance
+            $ast = $this->parser->parse($content);
         }
 
-        $body = $this->compileNodes($ast);
+        // Clean AST from any remaining inheritance artifacts
+        $cleanAst = $this->cleanInheritanceArtifacts($ast);
+
+        $body = $this->compileNodes($cleanAst);
         return $header . $body;
     }
 
-    private function extractExtendsAndBlocks(array $nodes): void
+    /**
+     * Check if template uses inheritance
+     */
+    private function hasInheritance(string $content): bool
     {
+        return str_contains($content, '{% extends') || str_contains($content, '{%extends');
+    }
+
+    /**
+     * Remove any remaining inheritance artifacts from AST
+     */
+    private function cleanInheritanceArtifacts(array $nodes): array
+    {
+        $cleaned = [];
+
         foreach ($nodes as $node) {
-            if ($node['type'] === 'extends') {
-                $this->extendsTemplate = $node['template'];
-            } elseif ($node['type'] === 'block') {
-                $this->blocks[$node['name']] = $node;
-            }
-        }
-    }
-
-    private function compileExtendingTemplate(array $nodes): string
-    {
-        $code = '';
-
-        // 1. Child-Blocks als Closures definieren BEVOR Parent-Include
-        $code .= "\$_childBlocks = [];\n";
-
-        // Define child blocks as closures with proper scope
-        foreach ($this->blocks as $blockName => $block) {
-            // FIX: Null Safety für block body
-            $blockBody = $block['body'] ?? $block['content'] ?? [];
-
-            if (!is_array($blockBody)) {
-                $blockBody = [];
+            // Skip inheritance-related nodes
+            if (in_array($node['type'] ?? '', ['extends', 'block', 'endblock', 'closing_tag'])) {
+                continue;
             }
 
-            $blockCode = $this->compileNodes($blockBody);
-            $code .= "\$_childBlocks['{$blockName}'] = function() use (\$renderer) {\n";
-            $code .= "ob_start();\n";
-            $code .= "try {\n";
-            $code .= $blockCode;
-            $code .= "return ob_get_clean();\n";
-            $code .= "} catch (\\Throwable \$e) {\n";
-            $code .= "ob_end_clean();\n";
-            $code .= "throw \$e;\n";
-            $code .= "}\n";
-            $code .= "};\n";
+            // Recursively clean nested structures
+            if (isset($node['body']) && is_array($node['body'])) {
+                $node['body'] = $this->cleanInheritanceArtifacts($node['body']);
+            }
+            if (isset($node['else']) && is_array($node['else'])) {
+                $node['else'] = $this->cleanInheritanceArtifacts($node['else']);
+            }
+            if (isset($node['content']) && is_array($node['content'])) {
+                $node['content'] = $this->cleanInheritanceArtifacts($node['content']);
+            }
+
+            $cleaned[] = $node;
         }
 
-        // 2. Blocks in renderer setzen BEVOR Parent-Template geladen wird
-        $code .= "if (!empty(\$_childBlocks)) {\n";
-        $code .= "\$renderer->setBlocks(\$_childBlocks);\n";
-        $code .= "}\n";
-
-        // 3. Parent-Template includen - sieht jetzt die Child-Blocks
-        $code .= "echo \$renderer->include('{$this->extendsTemplate}');\n";
-
-        return $code;
+        return $cleaned;
     }
 
+    /**
+     * Compile AST nodes to PHP code
+     */
     private function compileNodes(array $nodes): string
     {
         $code = '';
@@ -116,27 +112,34 @@ PHP;
         return $code;
     }
 
+    /**
+     * Compile single AST node
+     */
     private function compileNode(array $node): string
     {
+        // Defensive programming: ensure type exists
+        if (!isset($node['type'])) {
+            return ''; // Skip malformed nodes
+        }
+
         return match ($node['type']) {
             'text' => $this->compileText($node),
             'variable' => $this->compileVariable($node),
             'literal' => $this->compileLiteral($node),
-            // 'function' => REMOVED - No longer supported!
-            'extends' => $this->compileExtends($node),
-            'block' => $this->compileBlock($node),
             'if' => $this->compileIf($node),
             'for' => $this->compileFor($node),
             'include' => $this->compileInclude($node),
+            // Inheritance artifacts should be cleaned by now, but defensive handling
+            'extends', 'block', 'endblock', 'closing_tag' => '',
             default => throw new RuntimeException("Unknown node type: {$node['type']}")
         };
     }
 
     private function compileText(array $node): string
     {
-        $content = $node['content'];
+        $content = $node['content'] ?? '';
 
-        // Use strtr() instead of str_replace() - up to 4x faster for multiple replacements
+        // Fast escape using strtr
         $escaped = strtr($content, [
             '\\' => '\\\\',
             '"' => '\\"',
@@ -156,10 +159,9 @@ PHP;
 
     private function compileVariableAccess(array $node): string
     {
-
         // Handle literal values
-        if ($node['type'] === 'literal') {
-            $value = $node['value'];
+        if (($node['type'] ?? '') === 'literal') {
+            $value = $node['value'] ?? '';
             $code = "'" . str_replace("'", "\\'", $value) . "'";
 
             // Apply filters if present
@@ -180,16 +182,8 @@ PHP;
             return $code;
         }
 
-        $name = $node['name'];
+        $name = $node['name'] ?? '';
         $path = $node['path'] ?? [];
-        $isDynamicKey = $node['is_dynamic_key'] ?? false;
-
-        // If name contains quotes or template syntax, treat as literal
-        if (str_contains($name, '"') || str_contains($name, "'") || str_contains($name, '{{')) {
-            // This is a malformed variable, return as escaped string
-            $cleaned = str_replace(['{{', '}}', '"', "'"], '', $name);
-            return "'" . addslashes($cleaned) . "'";
-        }
 
         // For simple variables without path
         if (empty($path)) {
@@ -198,11 +192,8 @@ PHP;
             // For nested accesses
             $code = "\$renderer->get('{$name}')";
 
-            foreach ($path as $index => $property) {
-                if ($isDynamicKey && $index === count($path) - 1) {
-                    // Last element is dynamic (from variable)
-                    $code = "is_array({$code}) ? ({$code})[\$renderer->get('{$property}')] ?? null : null";
-                } elseif (is_numeric($property)) {
+            foreach ($path as $property) {
+                if (is_numeric($property)) {
                     $code = "is_array({$code}) ? ({$code})[{$property}] ?? null : null";
                 } else {
                     $code = "is_array({$code}) ? ({$code})['{$property}'] ?? null : null";
@@ -219,25 +210,7 @@ PHP;
                 if (empty($params)) {
                     $code = "\$renderer->applyFilter('{$filterName}', {$code})";
                 } else {
-                    // FIX: Better parameter handling for complex objects
-                    $cleanParams = [];
-                    foreach ($params as $param) {
-                        if (is_string($param)) {
-                            // Check if it's a JSON-like object syntax
-                            if (preg_match('/^\{.*\}$/', trim($param))) {
-                                // Convert {key: 'value'} to proper JSON
-                                $jsonParam = preg_replace('/(\w+):\s*/', '"$1": ', $param);
-                                $jsonParam = preg_replace("/'/", '"', $jsonParam);
-                                $cleanParams[] = $jsonParam;
-                            } else {
-                                $cleanParams[] = str_replace(['\\\'', '\\"', '\\\\'], ["'", '"', '\\'], trim($param, '\'"'));
-                            }
-                        } else {
-                            $cleanParams[] = $param;
-                        }
-                    }
-
-                    $paramsJson = json_encode($cleanParams, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                    $paramsJson = json_encode($params, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
                     $code = "\$renderer->applyFilter('{$filterName}', {$code}, {$paramsJson})";
                 }
             }
@@ -246,13 +219,11 @@ PHP;
         return $code;
     }
 
-
     private function compileLiteral(array $node): string
     {
-        $value = $node['value'];
+        $value = $node['value'] ?? '';
         $filters = $node['filters'] ?? [];
 
-        // Start with literal string
         $code = "'" . str_replace("'", "\\'", $value) . "'";
 
         // Apply filters if present
@@ -280,52 +251,16 @@ PHP;
         return "echo \$renderer->escape({$code});\n";
     }
 
-    private function compileExtends(array $node): string
-    {
-        // Extends is handled in extractExtendsAndBlocks, return empty string
-        return '';
-    }
-
-    private function compileBlock(array $node): string
-    {
-        $blockName = $node['name'];
-
-        // In extending templates, blocks are handled differently
-        if ($this->extendsTemplate !== null) {
-            return ''; // Blocks in extending templates are handled in compileExtendingTemplate
-        }
-
-        // FIX: Null Safety für block body/content
-        $blockBody = $node['body'] ?? $node['content'] ?? [];
-
-        if (!is_array($blockBody)) {
-            $blockBody = [];
-        }
-
-        // In base templates, render block with potential child override
-        $code = "// Block: {$blockName}\n";
-        $code .= "if (\$renderer->hasBlock('{$blockName}')) {\n";
-        $code .= "echo \$renderer->renderBlock('{$blockName}');\n";
-        $code .= "} else {\n";
-        $code .= "// Default block content\n";
-        $code .= $this->compileNodes($blockBody);
-        $code .= "}\n";
-
-        return $code;
-    }
-
     private function compileIf(array $node): string
     {
-        $condition = $this->compileCondition($node['condition']);
+        $condition = $this->compileCondition($node['condition'] ?? []);
 
-        // FIX: Null Safety für if body/content
         $ifBody = $node['body'] ?? $node['content'] ?? [];
         if (!is_array($ifBody)) {
             $ifBody = [];
         }
 
         $body = $this->compileNodes($ifBody);
-
         $code = "if ({$condition}) {\n{$body}";
 
         if (!empty($node['else'])) {
@@ -341,10 +276,12 @@ PHP;
 
     private function compileCondition(array $condition): string
     {
-        return match ($condition['type']) {
-            'variable' => $this->compileVariableCondition($condition['expression']),
+        $type = $condition['type'] ?? 'variable';
+
+        return match ($type) {
+            'variable' => $this->compileVariableCondition($condition['expression'] ?? []),
             'comparison' => $this->compileComparison($condition),
-            default => throw new RuntimeException("Unknown condition type: {$condition['type']}")
+            default => throw new RuntimeException("Unknown condition type: {$type}")
         };
     }
 
@@ -356,21 +293,20 @@ PHP;
 
     private function compileComparison(array $condition): string
     {
-        $left = $this->compileVariableAccess($condition['left']);
-        $operator = $condition['operator'];
-        $right = is_string($condition['right'])
+        $left = $this->compileVariableAccess($condition['left'] ?? []);
+        $operator = $condition['operator'] ?? '==';
+        $right = is_string($condition['right'] ?? '')
             ? "'" . str_replace("'", "\\'", $condition['right']) . "'"
-            : $condition['right'];
+            : ($condition['right'] ?? 'null');
 
         return "({$left}) {$operator} {$right}";
     }
 
     private function compileFor(array $node): string
     {
-        $array = $node['array'];
-        $item = $node['item'];
+        $array = $node['array'] ?? '';
+        $item = $node['item'] ?? '';
 
-        // FIX: Null Safety für for body/content
         $forBody = $node['body'] ?? $node['content'] ?? [];
         if (!is_array($forBody)) {
             $forBody = [];
@@ -405,7 +341,7 @@ PHP;
 
     private function compileInclude(array $node): string
     {
-        $template = $node['template'];
+        $template = $node['template'] ?? '';
 
         if (isset($node['data_source']) && isset($node['variable'])) {
             // Include with data mapping
@@ -414,8 +350,7 @@ PHP;
                 'path' => array_slice(explode('.', $node['data_source']), 1)
             ]);
 
-            $code = "echo \$renderer->includeWith('{$template}', '{$node['variable']}', {$dataSource});\n";
-            return $code;
+            return "echo \$renderer->includeWith('{$template}', '{$node['variable']}', {$dataSource});\n";
         }
 
         // Simple include

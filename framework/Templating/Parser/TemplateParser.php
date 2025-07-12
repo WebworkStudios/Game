@@ -117,7 +117,12 @@ class TemplateParser
 
                 case TokenType::BLOCK:
                     $blockResult = $this->parseBlock($token->getValue(), $tokens, $i);
-                    $ast[] = $blockResult['node'];
+
+                    // FIX: Filter out closing_tag nodes - they shouldn't be in the final AST
+                    if ($blockResult['node']['type'] !== 'closing_tag') {
+                        $ast[] = $blockResult['node'];
+                    }
+
                     $i = $blockResult['nextIndex'] - 1; // -1 because loop will increment
                     break;
             }
@@ -759,11 +764,6 @@ class TemplateParser
     /**
      * Parse IF block body - FIXED VERSION for nested conditions
      */
-// framework/Templating/Parser/TemplateParser.php
-
-    /**
-     * Parse IF block body - COMPLETELY REWRITTEN
-     */
     private function parseIfBlockBody(array $tokens, int $startIndex): array
     {
         $body = [];
@@ -780,17 +780,17 @@ class TemplateParser
                 $expression = trim($token->getValue());
                 $command = explode(' ', $expression)[0];
 
-                // Handle our own control flow
+                // Handle nested if statements properly
                 if ($command === 'if') {
                     $depth++;
                 } elseif ($command === 'endif') {
                     $depth--;
                     if ($depth === 0) {
-                        // Found our matching endif
+                        // Found our matching endif - exit the loop
                         break;
                     }
                 } elseif ($command === 'else' && $depth === 1) {
-                    // Our own else clause
+                    // Only handle 'else' if it belongs to our current if (depth === 1)
                     $inElse = true;
                     $i++;
                     continue;
@@ -820,12 +820,14 @@ class TemplateParser
                             }
                         }
                     } else {
-                        // Unknown block command - treat as text
-                        $textNode = ['type' => 'text', 'content' => '{%' . $expression . '%}'];
-                        if ($inElse) {
-                            $elseBody[] = $textNode;
-                        } else {
-                            $body[] = $textNode;
+                        // Unknown block command or endif/else - treat as text if not handled above
+                        if (!in_array($command, ['endif', 'else'])) {
+                            $textNode = ['type' => 'text', 'content' => '{%' . $expression . '%}'];
+                            if ($inElse) {
+                                $elseBody[] = $textNode;
+                            } else {
+                                $body[] = $textNode;
+                            }
                         }
                     }
                 }
@@ -850,6 +852,7 @@ class TemplateParser
 
         return [$body, $elseBody, $i];
     }
+
     /**
      * Parse condition - OPTIMIZED for simple cases
      */

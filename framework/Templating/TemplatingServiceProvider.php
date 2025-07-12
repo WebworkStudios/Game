@@ -7,6 +7,7 @@ use Framework\Core\Application;
 use Framework\Core\ServiceContainer;
 use Framework\Templating\Cache\TemplateCache;
 use Framework\Templating\Compiler\TemplateCompiler;
+use Framework\Templating\Compiler\TemplateCompilerFactory;
 use Framework\Templating\Parser\TemplateParser;
 use InvalidArgumentException;
 
@@ -73,18 +74,15 @@ PHP;
         return file_put_contents($configPath, $content) !== false;
     }
 
-    /**
-     * Registriert alle Templating Services
-     */
     public function register(): void
     {
         $this->registerParser();
         $this->registerCompiler();
         $this->registerCache();
         $this->registerEngine();
+        $this->registerViewRenderer();
         $this->bindInterfaces();
     }
-
     /**
      * Registriert Template Parser
      */
@@ -94,6 +92,16 @@ PHP;
             return new TemplateParser();
         });
     }
+
+    private function registerViewRenderer(): void
+    {
+        $this->container->singleton(ViewRenderer::class, function (ServiceContainer $container) {
+            return new ViewRenderer(
+                engine: $container->get(TemplateEngine::class)
+            );
+        });
+    }
+
 
     /**
      * Registriert Template Compiler
@@ -106,6 +114,7 @@ PHP;
             );
         });
     }
+
 
     /**
      * Registriert Template Cache
@@ -154,7 +163,7 @@ PHP;
 
             $engine = new TemplateEngine(
                 cache: $container->get(TemplateCache::class),
-                defaultPath: '' // Wird über addPath() gesetzt
+                defaultPath: ''
             );
 
             // Add template paths
@@ -163,10 +172,8 @@ PHP;
                 $engine->addPath($fullPath, $namespace);
             }
 
-            // Add global variables ONLY
-            foreach ($config['globals'] as $name => $value) {
-                $engine->addGlobal($name, $value);
-            }
+            // Add global variables
+            $engine->addGlobals($config['globals']);
 
             return $engine;
         });

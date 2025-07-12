@@ -151,6 +151,12 @@ class Application
                 cache: $container->get(RouterCache::class)
             );
         });
+
+        $this->container->singleton(\Framework\Templating\ViewRenderer::class, function (ServiceContainer $container) {
+            return new \Framework\Templating\ViewRenderer(
+                engine: $container->get(\Framework\Templating\TemplateEngine::class)
+            );
+        });
     }
 
     /**
