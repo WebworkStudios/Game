@@ -7,7 +7,7 @@ namespace Framework\Templating;
 use RuntimeException;
 
 /**
- * Template Engine - Twig-ähnliche Syntax mit Variables, Controls, Inheritance, Filtern und Caching
+ * Template Engine - Twig-ähnliche Syntax mit Variables, Controls, Inheritance, Filtern, Caching und Fragment-Support
  */
 class TemplateEngine
 {
@@ -105,6 +105,38 @@ class TemplateEngine
     }
 
     /**
+     * Render template with optional caching
+     */
+    public function renderCached(string $template, array $data = [], int $ttl = 0, array $tags = []): string
+    {
+        if ($ttl <= 0) {
+            return $this->render($template, $data);
+        }
+
+        // Create cache key from template and data
+        $cacheKey = 'template_' . md5($template . serialize($data));
+
+        // Try to get from fragment cache
+        if ($cached = $this->cache->getFragment($cacheKey)) {
+            return $cached;
+        }
+
+        // Render and cache
+        $content = $this->render($template, $data);
+        $this->cache->storeFragment($cacheKey, $content, $ttl, $tags);
+
+        return $content;
+    }
+
+    /**
+     * Render widget/component with caching
+     */
+    public function renderWidget(string $template, array $data = [], int $ttl = 300, array $tags = []): string
+    {
+        return $this->renderCached($template, $data, $ttl, $tags);
+    }
+
+    /**
      * Render from compiled structure
      */
     private function renderCompiled(array $compiled): string
@@ -123,6 +155,32 @@ class TemplateEngine
             error_log("Rendering without inheritance");
             return $this->renderParsed($tokens);
         }
+    }
+
+    /**
+     * Parse cache directives from template
+     */
+    private function parseCacheDirectives(array $tokens): array
+    {
+        $directives = ['ttl' => 0, 'tags' => []];
+
+        foreach ($tokens as $token) {
+            if ($token['type'] === 'control') {
+                $control = $token['content'] ?? '';
+
+                // Parse {% cache ttl:300 tags:player,team %}
+                if (str_starts_with($control, 'cache ')) {
+                    if (preg_match('/ttl:(\d+)/', $control, $matches)) {
+                        $directives['ttl'] = (int)$matches[1];
+                    }
+                    if (preg_match('/tags:([a-zA-Z0-9,_-]+)/', $control, $matches)) {
+                        $directives['tags'] = array_map('trim', explode(',', $matches[1]));
+                    }
+                }
+            }
+        }
+
+        return $directives;
     }
 
     /**
