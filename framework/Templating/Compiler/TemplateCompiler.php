@@ -31,6 +31,8 @@ PHP;
     ) {
     }
 
+// framework/Templating/Compiler/TemplateCompiler.php
+
     /**
      * Compile template with full inheritance support
      */
@@ -44,9 +46,9 @@ PHP;
 
         // Use inheritance parser if template contains extends
         if ($this->hasInheritance($content)) {
-            // Extract base path from template path for inheritance resolution
-            $basePath = $templatePath ? dirname($templatePath) : '';
-            $inheritanceParser = new TemplateInheritanceParser($this->parser, $basePath);
+            // Extract template root path correctly
+            $templateRoot = $this->getTemplateRoot($templatePath);
+            $inheritanceParser = new TemplateInheritanceParser($this->parser, $templateRoot);
             $ast = $inheritanceParser->parseWithInheritance($content, $templatePath);
         } else {
             // Simple template without inheritance
@@ -58,6 +60,27 @@ PHP;
 
         $body = $this->compileNodes($cleanAst);
         return $header . $body;
+    }
+
+    /**
+     * Extract template root from absolute template path
+     */
+    private function getTemplateRoot(string $templatePath): string
+    {
+        if (empty($templatePath)) {
+            return '';
+        }
+
+        // Find the Views directory in the path and return it
+        if (str_contains($templatePath, '/Views/') || str_contains($templatePath, '\\Views\\')) {
+            $pattern = '/^(.+[\/\\\\]Views)[\/\\\\].+$/';
+            if (preg_match($pattern, $templatePath, $matches)) {
+                return $matches[1];
+            }
+        }
+
+        // Fallback: assume it's in the same directory structure
+        return dirname($templatePath);
     }
 
     /**

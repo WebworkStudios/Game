@@ -229,6 +229,8 @@ class TemplateInheritanceParser
         return $content;
     }
 
+    // framework/Templating/Parser/TemplateInheritanceParser.php
+
     /**
      * Load template content from file
      */
@@ -238,7 +240,13 @@ class TemplateInheritanceParser
             return $this->templateCache[$templatePath];
         }
 
-        $fullPath = $this->templatePath . '/' . $templatePath;
+        // Check if templatePath is already absolute
+        if ($this->isAbsolutePath($templatePath)) {
+            $fullPath = $templatePath;
+        } else {
+            // For relative paths like "layouts/base.html", use template root
+            $fullPath = $this->templatePath . '/' . $templatePath;
+        }
 
         if (!file_exists($fullPath)) {
             throw new \RuntimeException("Template not found: {$fullPath}");
@@ -251,5 +259,37 @@ class TemplateInheritanceParser
 
         $this->templateCache[$templatePath] = $content;
         return $content;
+    }
+
+    /**
+     * Check if path is absolute
+     */
+    private function isAbsolutePath(string $path): bool
+    {
+        return str_starts_with($path, '/') ||
+            (strlen($path) > 1 && $path[1] === ':'); // Windows drive letter
+    }
+
+
+    /**
+     * Get template root directory from template path
+     */
+    private function getTemplateRoot(): string
+    {
+        // If templatePath is already a root directory, use it
+        if (is_dir($this->templatePath)) {
+            return $this->templatePath;
+        }
+
+        // Extract root from absolute path
+        if (str_contains($this->templatePath, '/Views/') || str_contains($this->templatePath, '\\Views\\')) {
+            $pattern = '/^(.+[\/\\\\]Views)[\/\\\\].+$/';
+            if (preg_match($pattern, $this->templatePath, $matches)) {
+                return $matches[1];
+            }
+        }
+
+        // Fallback: use directory of current template
+        return dirname($this->templatePath);
     }
 }

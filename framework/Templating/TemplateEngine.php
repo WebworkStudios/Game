@@ -77,6 +77,8 @@ class TemplateEngine
         $this->globals[$name] = $value;
     }
 
+
+
     /**
      * Add multiple global variables
      */
