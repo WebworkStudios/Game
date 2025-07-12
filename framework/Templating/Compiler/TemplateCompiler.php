@@ -156,6 +156,7 @@ PHP;
 
     private function compileVariableAccess(array $node): string
     {
+
         // Handle literal values
         if ($node['type'] === 'literal') {
             $value = $node['value'];
@@ -218,12 +219,23 @@ PHP;
                 if (empty($params)) {
                     $code = "\$renderer->applyFilter('{$filterName}', {$code})";
                 } else {
-                    $cleanParams = array_map(function ($param) {
+                    // FIX: Better parameter handling for complex objects
+                    $cleanParams = [];
+                    foreach ($params as $param) {
                         if (is_string($param)) {
-                            return str_replace(['\\\'', '\\"', '\\\\'], ["'", '"', '\\'], trim($param, '\'"'));
+                            // Check if it's a JSON-like object syntax
+                            if (preg_match('/^\{.*\}$/', trim($param))) {
+                                // Convert {key: 'value'} to proper JSON
+                                $jsonParam = preg_replace('/(\w+):\s*/', '"$1": ', $param);
+                                $jsonParam = preg_replace("/'/", '"', $jsonParam);
+                                $cleanParams[] = $jsonParam;
+                            } else {
+                                $cleanParams[] = str_replace(['\\\'', '\\"', '\\\\'], ["'", '"', '\\'], trim($param, '\'"'));
+                            }
+                        } else {
+                            $cleanParams[] = $param;
                         }
-                        return $param;
-                    }, $params);
+                    }
 
                     $paramsJson = json_encode($cleanParams, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
                     $code = "\$renderer->applyFilter('{$filterName}', {$code}, {$paramsJson})";
@@ -233,6 +245,7 @@ PHP;
 
         return $code;
     }
+
 
     private function compileLiteral(array $node): string
     {

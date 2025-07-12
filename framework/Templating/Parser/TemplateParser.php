@@ -28,7 +28,7 @@ class TemplateParser
         $position = 0;
         $length = strlen($content);
 
-        // Single regex pass instead of multiple strpos() calls
+        // IMPROVED: Better regex that handles quotes inside blocks
         $pattern = '/(\{\{.*?}}|\{%.*?%})/s';
         $parts = preg_split($pattern, $content, -1, PREG_SPLIT_DELIM_CAPTURE | PREG_SPLIT_NO_EMPTY);
 
@@ -41,7 +41,16 @@ class TemplateParser
             } elseif (str_starts_with($part, '{%') && str_ends_with($part, '%}')) {
                 // Block token
                 $expression = $this->cleanExpression(substr($part, 2, -2));
-                $tokens[] = new Token(TokenType::BLOCK, $expression, $currentPos, $currentPos + strlen($part));
+
+                // FIX: Validate block expression before creating token
+                if (!empty($expression) && !$this->isValidBlockExpression($expression)) {
+                    // Treat as text if it's not a valid block
+                    if ($part !== '') {
+                        $tokens[] = new Token(TokenType::TEXT, $part, $currentPos);
+                    }
+                } else {
+                    $tokens[] = new Token(TokenType::BLOCK, $expression, $currentPos, $currentPos + strlen($part));
+                }
             } else {
                 // Text token - only add if not empty
                 if ($part !== '') {
@@ -52,6 +61,24 @@ class TemplateParser
         }
 
         return $tokens;
+    }
+
+    /**
+     * Validate if expression is a valid block command
+     */
+    private function isValidBlockExpression(string $expression): bool
+    {
+        $trimmed = trim($expression);
+        if (empty($trimmed)) {
+            return false;
+        }
+
+        $firstWord = explode(' ', $trimmed)[0];
+
+        // Valid block commands
+        $validCommands = ['if', 'endif', 'else', 'for', 'endfor', 'block', 'endblock', 'extends', 'include'];
+
+        return in_array($firstWord, $validCommands, true);
     }
 
     /**
@@ -104,6 +131,11 @@ class TemplateParser
      */
     private function parseVariable(string $expression): array
     {
+        // Fast path for string literals - CHECK FIRST!
+        if ($this->isStringLiteral($expression)) {
+            return $this->parseStringLiteral($expression);
+        }
+
         // Fast path for simple variables (60% of cases)
         if (!str_contains($expression, '|') && !str_contains($expression, '(') && !str_contains($expression, '"') && !str_contains($expression, "'")) {
             return $this->parseSimpleVariable($expression);
@@ -154,7 +186,7 @@ class TemplateParser
     }
 
     /**
-     * Parse simple filter cases - OPTIMIZED
+     * Parse simple filter cases - FIXED VERSION
      */
     private function parseSimpleFilter(string $expression): array
     {
@@ -162,8 +194,12 @@ class TemplateParser
         $variablePart = substr($expression, 0, $pipePos);
         $filterPart = substr($expression, $pipePos + 1);
 
-        // Parse variable part
-        $variable = $this->parseSimpleVariable(trim($variablePart));
+        // WICHTIG: Check if variable part is string literal
+        if ($this->isStringLiteral(trim($variablePart))) {
+            $variable = $this->parseStringLiteral(trim($variablePart));
+        } else {
+            $variable = $this->parseSimpleVariable(trim($variablePart));
+        }
 
         // Parse single filter efficiently
         if (str_contains($filterPart, ':')) {
@@ -291,7 +327,7 @@ class TemplateParser
     }
 
     /**
-     * Parse filter parameters respecting quotes
+     * Parse filter parameters respecting quotes and object syntax
      */
     private function parseFilterParameters(string $paramString): array
     {
@@ -299,6 +335,7 @@ class TemplateParser
         $current = '';
         $inQuotes = false;
         $quoteChar = null;
+        $braceLevel = 0;
 
         for ($i = 0; $i < strlen($paramString); $i++) {
             $char = $paramString[$i];
@@ -306,17 +343,28 @@ class TemplateParser
             if (!$inQuotes && ($char === '"' || $char === "'")) {
                 $inQuotes = true;
                 $quoteChar = $char;
-                continue; // Skip the opening quote
+                $current .= $char; // Keep the quote for object syntax
+                continue;
             }
 
             if ($inQuotes && $char === $quoteChar) {
                 $inQuotes = false;
+                $current .= $char; // Keep the closing quote
                 $quoteChar = null;
-                continue; // Skip the closing quote
+                continue;
             }
 
-            if (!$inQuotes && $char === ':') {
-                // Parameter separator
+            // Handle braces for object syntax
+            if (!$inQuotes && $char === '{') {
+                $braceLevel++;
+            }
+
+            if (!$inQuotes && $char === '}') {
+                $braceLevel--;
+            }
+
+            if (!$inQuotes && $char === ':' && $braceLevel === 0) {
+                // Parameter separator (only when not inside object)
                 $param = trim($current);
                 if ($param !== '') {
                     $params[] = $this->convertParameter($param);
@@ -338,10 +386,27 @@ class TemplateParser
     }
 
     /**
-     * Convert parameter to appropriate type
+     * Convert parameter to appropriate type - ENHANCED
      */
     private function convertParameter(string $param): mixed
     {
+        $param = trim($param);
+
+        // Handle object syntax: {key: 'value', key2: 'value2'}
+        if (str_starts_with($param, '{') && str_ends_with($param, '}')) {
+            // Convert to proper JSON and return as string for later processing
+            $jsonParam = preg_replace('/(\w+):\s*/', '"$1": ', $param);
+            $jsonParam = preg_replace("/'/", '"', $jsonParam);
+            return $jsonParam;
+        }
+
+        // Handle quoted strings
+        if ((str_starts_with($param, '"') && str_ends_with($param, '"')) ||
+            (str_starts_with($param, "'") && str_ends_with($param, "'"))) {
+            return substr($param, 1, -1);
+        }
+
+        // Handle numbers
         if (is_numeric($param)) {
             return str_contains($param, '.') ? (float)$param : (int)$param;
         }
@@ -350,7 +415,7 @@ class TemplateParser
     }
 
     /**
-     * Check if expression is a string literal
+     * Check if expression is a string literal - IMPROVED
      */
     private function isStringLiteral(string $expression): bool
     {
@@ -522,15 +587,26 @@ class TemplateParser
     /**
      * Parse block - OPTIMIZED VERSION with proper closing tag handling
      */
+// framework/Templating/Parser/TemplateParser.php
+
     private function parseBlock(string $expression, array $tokens, int $currentIndex): array
     {
         $parts = explode(' ', trim($expression), 2);
         $command = $parts[0];
         $args = $parts[1] ?? '';
 
-        // Handle closing tags - these should not create nodes and cause errors
+        // Handle closing tags - DON'T throw exception, let parent handle them
         if (in_array($command, ['endif', 'endfor', 'endblock', 'else'])) {
-            throw new \RuntimeException("Unexpected closing tag: {$command}");
+            // Return a special marker that parent parsers can recognize
+            return [
+                'node' => ['type' => 'closing_tag', 'command' => $command],
+                'nextIndex' => $currentIndex + 1
+            ];
+        }
+
+        // FIX: Check if this looks like a malformed block (probably a parsing error)
+        if (strlen($command) <= 3 && !in_array($command, ['if', 'for'])) {
+            throw new \RuntimeException("Malformed template syntax near: {$expression}");
         }
 
         // Fast dispatch for common blocks
@@ -683,6 +759,11 @@ class TemplateParser
     /**
      * Parse IF block body - FIXED VERSION for nested conditions
      */
+// framework/Templating/Parser/TemplateParser.php
+
+    /**
+     * Parse IF block body - COMPLETELY REWRITTEN
+     */
     private function parseIfBlockBody(array $tokens, int $startIndex): array
     {
         $body = [];
@@ -699,65 +780,68 @@ class TemplateParser
                 $expression = trim($token->getValue());
                 $command = explode(' ', $expression)[0];
 
-                // Handle depth changes properly
+                // Handle our own control flow
                 if ($command === 'if') {
                     $depth++;
                 } elseif ($command === 'endif') {
                     $depth--;
-                    if ($depth === 0) break;
+                    if ($depth === 0) {
+                        // Found our matching endif
+                        break;
+                    }
                 } elseif ($command === 'else' && $depth === 1) {
+                    // Our own else clause
                     $inElse = true;
                     $i++;
                     continue;
                 }
-            }
 
-            // Parse token only if we're at the right depth
-            if ($depth > 0) {
-                // Handle nested blocks properly
-                if ($token->getType() === TokenType::BLOCK) {
-                    $expression = trim($token->getValue());
-                    $command = explode(' ', $expression)[0];
-
-                    // If it's a block command that needs parsing, parse it
+                // If we're still inside our block, process the token
+                if ($depth > 0) {
+                    // For nested control structures, parse them recursively
                     if (in_array($command, ['if', 'for', 'block', 'include'])) {
                         try {
-                            $node = $this->parseBlock($expression, $tokens, $i);
+                            $nestedResult = $this->parseBlock($expression, $tokens, $i);
 
                             if ($inElse) {
-                                $elseBody[] = $node['node'];
+                                $elseBody[] = $nestedResult['node'];
                             } else {
-                                $body[] = $node['node'];
+                                $body[] = $nestedResult['node'];
                             }
 
-                            $i = $node['nextIndex'] - 1;
+                            $i = $nestedResult['nextIndex'] - 1; // -1 because loop will increment
                         } catch (\RuntimeException $e) {
-                            // If it's a closing tag for nested block, skip it
-                            if (str_contains($e->getMessage(), 'Unexpected closing tag')) {
-                                // This closing tag belongs to a nested block, continue
+                            // If parseBlock fails, treat as text
+                            $textNode = ['type' => 'text', 'content' => '{%' . $expression . '%}'];
+                            if ($inElse) {
+                                $elseBody[] = $textNode;
                             } else {
-                                throw $e;
+                                $body[] = $textNode;
                             }
                         }
+                    } else {
+                        // Unknown block command - treat as text
+                        $textNode = ['type' => 'text', 'content' => '{%' . $expression . '%}'];
+                        if ($inElse) {
+                            $elseBody[] = $textNode;
+                        } else {
+                            $body[] = $textNode;
+                        }
                     }
-                    // Closing tags for nested blocks are handled by their respective parsers
-                } else {
-                    // Handle text and variable tokens normally
-                    $node = [
-                        'node' => match ($token->getType()) {
-                            TokenType::TEXT => ['type' => 'text', 'content' => $token->getValue()],
-                            TokenType::VARIABLE => $this->parseVariable($token->getValue()),
-                        },
-                        'nextIndex' => $i + 1
-                    ];
+                }
+            } else {
+                // Handle text and variable tokens
+                if ($depth > 0) {
+                    $node = match ($token->getType()) {
+                        TokenType::TEXT => ['type' => 'text', 'content' => $token->getValue()],
+                        TokenType::VARIABLE => $this->parseVariable($token->getValue()),
+                    };
 
                     if ($inElse) {
-                        $elseBody[] = $node['node'];
+                        $elseBody[] = $node;
                     } else {
-                        $body[] = $node['node'];
+                        $body[] = $node;
                     }
-
-                    $i = $node['nextIndex'] - 1;
                 }
             }
 
@@ -766,7 +850,6 @@ class TemplateParser
 
         return [$body, $elseBody, $i];
     }
-
     /**
      * Parse condition - OPTIMIZED for simple cases
      */

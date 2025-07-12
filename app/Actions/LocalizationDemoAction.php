@@ -20,24 +20,30 @@ class LocalizationDemoAction
 
     public function __invoke(Request $request): Response
     {
-        // Clear caches in debug mode
-        if ($this->app->isDebug()) {
-            $this->app->clearCaches();
-        }
-
-        // Handle language change
+        // Handle language change FIRST
         if ($request->isPost() && $request->input('change_language')) {
             $newLocale = $request->input('locale', 'de');
 
             try {
+                // Get language detector and set user locale in session
+                $detector = \Framework\Core\ServiceRegistry::get(\Framework\Localization\LanguageDetector::class);
+                $detector->setUserLocale($newLocale);
+
+                // Also update current translator instance
                 $translator = \Framework\Core\ServiceRegistry::get(\Framework\Localization\Translator::class);
                 $translator->setLocale($newLocale);
 
                 // Redirect to avoid POST resubmission
                 return Response::redirect('/test/localization');
-            } catch (\Throwable) {
-                // Translator not available, continue with demo
+            } catch (\Throwable $e) {
+                // Log error but continue with demo
+                error_log("Language change failed: " . $e->getMessage());
             }
+        }
+
+        // Clear caches in debug mode
+        if ($this->app->isDebug()) {
+            $this->app->clearCaches();
         }
 
         return Response::view('pages/test/localization', [
@@ -134,6 +140,15 @@ class LocalizationDemoAction
         ];
     }
 
+    private function getTranslator(): ?\Framework\Localization\Translator
+    {
+        try {
+            return \Framework\Core\ServiceRegistry::get(\Framework\Localization\Translator::class);
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
     private function getFallbackDemoData(): array
     {
         return [
@@ -177,14 +192,5 @@ class LocalizationDemoAction
             'loaded_namespaces' => count($translator->getSupportedLocales()),
             'cached_translations' => 'filter-optimized',
         ];
-    }
-
-    private function getTranslator(): ?\Framework\Localization\Translator
-    {
-        try {
-            return \Framework\Core\ServiceRegistry::get(\Framework\Localization\Translator::class);
-        } catch (\Throwable) {
-            return null;
-        }
     }
 }

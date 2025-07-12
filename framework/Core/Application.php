@@ -224,6 +224,8 @@ class Application
         // GLOBALE MIDDLEWARE REGISTRIEREN
         $this->router->addGlobalMiddleware(\Framework\Security\SessionMiddleware::class);
         $this->router->addGlobalMiddleware(\Framework\Security\CsrfMiddleware::class);
+        $this->router->addGlobalMiddleware(\Framework\Localization\LanguageMiddleware::class);
+
 
         // Standard 404 Handler
         $this->router->setNotFoundHandler(function (Request $request) {

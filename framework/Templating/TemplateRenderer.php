@@ -4,7 +4,6 @@ declare(strict_types=1);
 namespace Framework\Templating;
 
 use Countable;
-use Framework\Templating\Compiler\TemplateCompiler;
 use RuntimeException;
 use Throwable;
 
@@ -461,10 +460,21 @@ class TemplateRenderer
         }
 
         $key = (string)$value;
-        $parameters = $params[0] ?? [];
+        $parameters = [];
 
-        if (!is_array($parameters)) {
-            $parameters = [];
+        // Handle parameters correctly
+        if (!empty($params)) {
+            $firstParam = $params[0];
+
+            // If it's a JSON string (object syntax), decode it
+            if (is_string($firstParam) && str_starts_with($firstParam, '{')) {
+                $decoded = json_decode($firstParam, true);
+                if ($decoded !== null) {
+                    $parameters = $decoded;
+                }
+            } elseif (is_array($firstParam)) {
+                $parameters = $firstParam;
+            }
         }
 
         return $translator->translate($key, $parameters);
@@ -475,11 +485,17 @@ class TemplateRenderer
      */
     private function getTranslator(): ?\Framework\Localization\Translator
     {
-        try {
-            return \Framework\Core\ServiceRegistry::get(\Framework\Localization\Translator::class);
-        } catch (\Throwable) {
-            return null;
+        static $translator = null;
+
+        if ($translator === null) {
+            try {
+                $translator = \Framework\Core\ServiceRegistry::get(\Framework\Localization\Translator::class);
+            } catch (\Throwable) {
+                $translator = false; // Cache the failure
+            }
         }
+
+        return $translator ?: null;
     }
 
     /**
@@ -503,14 +519,28 @@ class TemplateRenderer
 
         $key = (string)$value;
         $count = (int)($params[0] ?? 1);
-        $parameters = $params[1] ?? [];
+        $parameters = [];
 
-        if (!is_array($parameters)) {
-            $parameters = [];
+        // Handle second parameter (additional parameters)
+        if (isset($params[1])) {
+            $secondParam = $params[1];
+
+            if (is_string($secondParam) && str_starts_with($secondParam, '{')) {
+                $decoded = json_decode($secondParam, true);
+                if ($decoded !== null) {
+                    $parameters = $decoded;
+                }
+            } elseif (is_array($secondParam)) {
+                $parameters = $secondParam;
+            }
         }
+
+        // Add count to parameters
+        $parameters['count'] = $count;
 
         return $translator->translatePlural($key, $count, $parameters);
     }
+
 
     /**
      * Include template with variable mapping

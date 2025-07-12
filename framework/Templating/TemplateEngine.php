@@ -41,6 +41,17 @@ class TemplateEngine
         $this->clearPathCache();
     }
 
+    /**
+     * Clear path cache - UNIFIED METHOD
+     */
+    public function clearPathCache(): void
+    {
+        $this->pathCache = [
+            'templates' => [],
+            'compiled' => [],
+        ];
+    }
+
     public function addGlobal(string $name, mixed $value): void
     {
         $this->globals[$name] = $value;
@@ -88,32 +99,6 @@ class TemplateEngine
         return $resolvedPath;
     }
 
-    /**
-     * Get compiled path with unified caching - NEW METHOD
-     */
-    private function getCompiledPath(string $templatePath): string
-    {
-        // Check compiled path cache
-        if (isset($this->pathCache['compiled'][$templatePath])) {
-            return $this->pathCache['compiled'][$templatePath];
-        }
-
-        // Get compiled path from TemplateCache
-        $compiledPath = $this->cache->get($templatePath);
-
-        // Cache the compiled path
-        $this->pathCache['compiled'][$templatePath] = $compiledPath;
-
-        // Prevent cache from growing too large
-        if (count($this->pathCache['compiled']) > 50) {
-            $this->pathCache['compiled'] = array_slice(
-                $this->pathCache['compiled'], -25, null, true
-            );
-        }
-
-        return $compiledPath;
-    }
-
     private function resolveTemplatePath(string $template): string
     {
         // Handle namespaced templates (@namespace/template.html)
@@ -144,6 +129,32 @@ class TemplateEngine
         }
 
         return $path;
+    }
+
+    /**
+     * Get compiled path with unified caching - NEW METHOD
+     */
+    private function getCompiledPath(string $templatePath): string
+    {
+        // Check compiled path cache
+        if (isset($this->pathCache['compiled'][$templatePath])) {
+            return $this->pathCache['compiled'][$templatePath];
+        }
+
+        // Get compiled path from TemplateCache
+        $compiledPath = $this->cache->get($templatePath);
+
+        // Cache the compiled path
+        $this->pathCache['compiled'][$templatePath] = $compiledPath;
+
+        // Prevent cache from growing too large
+        if (count($this->pathCache['compiled']) > 50) {
+            $this->pathCache['compiled'] = array_slice(
+                $this->pathCache['compiled'], -25, null, true
+            );
+        }
+
+        return $compiledPath;
     }
 
     private function executeTemplate(string $compiledPath, array $data): string
@@ -201,17 +212,6 @@ class TemplateEngine
     {
         $this->cache->clear();
         $this->clearPathCache();
-    }
-
-    /**
-     * Clear path cache - UNIFIED METHOD
-     */
-    public function clearPathCache(): void
-    {
-        $this->pathCache = [
-            'templates' => [],
-            'compiled' => [],
-        ];
     }
 
     /**

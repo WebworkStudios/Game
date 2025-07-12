@@ -30,6 +30,7 @@ class LocalizationServiceProvider
     {
         $this->registerTranslator();
         $this->registerLanguageDetector();
+        $this->registerMiddlewares();
         $this->bindInterfaces();
     }
 
@@ -413,6 +414,16 @@ PHP;
                 session: $container->get(Session::class),
                 supportedLocales: array_keys($config['supported_locales']),
                 defaultLocale: $config['default_locale']
+            );
+        });
+    }
+
+    private function registerMiddlewares(): void
+    {
+        $this->container->transient(LanguageMiddleware::class, function (ServiceContainer $container) {
+            return new LanguageMiddleware(
+                detector: $container->get(LanguageDetector::class),
+                translator: $container->get(Translator::class)
             );
         });
     }
