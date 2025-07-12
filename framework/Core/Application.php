@@ -47,9 +47,6 @@ class Application
         $this->bootstrap();
     }
 
-    /**
-     * Bootstrap der Anwendung
-     */
     private function bootstrap(): void
     {
         $this->setupEnvironment();
@@ -58,7 +55,7 @@ class Application
         $this->registerDatabaseServices();
         $this->registerSecurityServices();
         $this->registerValidationServices();
-        $this->registerLocalizationServices(); // ← NEU: Vor Templating
+        $this->registerLocalizationServices();
         $this->registerTemplatingServices();
         $this->setupRouter();
     }
@@ -220,6 +217,7 @@ class Application
         });
     }
 
+
     /**
      * Setup des Routers
      */
@@ -318,6 +316,7 @@ class Application
         return $this->container->get(TemplateEngine::class);
     }
 
+
     /**
      * Holt View Renderer
      */
@@ -325,7 +324,6 @@ class Application
     {
         return $this->container->get(ViewRenderer::class);
     }
-
     /**
      * Startet die Anwendung und verarbeitet Request
      */
@@ -646,8 +644,6 @@ class Application
     public function clearCaches(): void
     {
         if ($this->debug) {
-            // Clear template cache
-            $this->getTemplateEngine()->clearCompiledCache();
 
             // Clear route cache
             $this->getRouter()->clearCache();

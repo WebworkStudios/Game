@@ -1,0 +1,13 @@
+<!-- app/Views/components/navigation.html -->
+<nav class="nav">
+    <a href="/">Home</a>
+    {% if user.isAdmin %}
+    <a href="/admin">Admin Panel</a>
+    {% endif %}
+    <a href="/team">Team</a>
+    <a href="/matches">Matches</a>
+    <a href="/league">League</a>
+    {% if user %}
+    <a href="/profile">{{ user.name }}</a>
+    {% endif %}
+</nav>
