@@ -112,7 +112,8 @@ class TemplateEngine
         // Merge globals with data (data takes precedence)
         $mergedData = array_merge($this->globals, $data);
 
-        return $this->executeTemplate($compiledPath, $mergedData, $templatePath);
+        // Use original template name for debugging, not the resolved path
+        return $this->executeTemplate($compiledPath, $mergedData, $template);
     }
 
     /**
@@ -359,7 +360,7 @@ class TemplateEngine
             return $this->compiledPathCache[$templatePath];
         }
 
-        // Get compiled path from TemplateCache
+        // Get compiled path from TemplateCache - using template path directly
         $compiledPath = $this->cache->get($templatePath);
 
         // Cache the compiled path
@@ -378,15 +379,15 @@ class TemplateEngine
     /**
      * Execute compiled template with proper scope isolation
      */
-    private function executeTemplate(string $compiledPath, array $data, string $originalPath): string
+    private function executeTemplate(string $compiledPath, array $data, string $originalTemplateName): string
     {
         // Create renderer with template engine reference for includes
         $renderer = new TemplateRenderer($this, $data);
 
         ob_start();
         try {
-            // Provide template context for debugging
-            $_templatePath = $originalPath;
+            // Provide template context for debugging - use the original template name
+            $_templatePath = $originalTemplateName;
             $_parentBlocks = $_parentBlocks ?? [];
 
             // If parent blocks exist, pass them to renderer
@@ -400,9 +401,9 @@ class TemplateEngine
         } catch (Throwable $e) {
             ob_end_clean();
 
-            // Enhanced error reporting
+            // Enhanced error reporting - use original template name for clearer debugging
             throw new RuntimeException(
-                "Template execution failed in '{$originalPath}': {$e->getMessage()}\n" .
+                "Template execution failed in '{$originalTemplateName}': {$e->getMessage()}\n" .
                 "Compiled path: {$compiledPath}\n" .
                 "Error at line: {$e->getLine()}",
                 0,
