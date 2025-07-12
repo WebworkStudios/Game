@@ -11,10 +11,10 @@ use Framework\Http\Response;
 /**
  * View Renderer - Integriert Template Engine in Response System
  */
-class ViewRenderer
+readonly class ViewRenderer
 {
     public function __construct(
-        private readonly TemplateEngine $engine
+        private TemplateEngine $engine
     ) {}
 
     /**

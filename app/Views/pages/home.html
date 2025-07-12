@@ -3,157 +3,26 @@
 
 {% block title %}{{ welcome_message }} - {{ app_name }}{% endblock %}
 
-{% block styles %}
-.features {
-display: grid;
-grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-gap: 20px;
-margin: 40px 0;
-}
-.feature {
-background: rgba(102, 126, 234, 0.1);
-padding: 30px;
-border-radius: 15px;
-text-align: center;
-border: 1px solid rgba(102, 126, 234, 0.2);
-}
-.feature.inactive {
-opacity: 0.6;
-background: #f8f9fa;
-}
-.feature-icon {
-font-size: 3rem;
-margin-bottom: 15px;
-}
-.links {
-display: flex;
-gap: 15px;
-justify-content: center;
-flex-wrap: wrap;
-margin-top: 30px;
-}
-.link {
-background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-color: white;
-text-decoration: none;
-padding: 15px 25px;
-border-radius: 25px;
-font-weight: 500;
-transition: transform 0.3s ease;
-display: inline-block;
-}
-.link:hover {
-transform: translateY(-2px);
-}
-.stats-grid {
-display: grid;
-grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-gap: 20px;
-margin: 30px 0;
-}
-.stat-box {
-background: #f8f9fa;
-padding: 20px;
-border-radius: 10px;
-text-align: center;
-border: 2px solid #e9ecef;
-}
-.stat-number {
-font-size: 2em;
-font-weight: bold;
-color: #667eea;
-}
-{% endblock %}
-
 {% block content %}
-<!-- Welcome Section -->
-<div style="text-align: center; margin-bottom: 40px;">
-    <h1 style="font-size: 3rem; margin-bottom: 1rem;">
-        🚀 {{ welcome_message }}
-    </h1>
-    {% if user %}
-    <div class="alert alert-success">
-        Welcome back, <strong>{{ user.name }}</strong>!
-        {% if user.team %}
-        You are managing {{ user.team.name }} in {{ user.team.league }}.
-        {% endif %}
-    </div>
-    {% endif %}
-</div>
+<h1>🚀 {{ welcome_message }}</h1>
 
-<!-- Stats Section -->
-{% if stats %}
-<div class="stats-grid">
-    <div class="stat-box">
-        <div class="stat-number">{{ stats.total_players }}</div>
-        <div>Total Players</div>
-    </div>
-    <div class="stat-box">
-        <div class="stat-number">{{ stats.active_matches }}</div>
-        <div>Active Matches</div>
-    </div>
-    {% if stats.next_match %}
-    <div class="stat-box">
-        <div style="font-size: 1.2em; font-weight: bold;">Next Match</div>
-        <div>{{ stats.next_match }}</div>
-    </div>
+{% if user %}
+<div style="background: #e8f5e8; padding: 15px; border-radius: 5px; margin: 20px 0;">
+    <strong>Welcome {{ user.name }}!</strong>
+    {% if user.team %}
+    You are managing {{ user.team.name }} in {{ user.team.league }}.
     {% endif %}
 </div>
 {% endif %}
 
-<!-- Features Section with Loops and Conditions -->
-<h2>🎯 Framework Features</h2>
-<div class="features">
-    {% for feature in features %}
-    <div class="feature {% if feature.active %}{% else %}inactive{% endif %}">
-        <div class="feature-icon">{{ feature.icon }}</div>
-        <h3>{{ feature.title }}</h3>
-        <p>{{ feature.description }}</p>
-        {% if feature.active %}
-        <small style="color: green;">✅ Active</small>
-        {% else %}
-        <small style="color: #999;">⏳ Coming Soon</small>
-        {% endif %}
-    </div>
-    {% endfor %}
+<h2>Features:</h2>
+{% for feature in features %}
+<div style="margin: 15px 0; padding: 15px; background: #f5f5f5; border-radius: 5px;">
+    <h3>{{ feature.icon }} {{ feature.title }}</h3>
+    <p>{{ feature.description }}</p>
+    {% if feature.active %}
+    <small style="color: green;">✅ Active</small>
+    {% endif %}
 </div>
-
-<!-- Template Engine Demo Info -->
-<div class="alert alert-info">
-    <h3>🎨 Template Engine Demo</h3>
-    <p>This page demonstrates:</p>
-    <ul style="margin: 10px 0; padding-left: 20px;">
-        <li><strong>Variables:</strong> {{ user.name }}, {{ app_name }}</li>
-        <li><strong>Nested Variables:</strong> {{ user.team.name }}</li>
-        <li><strong>Conditionals:</strong> {% if user.isAdmin %}Admin menu shown{% endif %}</li>
-        <li><strong>Loops:</strong> {{ features|length }} features rendered</li>
-        <li><strong>Inheritance:</strong> Extends layouts/base.html</li>
-        <li><strong>Includes:</strong> Navigation component included</li>
-    </ul>
-</div>
-
-<!-- Quick Links -->
-{% if quick_links %}
-<h2>🔗 Quick Links</h2>
-<div class="links">
-    {% for link in quick_links %}
-    <a href="{{ link.url }}" class="link">{{ link.text }}</a>
-    {% endfor %}
-</div>
-{% endif %}
-
-<!-- User-specific content -->
-{% if user.isAdmin %}
-<div class="alert alert-info">
-    <strong>Admin Notice:</strong> You have administrative privileges.
-    <br>Email: {{ user.email }}
-</div>
-{% endif %}
-{% endblock %}
-
-{% block scripts %}
-<script>
-    console.log('Welcome {{ user.name }}!');
-    console.log('App: {{ app_name }} v{{ app_version }}');
-</script>
+{% endfor %}
 {% endblock %}

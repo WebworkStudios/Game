@@ -14,7 +14,7 @@ class TemplateEngine
 {
     private array $paths = [];
     private array $data = [];
-    protected array $blocks = [];
+    private array $blocks = [];
     private ?string $parentTemplate = null;
 
     public function __construct(array $templatePaths = [])
@@ -27,22 +27,99 @@ class TemplateEngine
      */
     public function render(string $template, array $data = []): string
     {
+        error_log("=== TemplateEngine::render START ===");
+        error_log("Template: $template");
+
         $this->data = $data;
         $this->blocks = [];
         $this->parentTemplate = null;
 
-        $templatePath = $this->findTemplate($template);
-        $content = file_get_contents($templatePath);
+        try {
+            $templatePath = $this->findTemplate($template);
+            $content = file_get_contents($templatePath);
 
-        // Parse Template
-        $parsed = $this->parseTemplate($content);
+            error_log("Template content length: " . strlen($content));
 
-        // Handle inheritance
-        if ($this->parentTemplate) {
-            return $this->renderWithInheritance($parsed);
+            if (strlen($content) === 0) {
+                throw new RuntimeException("Template file is empty: $templatePath");
+            }
+
+            // Parse Template
+            $parsed = $this->parseTemplate($content);
+            error_log("Parsed " . count($parsed) . " tokens");
+
+            // FIRST PASS: Extract extends and blocks
+            $this->extractExtendsAndBlocks($parsed);
+
+            error_log("Parent template: " . ($this->parentTemplate ?? 'none'));
+            error_log("Blocks found: " . implode(', ', array_keys($this->blocks)));
+
+            // Handle inheritance
+            if ($this->parentTemplate) {
+                error_log("Using inheritance");
+                $result = $this->renderWithInheritance();
+            } else {
+                error_log("Rendering without inheritance");
+                $result = $this->renderParsed($parsed);
+            }
+
+            error_log("Final result length: " . strlen($result));
+            error_log("=== TemplateEngine::render END ===");
+
+            return $result;
+
+        } catch (\Throwable $e) {
+            error_log("TemplateEngine ERROR: " . $e->getMessage());
+            error_log("Error file: " . $e->getFile() . ":" . $e->getLine());
+            throw $e;
         }
+    }
 
-        return $this->renderParsed($parsed);
+    /**
+     * First pass: Extract extends and blocks from child template
+     */
+    private function extractExtendsAndBlocks(array $tokens): void
+    {
+        $i = 0;
+        $count = count($tokens);
+
+        while ($i < $count) {
+            $token = $tokens[$i];
+
+            if ($token['type'] === 'extends') {
+                $this->parentTemplate = $token['template'];
+                error_log("Found extends: " . $this->parentTemplate);
+            } elseif ($token['type'] === 'block') {
+                $blockName = $token['name'];
+                $blockData = $this->extractBlock($tokens, $i);
+                $this->blocks[$blockName] = $blockData['content'];
+                error_log("Extracted child block '$blockName' with " . count($blockData['content']) . " tokens");
+
+                // Debug: Zeige ersten Token des Blocks
+                if (!empty($blockData['content'])) {
+                    $firstToken = $blockData['content'][0];
+                    error_log("First token in block '$blockName': " . json_encode($firstToken));
+                }
+
+                $i = $blockData['endIndex'];
+            }
+
+            $i++;
+        }
+    }
+
+    /**
+     * Render with inheritance - load parent and inject blocks
+     */
+    private function renderWithInheritance(): string
+    {
+        // Load parent template
+        $parentPath = $this->findTemplate($this->parentTemplate);
+        $parentContent = file_get_contents($parentPath);
+        $parentTokens = $this->parseTemplate($parentContent);
+
+        // Render parent with child blocks
+        return $this->renderParsed($parentTokens);
     }
 
     /**
@@ -56,13 +133,19 @@ class TemplateEngine
         }
 
         foreach ($this->paths as $path) {
-            $fullPath = rtrim($path, '/') . '/' . ltrim($template, '/');
+            // Normalize path separators for Windows
+            $normalizedPath = str_replace(['/', '\\'], DIRECTORY_SEPARATOR, $path);
+            $normalizedTemplate = str_replace(['/', '\\'], DIRECTORY_SEPARATOR, $template);
+
+            $fullPath = rtrim($normalizedPath, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . ltrim($normalizedTemplate, DIRECTORY_SEPARATOR);
+
             if (file_exists($fullPath)) {
+                error_log("Template found: $fullPath");
                 return $fullPath;
             }
         }
 
-        throw new RuntimeException("Template not found: {$template}");
+        throw new RuntimeException("Template not found: {$template} in paths: " . implode(', ', $this->paths));
     }
 
     /**
@@ -153,7 +236,7 @@ class TemplateEngine
     }
 
     /**
-     * Rendert geparste Tokens
+     * Rendert geparste Tokens mit Block-Replacement für Inheritance
      */
     private function renderParsed(array $tokens): string
     {
@@ -174,13 +257,41 @@ class TemplateEngine
                     break;
 
                 case 'extends':
-                    $this->parentTemplate = $token['template'];
+                    // Skip extends in parent rendering
                     break;
 
                 case 'block':
-                    $blockContent = $this->extractBlock($tokens, $i);
-                    $this->blocks[$token['name']] = $blockContent['content'];
-                    $i = $blockContent['endIndex'];
+                    $blockName = $token['name'];
+                    error_log("Processing block: $blockName");
+
+                    if (isset($this->blocks[$blockName])) {
+                        // Use child block content (override)
+                        error_log("Using child block content for: $blockName");
+                        $output .= $this->renderParsed($this->blocks[$blockName]);
+
+                        // Skip to endblock
+                        $blockDepth = 1;
+                        $skipIndex = $i + 1;
+                        while ($skipIndex < $count && $blockDepth > 0) {
+                            if ($tokens[$skipIndex]['type'] === 'block') {
+                                $blockDepth++;
+                            } elseif ($tokens[$skipIndex]['type'] === 'endblock') {
+                                $blockDepth--;
+                            }
+                            $skipIndex++;
+                        }
+                        $i = $skipIndex - 1; // Will be incremented at end of loop
+                    } else {
+                        // Use parent block content (default)
+                        error_log("Using parent block content for: $blockName");
+                        $blockData = $this->extractBlock($tokens, $i);
+                        $output .= $this->renderParsed($blockData['content']);
+                        $i = $blockData['endIndex'];
+                    }
+                    break;
+
+                case 'endblock':
+                    // Skip standalone endblock (should not happen in normal flow)
                     break;
 
                 case 'include':
@@ -232,6 +343,8 @@ class TemplateEngine
             foreach ($parts as $part) {
                 if (is_array($current) && isset($current[$part])) {
                     $current = $current[$part];
+                } elseif (is_object($current) && isset($current->$part)) {
+                    $current = $current->$part;
                 } else {
                     return null;
                 }
@@ -276,11 +389,16 @@ class TemplateEngine
      */
     private function renderInclude(string $template): string
     {
+        $originalData = $this->data; // Backup data
+
         $includePath = $this->findTemplate($template);
         $includeContent = file_get_contents($includePath);
         $parsed = $this->parseTemplate($includeContent);
 
-        return $this->renderParsed($parsed);
+        $result = $this->renderParsed($parsed);
+
+        $this->data = $originalData; // Restore data
+        return $result;
     }
 
     /**
@@ -318,8 +436,19 @@ class TemplateEngine
                     $output .= $token['content'];
                 } elseif ($token['type'] === 'variable') {
                     $output .= $this->renderVariable($token['name']);
+                } elseif ($token['type'] === 'if') {
+                    // Handle nested if
+                    $nestedResult = $this->renderIf($tokens, $i);
+                    $output .= $nestedResult['output'];
+                    $i = $nestedResult['endIndex'];
+                } elseif ($token['type'] === 'for') {
+                    // Handle nested for
+                    $nestedResult = $this->renderFor($tokens, $i);
+                    $output .= $nestedResult['output'];
+                    $i = $nestedResult['endIndex'];
+                } elseif ($token['type'] === 'include') {
+                    $output .= $this->renderInclude($token['template']);
                 }
-                // TODO: Handle nested controls
             }
 
             $i++;
@@ -341,7 +470,25 @@ class TemplateEngine
             return !empty($value);
         }
 
-        // TODO: Erweiterte Bedingungen (==, !=, etc.)
+        // Handle basic comparisons
+        if (preg_match('/(.+?)\s*(==|!=|>|<|>=|<=)\s*(.+)/', $condition, $matches)) {
+            $left = trim($matches[1]);
+            $operator = $matches[2];
+            $right = trim($matches[3], '\'"');
+
+            $leftValue = $this->getValue($left);
+
+            return match ($operator) {
+                '==' => $leftValue == $right,
+                '!=' => $leftValue != $right,
+                '>' => $leftValue > $right,
+                '<' => $leftValue < $right,
+                '>=' => $leftValue >= $right,
+                '<=' => $leftValue <= $right,
+                default => false
+            };
+        }
+
         return false;
     }
 
@@ -437,19 +584,6 @@ class TemplateEngine
     }
 
     /**
-     * Rendert Template mit Vererbung
-     */
-    private function renderWithInheritance(array $childTokens): string
-    {
-        // Render parent template
-        $parentPath = $this->findTemplate($this->parentTemplate);
-        $parentContent = file_get_contents($parentPath);
-        $parentTokens = $this->parseTemplate($parentContent);
-
-        return $this->renderParsed($parentTokens);
-    }
-
-    /**
      * Fügt Template-Pfad hinzu
      */
     public function addPath(string $path): void
@@ -463,5 +597,27 @@ class TemplateEngine
     public function getPaths(): array
     {
         return $this->paths;
+    }
+
+    /**
+     * Clear compiled cache (für Development)
+     */
+    public function clearCompiledCache(): void
+    {
+        // Placeholder für Caching-Feature (Schritt 6)
+        error_log("Template cache cleared (placeholder)");
+    }
+
+    /**
+     * Debug-Information
+     */
+    public function getDebugInfo(): array
+    {
+        return [
+            'paths' => $this->paths,
+            'parent_template' => $this->parentTemplate,
+            'blocks' => array_keys($this->blocks),
+            'data_keys' => array_keys($this->data),
+        ];
     }
 }
