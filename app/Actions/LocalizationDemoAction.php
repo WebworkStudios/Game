@@ -10,6 +10,15 @@ use Framework\Http\Request;
 use Framework\Http\Response;
 use Framework\Routing\Route;
 
+/**
+ * Localization Demo Action - Vollständige Neuimplementierung
+ *
+ * Features:
+ * - Sichere CSRF-Validierung
+ * - Robuste Sprachwechsel-Funktionalität
+ * - Umfassendes Error Handling
+ * - Debug-Informationen für Entwicklung
+ */
 #[Route(path: '/test/localization', methods: ['GET', 'POST'], name: 'test.localization')]
 class LocalizationDemoAction
 {
@@ -18,171 +27,260 @@ class LocalizationDemoAction
 
     public function __construct(
         private readonly Application $app
-    )
-    {
+    ) {
     }
 
     public function __invoke(Request $request): Response
     {
-        // Handle language change with full security validation
-        if ($request->isPost() && $request->input('change_language')) {
+        // Handle session test request
+        if ($request->isPost() && $request->input('test_session')) {
+            return $this->handleSessionTest($request);
+        }
+
+        // POST Request: Handle language change
+        if ($request->isPost()) {
             return $this->handleLanguageChange($request);
         }
 
-        // Clear caches in debug mode for development
+        // GET Request: Display localization demo
+        return $this->displayDemo($request);
+    }
+
+    /**
+     * Display the localization demo page
+     */
+    private function displayDemo(Request $request): Response
+    {
+        // Clear caches in debug mode
         if ($this->app->isDebug()) {
             $this->app->clearCaches();
         }
 
-        // Render localization demo page
-        return Response::view('pages/test/localization', [
+        // Collect all data for the demo
+        $data = [
             'current_locale' => $this->getCurrentLocale(),
-            'demo_data' => $this->getDemoData(),
+            'supported_locales' => self::SUPPORTED_LOCALES,
+            'demo_translations' => $this->getDemoTranslations(),
             'detection_info' => $this->getDetectionInfo($request),
             'translator_stats' => $this->getTranslatorStats(),
-        ]);
+            'session_info' => $this->getSessionInfo(),
+            'csrf_debug' => $this->getCsrfDebugInfo(),
+        ];
+
+        return Response::view('pages/test/localization', $data);
     }
 
     /**
-     * Handle language change with complete security validation
+     * Handle language change requests with full validation
      */
     private function handleLanguageChange(Request $request): Response
     {
         try {
-            // 1. CSRF Token Validation
-            $csrf = \Framework\Core\ServiceRegistry::get(\Framework\Security\Csrf::class);
-            $token = $request->input('_token', '');
+            // Step 1: Validate CSRF token
+            $this->validateCsrfToken($request);
 
-            if (!$csrf->isValidToken($token)) {
-                $this->logSecurityViolation($request, 'CSRF validation failed for localization change');
+            // Step 2: Validate locale input
+            $newLocale = $this->validateLocaleInput($request);
 
-                if ($request->expectsJson()) {
-                    return Response::json([
-                        'error' => 'Security validation failed',
-                        'message' => 'CSRF token is invalid or expired'
-                    ], HttpStatus::PAGE_EXPIRED);
-                }
+            // Step 3: Change language
+            $this->performLanguageChange($newLocale);
 
-                // Flash message über Session setzen
-                $session = \Framework\Core\ServiceRegistry::get(\Framework\Security\Session::class);
-                $session->flashError('Security validation failed. Please refresh the page and try again.');
-
-                return Response::redirect('/test/localization');
-            }
-
-            // 2. Input Validation
-            $newLocale = trim($request->input('locale', ''));
-            if (!$this->isValidLocale($newLocale)) {
-                $this->logSecurityViolation($request, "Invalid locale attempted: {$newLocale}");
-
-                $session = \Framework\Core\ServiceRegistry::get(\Framework\Security\Session::class);
-                $session->flashError('Invalid language selection.');
-
-                return Response::redirect('/test/localization');
-            }
-
-            // 3. Perform Language Change
-            $this->changeLanguage($newLocale);
-
-            // 4. Regenerate CSRF token for security
-            $csrf->refreshToken();
-
-            // 5. Success Response
-            if ($request->expectsJson()) {
-                return Response::json([
-                    'success' => true,
-                    'message' => 'Language changed successfully',
-                    'locale' => $newLocale
-                ]);
-            }
-
-            $session = \Framework\Core\ServiceRegistry::get(\Framework\Security\Session::class);
-            $session->flashSuccess('Language changed successfully.');
-
-            return Response::redirect('/test/localization');
+            // Step 4: Return success response
+            return $this->createSuccessResponse($request, $newLocale);
 
         } catch (\Framework\Security\CsrfException $e) {
-            $this->logSecurityViolation($request, "CSRF Exception: {$e->getMessage()}");
-
-            $session = \Framework\Core\ServiceRegistry::get(\Framework\Security\Session::class);
-            $session->flashError('Security validation failed. Please try again.');
-
-            return Response::redirect('/test/localization');
-
+            return $this->handleCsrfError($request, $e);
         } catch (\InvalidArgumentException $e) {
-            $this->logSecurityViolation($request, "Invalid argument: {$e->getMessage()}");
-
-            $session = \Framework\Core\ServiceRegistry::get(\Framework\Security\Session::class);
-            $session->flashError('Invalid language selection.');
-
-            return Response::redirect('/test/localization');
-
+            return $this->handleValidationError($request, $e);
         } catch (\Throwable $e) {
-            // Log detailed error for debugging (but don't expose to user)
-            error_log(sprintf(
-                'Language change failed: %s in %s:%d. Request: %s',
-                $e->getMessage(),
-                $e->getFile(),
-                $e->getLine(),
-                json_encode([
-                    'ip' => $request->ip(),
-                    'user_agent' => $request->getUserAgent(),
-                    'locale' => $request->input('locale', 'unknown')
-                ])
-            ));
-
-            $session = \Framework\Core\ServiceRegistry::get(\Framework\Security\Session::class);
-            $session->flashError('Language change failed. Please try again.');
-
-            return Response::redirect('/test/localization');
+            return $this->handleGenericError($request, $e);
         }
     }
 
     /**
-     * Change the application language
+     * Validate CSRF token
      */
-    private function changeLanguage(string $locale): void
+    private function validateCsrfToken(Request $request): void
     {
-        // Debug: Log current session state BEFORE change
-        error_log("BEFORE language change: Session locale = " . $this->getSessionLocale() . ", Target locale = {$locale}");
+        $csrf = \Framework\Core\ServiceRegistry::get(\Framework\Security\Csrf::class);
+        $token = $request->input('_token', '');
 
-        // Update language detector (stores in session)
-        $detector = \Framework\Core\ServiceRegistry::get(\Framework\Localization\LanguageDetector::class);
-        $detector->setUserLocale($locale);
+        // Enhanced logging for debugging
+        if ($this->app->isDebug()) {
+            error_log("CSRF Debug - Submitted: {$token}");
+            error_log("CSRF Debug - Expected: " . $csrf->getToken());
+            error_log("CSRF Debug - Valid: " . ($csrf->isValidToken($token) ? 'YES' : 'NO'));
+        }
 
-        // Debug: Verify session was updated
-        $newSessionLocale = $detector->getUserLocale();
-        error_log("AFTER setUserLocale: Session locale = {$newSessionLocale}");
-
-        // Update current translator instance
-        $translator = \Framework\Core\ServiceRegistry::get(\Framework\Localization\Translator::class);
-        $translator->setLocale($locale);
-        $translator->clearCache();
-
-        // Debug: Verify translator was updated
-        error_log("AFTER setLocale: Translator locale = " . $translator->getLocale());
+        if (!$csrf->isValidToken($token)) {
+            $this->logSecurityViolation($request, 'CSRF validation failed');
+            throw new \Framework\Security\CsrfException('Invalid CSRF token');
+        }
     }
 
     /**
-     * Validate locale against supported locales
+     * Validate locale input
      */
-    private function isValidLocale(string $locale): bool
+    private function validateLocaleInput(Request $request): string
     {
-        return in_array($locale, self::SUPPORTED_LOCALES, true);
+        $locale = trim($request->input('locale', ''));
+
+        if (empty($locale)) {
+            throw new \InvalidArgumentException('Locale parameter is required');
+        }
+
+        if (!$this->isValidLocale($locale)) {
+            $this->logSecurityViolation($request, "Invalid locale attempted: {$locale}");
+            throw new \InvalidArgumentException("Unsupported locale: {$locale}");
+        }
+
+        return $locale;
     }
 
     /**
-     * Log security violations for monitoring
+     * Perform the actual language change
      */
-    private function logSecurityViolation(Request $request, string $message): void
+    private function performLanguageChange(string $locale): void
     {
+        if ($this->app->isDebug()) {
+            error_log("Language change: {$this->getCurrentLocale()} -> {$locale}");
+        }
+
+        try {
+            // Step 1: Get session and ensure it's properly started
+            $session = \Framework\Core\ServiceRegistry::get(\Framework\Security\Session::class);
+            if (!$session->isStarted()) {
+                $session->start();
+            }
+
+            // Step 2: Update language detector (session storage)
+            $detector = \Framework\Core\ServiceRegistry::get(\Framework\Localization\LanguageDetector::class);
+            $detector->setUserLocale($locale);
+
+            // Step 3: Update translator
+            $translator = \Framework\Core\ServiceRegistry::get(\Framework\Localization\Translator::class);
+            $translator->setLocale($locale);
+            $translator->clearCache();
+
+            // Step 4: Force session write and verify
+            if (session_status() === PHP_SESSION_ACTIVE) {
+                session_write_close();
+                session_start();
+            }
+
+            // Step 5: Additional verification with direct session access
+            if (isset($_SESSION)) {
+                $_SESSION['locale'] = $locale;
+                $_SESSION['language_changed_at'] = time();
+            }
+
+            // Verify changes
+            if ($this->app->isDebug()) {
+                error_log("Language change complete. New locale: " . $translator->getLocale());
+                error_log("Session locale from detector: " . ($detector->getUserLocale() ?? 'null'));
+                error_log("Direct session locale: " . ($_SESSION['locale'] ?? 'not set'));
+                error_log("Session ID: " . session_id());
+                error_log("Session status: " . session_status());
+                error_log("Full session data: " . json_encode($_SESSION ?? []));
+            }
+
+        } catch (\Throwable $e) {
+            error_log("Language change failed: " . $e->getMessage());
+            error_log("Error trace: " . $e->getTraceAsString());
+            throw new \RuntimeException("Failed to change language to {$locale}: " . $e->getMessage());
+        }
+    }
+
+    /**
+     * Create success response
+     */
+    private function createSuccessResponse(Request $request, string $locale): Response
+    {
+        $session = \Framework\Core\ServiceRegistry::get(\Framework\Security\Session::class);
+
+        if ($request->expectsJson()) {
+            return Response::json([
+                'success' => true,
+                'message' => 'Language changed successfully',
+                'locale' => $locale,
+                'redirect_url' => '/test/localization'
+            ]);
+        }
+
+        $session->flashSuccess("Language changed to: {$locale}");
+        return Response::redirect('/test/localization');
+    }
+
+    /**
+     * Handle CSRF errors
+     */
+    private function handleCsrfError(Request $request, \Framework\Security\CsrfException $e): Response
+    {
+        $session = \Framework\Core\ServiceRegistry::get(\Framework\Security\Session::class);
+
+        if ($request->expectsJson()) {
+            return Response::json([
+                'error' => 'Security validation failed',
+                'message' => 'CSRF token is invalid or expired. Please refresh the page.',
+                'code' => 'CSRF_INVALID'
+            ], HttpStatus::PAGE_EXPIRED);
+        }
+
+        $session->flashError('Security validation failed. Please refresh the page and try again.');
+        return Response::redirect('/test/localization');
+    }
+
+    /**
+     * Handle validation errors
+     */
+    private function handleValidationError(Request $request, \InvalidArgumentException $e): Response
+    {
+        $session = \Framework\Core\ServiceRegistry::get(\Framework\Security\Session::class);
+
+        if ($request->expectsJson()) {
+            return Response::json([
+                'error' => 'Validation failed',
+                'message' => $e->getMessage(),
+                'code' => 'VALIDATION_ERROR'
+            ], HttpStatus::BAD_REQUEST);
+        }
+
+        $session->flashError($e->getMessage());
+        return Response::redirect('/test/localization');
+    }
+
+    /**
+     * Handle generic errors
+     */
+    private function handleGenericError(Request $request, \Throwable $e): Response
+    {
+        // Log detailed error for debugging
         error_log(sprintf(
-            'SECURITY VIOLATION - %s. IP: %s, User-Agent: %s, Referer: %s',
-            $message,
-            $request->ip(),
-            $request->getUserAgent() ?? 'unknown',
-            $request->getHeader('Referer') ?? 'unknown'
+            'Localization error: %s in %s:%d. Request: %s',
+            $e->getMessage(),
+            $e->getFile(),
+            $e->getLine(),
+            json_encode([
+                'method' => $request->getMethod()->value,
+                'ip' => $request->ip(),
+                'user_agent' => $request->getUserAgent(),
+                'locale' => $request->input('locale', 'unknown'),
+                'csrf_token' => substr($request->input('_token', ''), 0, 8) . '...'
+            ])
         ));
+
+        $session = \Framework\Core\ServiceRegistry::get(\Framework\Security\Session::class);
+
+        if ($request->expectsJson()) {
+            return Response::json([
+                'error' => 'Internal server error',
+                'message' => 'An unexpected error occurred',
+                'code' => 'INTERNAL_ERROR'
+            ], HttpStatus::INTERNAL_SERVER_ERROR);
+        }
+
+        $session->flashError('Language change failed. Please try again.');
+        return Response::redirect('/test/localization');
     }
 
     /**
@@ -199,65 +297,154 @@ class LocalizationDemoAction
     }
 
     /**
-     * Get demo translations data
+     * Check if locale is valid
      */
-    private function getDemoData(): array
+    private function isValidLocale(string $locale): bool
+    {
+        return in_array($locale, self::SUPPORTED_LOCALES, true);
+    }
+
+    /**
+     * Get demo translations for all categories
+     */
+    private function getDemoTranslations(): array
     {
         $translator = $this->getTranslator();
 
         if (!$translator) {
-            return $this->getFallbackDemoData();
+            return $this->getFallbackTranslations();
         }
 
         return [
-            // Navigation translations
             'navigation' => [
-                ['key' => 'common.welcome', 'translated' => $translator->translate('common.welcome')],
-                ['key' => 'common.navigation.home', 'translated' => $translator->translate('common.navigation.home')],
-                ['key' => 'common.navigation.team', 'translated' => $translator->translate('common.navigation.team')],
-                ['key' => 'common.navigation.matches', 'translated' => $translator->translate('common.navigation.matches')],
-                ['key' => 'common.navigation.league', 'translated' => $translator->translate('common.navigation.league')],
-                ['key' => 'common.navigation.profile', 'translated' => $translator->translate('common.navigation.profile')],
+                ['key' => 'common.welcome', 'value' => $translator->translate('common.welcome')],
+                ['key' => 'common.navigation.home', 'value' => $translator->translate('common.navigation.home')],
+                ['key' => 'common.navigation.team', 'value' => $translator->translate('common.navigation.team')],
+                ['key' => 'common.navigation.matches', 'value' => $translator->translate('common.navigation.matches')],
+                ['key' => 'common.navigation.league', 'value' => $translator->translate('common.navigation.league')],
+                ['key' => 'common.navigation.profile', 'value' => $translator->translate('common.navigation.profile')],
             ],
-
-            // Authentication translations
-            'auth' => [
-                ['key' => 'auth.login', 'translated' => $translator->translate('auth.login')],
-                ['key' => 'auth.password', 'translated' => $translator->translate('auth.password')],
-                ['key' => 'auth.register', 'translated' => $translator->translate('auth.register')],
-                ['key' => 'auth.logout', 'translated' => $translator->translate('auth.logout')],
+            'authentication' => [
+                ['key' => 'auth.login', 'value' => $translator->translate('auth.login')],
+                ['key' => 'auth.logout', 'value' => $translator->translate('auth.logout')],
+                ['key' => 'auth.register', 'value' => $translator->translate('auth.register')],
+                ['key' => 'auth.password', 'value' => $translator->translate('auth.password')],
+                ['key' => 'auth.email', 'value' => $translator->translate('auth.email')],
             ],
-
-            // Game statistics translations
-            'game_stats' => [
-                ['key' => 'game.stats.goals', 'translated' => $translator->translate('game.stats.goals')],
-                ['key' => 'game.stats.assists', 'translated' => $translator->translate('game.stats.assists')],
-                ['key' => 'game.stats.points', 'translated' => $translator->translate('game.stats.points')],
+            'validation' => [
+                ['key' => 'validation.required', 'value' => $translator->translate('validation.required')],
+                ['key' => 'validation.email', 'value' => $translator->translate('validation.email')],
+                ['key' => 'validation.min_length', 'value' => $translator->translate('validation.min_length')],
+                ['key' => 'validation.max_length', 'value' => $translator->translate('validation.max_length')],
             ],
-
-            // Match events translations
-            'match_events' => [
-                ['key' => 'match.events.goal', 'translated' => $translator->translate('match.events.goal')],
-                ['key' => 'match.events.card', 'translated' => $translator->translate('match.events.card')],
-                ['key' => 'match.events.substitution', 'translated' => $translator->translate('match.events.substitution')],
-            ],
-
-            // Actions
-            'actions' => [
-                ['key' => 'common.actions.save', 'translated' => $translator->translate('common.actions.save')],
-                ['key' => 'common.actions.cancel', 'translated' => $translator->translate('common.actions.cancel')],
-                ['key' => 'common.actions.delete', 'translated' => $translator->translate('common.actions.delete')],
-                ['key' => 'common.actions.edit', 'translated' => $translator->translate('common.actions.edit')],
-            ],
-
-            // Language names
-            'language_names' => [
-                'de' => $translator->translate('common.languages.de'),
-                'en' => $translator->translate('common.languages.en'),
-                'fr' => $translator->translate('common.languages.fr'),
-                'es' => $translator->translate('common.languages.es'),
+            'game' => [
+                ['key' => 'game.player', 'value' => $translator->translate('game.player')],
+                ['key' => 'game.team', 'value' => $translator->translate('game.team')],
+                ['key' => 'game.match', 'value' => $translator->translate('game.match')],
+                ['key' => 'game.league', 'value' => $translator->translate('game.league')],
+                ['key' => 'game.season', 'value' => $translator->translate('game.season')],
             ],
         ];
+    }
+
+    /**
+     * Get detection information for debugging
+     */
+    private function getDetectionInfo(Request $request): array
+    {
+        $detector = $this->getLanguageDetector();
+
+        return [
+            'current_locale' => $this->getCurrentLocale(),
+            'session_locale' => $detector?->getUserLocale(),
+            'accept_language' => $request->getHeader('Accept-Language'),
+            'supported_locales' => self::SUPPORTED_LOCALES,
+            'default_locale' => self::DEFAULT_LOCALE,
+            'detection_method' => $this->getDetectionMethod(),
+        ];
+    }
+
+    /**
+     * Get translator statistics
+     */
+    private function getTranslatorStats(): array
+    {
+        $translator = $this->getTranslator();
+
+        if (!$translator) {
+            return [
+                'status' => 'unavailable',
+                'error' => 'Translator service not accessible'
+            ];
+        }
+
+        try {
+            $stats = $translator->getCacheStats();
+            $stats['status'] = 'available';
+            return $stats;
+        } catch (\Throwable $e) {
+            return [
+                'status' => 'error',
+                'error' => $e->getMessage()
+            ];
+        }
+    }
+
+    /**
+     * Get session information for debugging
+     */
+    private function getSessionInfo(): array
+    {
+        try {
+            $session = \Framework\Core\ServiceRegistry::get(\Framework\Security\Session::class);
+            return [
+                'session_id' => $session->getId(),
+                'session_started' => $session->isStarted(),
+                'locale_in_session' => $session->get('locale'),
+                'flash_messages' => $session->getAllFlash(),
+            ];
+        } catch (\Throwable $e) {
+            return [
+                'error' => 'Session not accessible: ' . $e->getMessage()
+            ];
+        }
+    }
+
+    /**
+     * Get CSRF debug information
+     */
+    private function getCsrfDebugInfo(): array
+    {
+        try {
+            $csrf = \Framework\Core\ServiceRegistry::get(\Framework\Security\Csrf::class);
+            return [
+                'token_info' => $csrf->getTokenInfo(),
+                'token_field' => $csrf->getTokenField(),
+                'current_token' => $csrf->getToken(),
+            ];
+        } catch (\Throwable $e) {
+            return [
+                'error' => 'CSRF service not accessible: ' . $e->getMessage()
+            ];
+        }
+    }
+
+    /**
+     * Get detection method used
+     */
+    private function getDetectionMethod(): string
+    {
+        $detector = $this->getLanguageDetector();
+
+        if (!$detector) {
+            return 'fallback';
+        }
+
+        if ($detector->getUserLocale()) {
+            return 'session';
+        }
+
+        return 'default';
     }
 
     /**
@@ -273,89 +460,97 @@ class LocalizationDemoAction
     }
 
     /**
-     * Fallback demo data when translator is not available
+     * Get language detector instance safely
      */
-    private function getFallbackDemoData(): array
-    {
-        return [
-            'navigation' => [
-                ['key' => 'common.welcome', 'translated' => 'Welcome (fallback)'],
-                ['key' => 'common.navigation.home', 'translated' => 'Home (fallback)'],
-                ['key' => 'common.navigation.team', 'translated' => 'Team (fallback)'],
-                ['key' => 'common.navigation.matches', 'translated' => 'Matches (fallback)'],
-            ],
-            'auth' => [
-                ['key' => 'auth.login', 'translated' => 'Login (fallback)'],
-                ['key' => 'auth.password', 'translated' => 'Password (fallback)'],
-            ],
-            'game_stats' => [
-                ['key' => 'game.stats.goals', 'translated' => 'Goals (fallback)'],
-            ],
-            'match_events' => [
-                ['key' => 'match.events.goal', 'translated' => 'Goal (fallback)'],
-            ],
-            'actions' => [
-                ['key' => 'common.actions.save', 'translated' => 'Save (fallback)'],
-            ],
-            'language_names' => [
-                'de' => 'Deutsch (fallback)',
-                'en' => 'English (fallback)',
-                'fr' => 'Français (fallback)',
-                'es' => 'Español (fallback)',
-            ],
-        ];
-    }
-
-    /**
-     * Get language detection information
-     */
-    private function getDetectionInfo(Request $request): array
-    {
-        return [
-            'detected_locale' => $this->getCurrentLocale(),
-            'accept_header' => $request->getHeader('Accept-Language', 'not-provided'),
-            'default_locale' => self::DEFAULT_LOCALE,
-            'available_locales' => self::SUPPORTED_LOCALES,
-            'session_locale' => $this->getSessionLocale(),
-        ];
-    }
-
-    /**
-     * Get locale from session
-     */
-    private function getSessionLocale(): ?string
+    private function getLanguageDetector(): ?\Framework\Localization\LanguageDetector
     {
         try {
-            $detector = \Framework\Core\ServiceRegistry::get(\Framework\Localization\LanguageDetector::class);
-            return $detector->getUserLocale();
+            return \Framework\Core\ServiceRegistry::get(\Framework\Localization\LanguageDetector::class);
         } catch (\Throwable) {
             return null;
         }
     }
 
     /**
-     * Get translator statistics
+     * Get fallback translations when translator is unavailable
      */
-    private function getTranslatorStats(): array
+    private function getFallbackTranslations(): array
     {
-        $translator = $this->getTranslator();
-
-        if (!$translator) {
-            return [
-                'current_locale' => 'not-available',
-                'loaded_namespaces' => 0,
-                'cached_translations' => 0,
-                'fallback_locale' => self::DEFAULT_LOCALE,
-                'supported_locales' => self::SUPPORTED_LOCALES,
-            ];
-        }
-
         return [
-            'current_locale' => $translator->getLocale(),
-            'loaded_namespaces' => count($translator->getSupportedLocales() ?? []),
-            'cached_translations' => 'filter-optimized',
-            'fallback_locale' => self::DEFAULT_LOCALE,
-            'supported_locales' => self::SUPPORTED_LOCALES,
+            'navigation' => [
+                ['key' => 'common.welcome', 'value' => 'Welcome (Fallback)'],
+                ['key' => 'common.navigation.home', 'value' => 'Home (Fallback)'],
+                ['key' => 'common.navigation.team', 'value' => 'Team (Fallback)'],
+            ],
+            'authentication' => [
+                ['key' => 'auth.login', 'value' => 'Login (Fallback)'],
+                ['key' => 'auth.logout', 'value' => 'Logout (Fallback)'],
+            ],
+            'validation' => [
+                ['key' => 'validation.required', 'value' => 'Required (Fallback)'],
+            ],
+            'game' => [
+                ['key' => 'game.player', 'value' => 'Player (Fallback)'],
+                ['key' => 'game.team', 'value' => 'Team (Fallback)'],
+            ],
         ];
+    }
+
+    /**
+     * Handle session test requests
+     */
+    private function handleSessionTest(Request $request): Response
+    {
+        try {
+            // Force session start if not started
+            if (session_status() === PHP_SESSION_NONE) {
+                session_start();
+            }
+
+            // Set test data
+            $_SESSION['test_' . time()] = 'Session test at ' . date('Y-m-d H:i:s');
+
+            $sessionInfo = [
+                'session_id' => session_id(),
+                'session_status' => session_status(),
+                'session_data_count' => count($_SESSION),
+                'cookie_params' => session_get_cookie_params(),
+                'save_path' => session_save_path(),
+                'headers_sent' => headers_sent($file, $line) ? "Yes (in $file:$line)" : 'No',
+                'session_data' => $_SESSION,
+            ];
+
+            // Force cookie to be sent
+            if (!headers_sent()) {
+                header('Set-Cookie: test_cookie=test_value; Path=/; HttpOnly');
+            }
+
+            return Response::json([
+                'success' => true,
+                'message' => 'Session test completed',
+                'debug' => $sessionInfo,
+            ]);
+
+        } catch (\Throwable $e) {
+            return Response::json([
+                'success' => false,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+        }
+    }
+
+    /**
+     * Log security violations
+     */
+    private function logSecurityViolation(Request $request, string $message): void
+    {
+        error_log(sprintf(
+            'SECURITY VIOLATION [Localization]: %s | IP: %s | UA: %s | Referer: %s',
+            $message,
+            $request->ip(),
+            $request->getUserAgent() ?? 'unknown',
+            $request->getHeader('Referer') ?? 'none'
+        ));
     }
 }

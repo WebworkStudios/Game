@@ -1,366 +1,359 @@
-<!-- app/Views/pages/test/localization.html -->
-{% extends "layouts/base.html" %}
+{% extends 'layouts/base' %}
 
-{% block title %}{{ 'common.welcome' | t }} - Localization Demo{% endblock %}
+{% block title %}🌍 Localization Demo - {{ app_name }}{% endblock %}
 
 {% block styles %}
+<!-- CSRF Meta Tag direkt im Template -->
+<meta name="csrf-token" content="{{ csrf_debug.current_token | default('') }}">
 <style>
-    /* ===== Localization Demo Specific Styles ===== */
+    /* Root Container */
+    .localization-demo {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 20px;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+        line-height: 1.6;
+    }
 
-    /* Alert Styles */
-    .alert {
+    /* Header Section */
+    .demo-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 40px;
+        border-radius: 16px;
+        text-align: center;
+        margin-bottom: 30px;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+    }
+
+    .demo-header h1 {
+        margin: 0 0 10px 0;
+        font-size: 2.5rem;
+        font-weight: 700;
+    }
+
+    .demo-header .subtitle {
+        font-size: 1.1rem;
+        opacity: 0.9;
+        margin: 0;
+    }
+
+    /* Current Status Card */
+    .status-card {
+        background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+        color: white;
+        padding: 30px;
+        border-radius: 12px;
+        margin-bottom: 30px;
+        text-align: center;
+        box-shadow: 0 4px 20px rgba(79, 172, 254, 0.3);
+    }
+
+    .status-card h3 {
+        margin: 0 0 15px 0;
+        font-size: 1.8rem;
+    }
+
+    .status-info {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 20px;
+        margin-top: 20px;
+    }
+
+    .status-item {
+        background: rgba(255, 255, 255, 0.2);
         padding: 15px;
-        margin: 20px 0;
-        border: 1px solid transparent;
         border-radius: 8px;
-        position: relative;
+        backdrop-filter: blur(10px);
     }
 
-    .alert-success {
-        background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
-        color: #155724;
-        border-color: #c3e6cb;
-        box-shadow: 0 2px 4px rgba(21, 87, 36, 0.1);
+    .status-label {
+        font-size: 0.9rem;
+        opacity: 0.8;
+        margin-bottom: 5px;
     }
 
-    .alert-info {
-        background: linear-gradient(135deg, #d1ecf1 0%, #bee5eb 100%);
-        color: #0c5460;
-        border-color: #bee5eb;
-    }
-
-    .alert-warning {
-        background: linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%);
-        color: #856404;
-        border-color: #ffeaa7;
+    .status-value {
+        font-size: 1.2rem;
+        font-weight: 600;
     }
 
     /* Language Switcher */
     .language-switcher {
-        background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
-        padding: 25px;
+        background: white;
+        border: 2px solid #e1e5e9;
         border-radius: 12px;
-        margin: 25px 0;
+        padding: 30px;
+        margin-bottom: 30px;
         text-align: center;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-        border: 1px solid #90caf9;
+        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+        transition: border-color 0.3s ease;
+    }
+
+    .language-switcher:hover {
+        border-color: #4facfe;
     }
 
     .language-switcher h3 {
-        margin-bottom: 20px;
-        color: #1565c0;
-        font-size: 1.4em;
+        margin: 0 0 20px 0;
+        color: #2d3748;
+        font-size: 1.5rem;
     }
 
-    .language-switcher form {
-        display: inline-block;
+    .language-form {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 20px;
     }
 
-    .language-switcher select {
-        padding: 12px 20px;
-        font-size: 16px;
-        border: 2px solid #2196f3;
+    .language-select {
+        background: white;
+        border: 2px solid #e1e5e9;
         border-radius: 8px;
-        background: white;
-        color: #333;
+        padding: 15px 20px;
+        font-size: 16px;
+        font-weight: 500;
+        min-width: 250px;
         cursor: pointer;
-        min-width: 200px;
         transition: all 0.3s ease;
-    }
-
-    .language-switcher select:hover {
-        border-color: #1976d2;
-        box-shadow: 0 2px 8px rgba(33, 150, 243, 0.3);
-    }
-
-    .language-switcher select:focus {
         outline: none;
-        border-color: #0d47a1;
-        box-shadow: 0 0 0 3px rgba(33, 150, 243, 0.2);
     }
 
-    /* Demo Sections */
-    .demo-section {
-        background: #f8f9fa;
-        padding: 25px;
-        border-radius: 10px;
-        margin: 20px 0;
-        border-left: 5px solid #007bff;
-        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+    .language-select:hover {
+        border-color: #4facfe;
+        box-shadow: 0 2px 8px rgba(79, 172, 254, 0.2);
     }
 
-    .demo-section h4 {
-        color: #495057;
-        margin-bottom: 15px;
-        padding-bottom: 8px;
-        border-bottom: 2px solid #e9ecef;
-        font-size: 1.2em;
+    .language-select:focus {
+        border-color: #667eea;
+        box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
     }
 
-    .demo-section ul {
-        list-style: none;
-        padding-left: 0;
-    }
-
-    .demo-section li {
-        margin: 12px 0;
+    .language-select option {
         padding: 10px;
-        background: white;
-        border-radius: 6px;
-        border-left: 3px solid #28a745;
-        transition: all 0.2s ease;
+        font-size: 16px;
     }
 
-    .demo-section li:hover {
-        background: #f0f8f0;
-        transform: translateX(5px);
+    /* Debug Controls */
+    .debug-controls {
+        display: flex;
+        gap: 10px;
+        justify-content: center;
+        margin-top: 15px;
+    }
+
+    .debug-btn {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 0.9rem;
+        font-weight: 500;
+        transition: transform 0.2s ease;
+    }
+
+    .debug-btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
     }
 
     /* Translation Examples */
-    .translation-examples {
+    .demo-section {
+        background: white;
+        border-radius: 12px;
+        padding: 30px;
+        margin-bottom: 30px;
+        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+        border: 1px solid #f0f0f0;
+    }
+
+    .demo-section h3 {
+        margin: 0 0 25px 0;
+        color: #2d3748;
+        font-size: 1.5rem;
+        border-bottom: 3px solid #4facfe;
+        padding-bottom: 10px;
+        display: inline-block;
+    }
+
+    .translation-grid {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-        gap: 20px;
-        margin: 20px 0;
+        gap: 25px;
     }
 
-    .example-card {
-        background: white;
+    .translation-category {
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
         padding: 20px;
-        border-radius: 10px;
-        border: 1px solid #e9ecef;
-        box-shadow: 0 3px 10px rgba(0, 0, 0, 0.1);
-        transition: all 0.3s ease;
+        transition: transform 0.2s ease;
     }
 
-    .example-card:hover {
-        transform: translateY(-3px);
-        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+    .translation-category:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
     }
 
-    .example-card h5 {
-        color: #6f42c1;
-        margin-bottom: 15px;
-        font-size: 1.1em;
-        border-bottom: 2px solid #e9ecef;
+    .category-title {
+        color: #4a5568;
+        font-size: 1.1rem;
+        font-weight: 600;
+        margin: 0 0 15px 0;
+        text-transform: capitalize;
+        border-bottom: 2px solid #e2e8f0;
         padding-bottom: 8px;
     }
 
-    /* Syntax Highlighting */
-    .syntax-example {
-        background: #2d3748;
-        color: #e2e8f0;
-        padding: 15px;
-        border-radius: 8px;
-        font-family: 'Courier New', monospace;
-        margin: 10px 0;
-        overflow-x: auto;
-        border-left: 4px solid #4299e1;
+    .translation-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        padding: 8px 0;
+        border-bottom: 1px solid #edf2f7;
+        gap: 15px;
     }
 
-    .syntax-highlight {
-        color: #f687b3;
-        font-weight: bold;
+    .translation-item:last-child {
+        border-bottom: none;
     }
 
-    .filter-syntax {
-        color: #68d391;
-    }
-
-    .parameter-syntax {
-        color: #fbb6ce;
-    }
-
-    /* Filter Examples Grid */
-    .filter-examples {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 20px;
-        margin: 20px 0;
-    }
-
-    @media (max-width: 768px) {
-        .filter-examples {
-            grid-template-columns: 1fr;
-        }
-    }
-
-    .filter-example {
-        background: white;
-        padding: 15px;
-        border-radius: 8px;
-        border: 1px solid #dee2e6;
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-    }
-
-    .filter-example .syntax {
-        font-family: monospace;
-        color: #e83e8c;
-        font-weight: bold;
-        background: #f8f9fa;
+    .translation-key {
+        font-family: 'Fira Code', Monaco, 'Cascadia Code', monospace;
+        background: #edf2f7;
+        color: #4a5568;
         padding: 4px 8px;
         border-radius: 4px;
+        font-size: 0.85rem;
+        flex-shrink: 0;
+        max-width: 40%;
+        word-break: break-all;
     }
 
-    .filter-example .result {
-        color: #28a745;
-        font-weight: bold;
-        margin-top: 8px;
+    .translation-value {
+        font-weight: 500;
+        color: #2d3748;
+        text-align: right;
+        flex-grow: 1;
     }
 
-    /* Stats Section */
-    .stats-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-        gap: 15px;
-        margin: 20px 0;
-    }
-
-    .stat-card {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-        padding: 20px;
-        border-radius: 10px;
-        text-align: center;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-        transition: all 0.3s ease;
-    }
-
-    .stat-card:hover {
-        transform: translateY(-3px);
-        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
-    }
-
-    .stat-number {
-        font-size: 2em;
-        font-weight: bold;
-        margin-bottom: 8px;
-    }
-
-    .stat-label {
-        font-size: 0.9em;
-        opacity: 0.9;
-    }
-
-    /* Debug Section */
+    /* Debug Sections */
     .debug-section {
-        background: #f1f3f4;
-        padding: 20px;
-        border-radius: 10px;
-        margin: 20px 0;
-        border: 1px solid #dadce0;
-    }
-
-    .debug-section details {
-        background: white;
-        padding: 15px;
+        background: #f7fafc;
+        border: 1px solid #e2e8f0;
         border-radius: 8px;
-        margin: 10px 0;
-        border: 1px solid #e0e0e0;
+        margin: 15px 0;
     }
 
     .debug-section summary {
+        background: #edf2f7;
+        padding: 15px 20px;
         cursor: pointer;
-        font-weight: bold;
-        color: #1a73e8;
-        padding: 10px;
-        background: #f8f9fa;
-        border-radius: 4px;
-        margin: -15px -15px 15px -15px;
+        font-weight: 600;
+        color: #4a5568;
+        border-radius: 8px 8px 0 0;
+        transition: background-color 0.2s ease;
+        user-select: none;
     }
 
     .debug-section summary:hover {
-        background: #e8f0fe;
+        background: #e2e8f0;
+    }
+
+    .debug-section[open] summary {
+        border-radius: 8px 8px 0 0;
+        border-bottom: 1px solid #e2e8f0;
+    }
+
+    .debug-content {
+        padding: 20px;
     }
 
     .debug-section pre {
         background: #2d3748;
         color: #e2e8f0;
-        padding: 15px;
+        padding: 20px;
         border-radius: 6px;
         overflow-x: auto;
-        font-size: 0.9em;
+        font-family: 'Fira Code', Monaco, 'Cascadia Code', monospace;
+        font-size: 0.9rem;
         line-height: 1.4;
+        margin: 0;
     }
 
-    /* CSRF Debug */
-    .csrf-debug {
-        background: #fff3cd;
-        border: 1px solid #ffeaa7;
-        padding: 20px;
-        border-radius: 8px;
-        margin: 20px 0;
+    /* Flash Messages */
+    .flash-messages {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        z-index: 1000;
+        min-width: 300px;
     }
 
-    .csrf-debug code {
-        background: #f8f9fa;
-        padding: 4px 8px;
-        border-radius: 4px;
-        font-family: monospace;
-        border: 1px solid #e9ecef;
-    }
-
-    .csrf-field-display {
-        background: #f5f5f5;
-        padding: 15px;
+    .flash-message {
+        background: white;
+        border-left: 4px solid;
         border-radius: 6px;
-        font-family: monospace;
-        border: 1px solid #ddd;
-        margin: 10px 0;
-        word-break: break-all;
+        padding: 15px 20px;
+        margin-bottom: 10px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        animation: slideIn 0.3s ease;
+        cursor: pointer;
     }
 
-    /* Responsive Design */
-    @media (max-width: 992px) {
-        .translation-examples {
-            grid-template-columns: 1fr;
-        }
-
-        .stats-grid {
-            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-        }
+    .flash-success {
+        border-left-color: #48bb78;
+        background: linear-gradient(135deg, #f0fff4 0%, #c6f6d5 100%);
+        color: #22543d;
     }
 
-    @media (max-width: 768px) {
-        .demo-section {
-            padding: 15px;
-        }
+    .flash-error {
+        border-left-color: #f56565;
+        background: linear-gradient(135deg, #fff5f5 0%, #fed7d7 100%);
+        color: #742a2a;
+    }
 
-        .language-switcher {
-            padding: 20px 15px;
-        }
+    .flash-info {
+        border-left-color: #4299e1;
+        background: linear-gradient(135deg, #ebf8ff 0%, #bee3f8 100%);
+        color: #2a4365;
+    }
 
-        .language-switcher select {
-            min-width: 150px;
-            font-size: 14px;
+    @keyframes slideIn {
+        from {
+            transform: translateX(100%);
+            opacity: 0;
         }
-
-        .stat-card {
-            padding: 15px;
-        }
-
-        .stat-number {
-            font-size: 1.5em;
+        to {
+            transform: translateX(0);
+            opacity: 1;
         }
     }
 
-    /* Animation for locale changes */
-    .locale-transition {
-        transition: all 0.3s ease-in-out;
+    /* Loading States */
+    .loading-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(255, 255, 255, 0.8);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 2000;
+        backdrop-filter: blur(2px);
     }
 
-    .locale-changing {
-        opacity: 0.7;
-        transform: scale(0.98);
-    }
-
-    /* Loading indicator */
-    .loading {
-        display: inline-block;
-        width: 20px;
-        height: 20px;
-        border: 3px solid #f3f3f3;
-        border-top: 3px solid #3498db;
+    .loading-spinner {
+        width: 50px;
+        height: 50px;
+        border: 4px solid #e2e8f0;
+        border-top: 4px solid #4facfe;
         border-radius: 50%;
         animation: spin 1s linear infinite;
     }
@@ -370,297 +363,579 @@
         100% { transform: rotate(360deg); }
     }
 
-    /* Success/Error Messages */
-    .flash-message {
-        padding: 12px 20px;
-        margin: 15px 0;
+    .language-changing .language-select {
+        opacity: 0.6;
+        pointer-events: none;
+    }
+
+    /* Debug Output */
+    .debug-output {
+        background: #2d3748;
+        color: #e2e8f0;
+        padding: 15px;
         border-radius: 6px;
-        font-weight: 500;
+        font-family: monospace;
+        font-size: 0.9rem;
+        white-space: pre-wrap;
+        word-break: break-word;
+        max-height: 300px;
+        overflow-y: auto;
+        margin-top: 15px;
+        display: none;
     }
 
-    .flash-success {
-        background: #d4edda;
-        color: #155724;
-        border: 1px solid #c3e6cb;
+    .debug-output.visible {
+        display: block;
     }
 
-    .flash-error {
-        background: #f8d7da;
-        color: #721c24;
-        border: 1px solid #f5c6cb;
-    }
+    /* Responsive Design */
+    @media (max-width: 768px) {
+        .localization-demo {
+            padding: 15px;
+        }
 
-    .flash-info {
-        background: #d1ecf1;
-        color: #0c5460;
-        border: 1px solid #bee5eb;
+        .demo-header {
+            padding: 25px 20px;
+        }
+
+        .demo-header h1 {
+            font-size: 2rem;
+        }
+
+        .status-info {
+            grid-template-columns: 1fr;
+        }
+
+        .translation-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .translation-item {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 8px;
+        }
+
+        .translation-key {
+            max-width: 100%;
+        }
+
+        .translation-value {
+            text-align: left;
+        }
+
+        .language-select {
+            min-width: 200px;
+        }
+
+        .debug-controls {
+            flex-wrap: wrap;
+        }
+
+        .flash-messages {
+            left: 15px;
+            right: 15px;
+            min-width: auto;
+        }
     }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="locale-transition" id="localization-demo">
-    <h2>🌍 {{ 'common.welcome' | t }} - Localization Demo</h2>
+<div class="localization-demo" id="localization-demo">
+    <!-- Header -->
+    <header class="demo-header">
+        <h1>🌍 {{ 'common.welcome' | t }}</h1>
+        <p class="subtitle">Localization Demo - Multi-Language Support</p>
+    </header>
 
-    <!-- Current Language Info -->
-    <div class="alert alert-success">
-        <h4>{{ 'common.navigation.home' | t }} - Current Language: {{ current_locale }}</h4>
-        <p><strong>Detected Locale:</strong> {{ current_locale }}</p>
-        <p><strong>Available Languages:</strong> Deutsch, English, Français, Español</p>
-    </div>
+    <!-- Current Status -->
+    <section class="status-card">
+        <h3>Current Language Status</h3>
+        <div class="status-info">
+            <div class="status-item">
+                <div class="status-label">Active Language</div>
+                <div class="status-value">{{ current_locale | upper }}</div>
+            </div>
+            <div class="status-item">
+                <div class="status-label">Detection Method</div>
+                <div class="status-value">{{ detection_info.detection_method | default('Unknown') | title }}</div>
+            </div>
+            <div class="status-item">
+                <div class="status-label">Supported Languages</div>
+                <div class="status-value">{{ supported_locales | length }}</div>
+            </div>
+            <div class="status-item">
+                <div class="status-label">Translator Status</div>
+                <div class="status-value">{{ translator_stats.status | title }}</div>
+            </div>
+        </div>
+    </section>
 
-    <!-- Language Switcher - FIXED -->
-    <div class="language-switcher">
+    <!-- Language Switcher -->
+    <section class="language-switcher">
         <h3>🔄 Change Language</h3>
-        <form method="POST" action="/test/localization" id="language-form">
+        <form method="POST" action="/test/localization" class="language-form" id="language-form">
             {{ csrf_token_field | raw }}
             <input type="hidden" name="change_language" value="1">
 
-            <select name="locale" onchange="submitLanguageChange(this.value)">
-                <option value="de" {{ current_locale == 'de' ? 'selected' : '' }}>🇩🇪 Deutsch</option>
-                <option value="en" {{ current_locale == 'en' ? 'selected' : '' }}>🇺🇸 English</option>
-                <option value="fr" {{ current_locale == 'fr' ? 'selected' : '' }}>🇫🇷 Français</option>
-                <option value="es" {{ current_locale == 'es' ? 'selected' : '' }}>🇪🇸 Español</option>
+            <select name="locale" class="language-select" onchange="handleLanguageChange(this.value)">
+                {% for locale in supported_locales %}
+                <option value="{{ locale }}" {{ current_locale == locale ? 'selected' : '' }}>
+                {% if locale == 'de' %}🇩🇪 Deutsch{% endif %}
+                {% if locale == 'en' %}🇺🇸 English{% endif %}
+                {% if locale == 'fr' %}🇫🇷 Français{% endif %}
+                {% if locale == 'es' %}🇪🇸 Español{% endif %}
+                </option>
+                {% endfor %}
             </select>
+
+            <div class="debug-controls">
+                <button type="button" class="debug-btn" onclick="debugFormData()">Debug Form</button>
+                <button type="button" class="debug-btn" onclick="debugCsrfToken()">Debug CSRF</button>
+                <button type="button" class="debug-btn" onclick="debugSession()">Debug Session</button>
+                <button type="button" class="debug-btn" onclick="testSessionWrite()">Test Session</button>
+            </div>
         </form>
-    </div>
 
-    <!-- Translation Filters Demo -->
-    <section>
-        <h3>🎨 Translation Filters</h3>
-
-        <div class="translation-examples">
-            <!-- Basic Translation -->
-            <div class="example-card">
-                <h5>Basic Translation</h5>
-                <ul>
-                    <li><strong>Welcome:</strong> {{ 'common.welcome' | t }}</li>
-                    <li><strong>Login:</strong> {{ 'auth.login' | t }}</li>
-                    <li><strong>Password:</strong> {{ 'auth.password' | t }}</li>
-                    <li><strong>Home:</strong> {{ 'common.navigation.home' | t }}</li>
-                    <li><strong>Team:</strong> {{ 'common.navigation.team' | t }}</li>
-                </ul>
-            </div>
-
-            <!-- Plural Translations -->
-            <div class="example-card">
-                <h5>Plural Translations</h5>
-                <ul>
-                    <li><strong>1 Goal:</strong> {{ 'game.goals' | t_plural:1 }}</li>
-                    <li><strong>3 Goals:</strong> {{ 'game.goals' | t_plural:3 }}</li>
-                    <li><strong>1 Player:</strong> {{ 'game.players' | t_plural:1 }}</li>
-                    <li><strong>11 Players:</strong> {{ 'game.players' | t_plural:11 }}</li>
-                </ul>
-            </div>
-
-            <!-- With Parameters -->
-            <div class="example-card">
-                <h5>With Parameters</h5>
-                <ul>
-                    <li><strong>Messi Goal:</strong> {{ 'match.goal_scored' | t:{player: 'Messi', minute: 90} }}</li>
-                    <li><strong>Ronaldo Goal:</strong> {{ 'match.goal_scored' | t:{player: 'Cristiano', minute: 78} }}</li>
-                </ul>
-            </div>
-
-            <!-- System Info -->
-            <div class="example-card">
-                <h5>System Info</h5>
-                <ul>
-                    <li><strong>Current Locale:</strong> {{ current_locale }}</li>
-                    <li><strong>Match Started:</strong> {{ 'match.match_started' | t }}</li>
-                    <li><strong>Live Ticker:</strong> {{ 'match.live_ticker' | t }}</li>
-                </ul>
-            </div>
-        </div>
+        <div id="debug-output" class="debug-output"></div>
     </section>
 
-    <!-- Syntax Examples -->
-    <section>
-        <h3>📝 Filter Syntax Examples</h3>
-        <div class="demo-section">
-            <div class="filter-examples">
-                <div class="filter-example">
-                    <h6>Basic Syntax:</h6>
-                    <div class="syntax">{{ '{{ "common.welcome" | t }}' }}</div>
-                    <div class="result">→ {{ 'common.welcome' | t }}</div>
-                </div>
-
-                <div class="filter-example">
-                    <h6>Plural Syntax:</h6>
-                    <div class="syntax">{{ '{{ "game.goals" | t_plural:3 }}' }}</div>
-                    <div class="result">→ {{ 'game.goals' | t_plural:3 }}</div>
-                </div>
-
-                <div class="filter-example">
-                    <h6>With Parameters:</h6>
-                    <div class="syntax">{{ '{{ "match.goal_scored" | t:{player: "Messi"} }}' }}</div>
-                    <div class="result">→ {{ 'match.goal_scored' | t:{player: 'Messi', minute: 90} }}</div>
-                </div>
-
-                <div class="filter-example">
-                    <h6>Filter Combinations:</h6>
-                    <div class="syntax">{{ '{{ "auth.login" | t | upper }}' }}</div>
-                    <div class="result">→ {{ 'auth.login' | t | upper }}</div>
-                </div>
-            </div>
-
-            <div class="syntax-example">
-                <span class="syntax-highlight">Basic Translation:</span>
-                {{ <span class="filter-syntax">'translation.key'</span> | <span class="parameter-syntax">t</span> }}
-
-                <span class="syntax-highlight">With Parameters:</span>
-                {{ <span class="filter-syntax">'message.key'</span> | <span class="parameter-syntax">t:{param: 'value', count: 5}</span> }}
-
-                <span class="syntax-highlight">Plural Forms:</span>
-                {{ <span class="filter-syntax">'items.count'</span> | <span class="parameter-syntax">t_plural:count</span> }}
-
-                <span class="syntax-highlight">Filter Chains:</span>
-                {{ <span class="filter-syntax">'text.key'</span> | <span class="parameter-syntax">t</span> | <span class="parameter-syntax">upper</span> | <span class="parameter-syntax">truncate:50</span> }}
-            </div>
-        </div>
-    </section>
-
-    <!-- Statistics -->
-    <section>
-        <h3>📊 Translation Statistics</h3>
-        <div class="stats-grid">
-            <div class="stat-card">
-                <div class="stat-number">{{ current_locale | upper }}</div>
-                <div class="stat-label">Current Locale</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-number">{{ translator_stats.loaded_namespaces }}</div>
-                <div class="stat-label">Loaded Namespaces</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-number">4</div>
-                <div class="stat-label">Supported Languages</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-number">{{ translator_stats.supported_locales | length }}</div>
-                <div class="stat-label">Available Locales</div>
-            </div>
-        </div>
-    </section>
-
-    <!-- Demo Data Display -->
-    {% if demo_data %}
-    <section>
-        <h3>🗂️ Translation Data</h3>
-        <div class="demo-section">
-            {% if demo_data.navigation %}
-            <details>
-                <summary>Navigation Translations</summary>
-                {% for nav in demo_data.navigation %}
-                <div class="filter-example">
-                    <strong>{{ nav.key }}:</strong> {{ nav.translated }}
+    <!-- Translation Examples -->
+    {% if demo_translations %}
+    <section class="demo-section">
+        <h3>📝 Translation Examples</h3>
+        <div class="translation-grid">
+            {% for category, translations in demo_translations %}
+            <div class="translation-category">
+                <h4 class="category-title">{{ category }}</h4>
+                {% for item in translations %}
+                <div class="translation-item">
+                    <span class="translation-key">{{ item.key }}</span>
+                    <span class="translation-value">{{ item.value }}</span>
                 </div>
                 {% endfor %}
-            </details>
-            {% endif %}
-
-            {% if demo_data.language_names %}
-            <details>
-                <summary>Language Names</summary>
-                {% for code, name in demo_data.language_names %}
-                <div class="filter-example">
-                    <strong>{{ code }}:</strong> {{ name }}
-                </div>
-                {% endfor %}
-            </details>
-            {% endif %}
+            </div>
+            {% endfor %}
         </div>
     </section>
     {% endif %}
 
-    <!-- Debug Information -->
-    <section>
-        <h3>🔍 Debug Information</h3>
+    <!-- Statistics & Debug Information -->
+    <section class="demo-section">
+        <h3>📊 System Information</h3>
+
         <div class="debug-section">
             <details>
-                <summary>Language Detection Info</summary>
-                <pre>{{ detection_info | json }}</pre>
+                <summary>🔍 Language Detection Information</summary>
+                <div class="debug-content">
+                    <pre>{{ detection_info | json }}</pre>
+                </div>
             </details>
-
-            <details>
-                <summary>Translator Statistics</summary>
-                <pre>{{ translator_stats | json }}</pre>
-            </details>
-
-            {% if demo_data %}
-            <details>
-                <summary>Demo Data Structure</summary>
-                <pre>{{ demo_data | json }}</pre>
-            </details>
-            {% endif %}
         </div>
-    </section>
 
-    <!-- CSRF Debug (Development Only) -->
-    <section>
-        <h3>🔒 CSRF Debug (Development)</h3>
-        <div class="csrf-debug">
-            <p><strong>CSRF Token Field:</strong></p>
-            <div class="csrf-field-display">
-                {{ csrf_token_field | default:'CSRF token not available' }}
-            </div>
-
-            <p><strong>Raw CSRF Field (for forms):</strong></p>
-            <div class="csrf-field-display">
-                {{ csrf_token_field | raw | default:'CSRF token not available' }}
-            </div>
+        <div class="debug-section">
+            <details>
+                <summary>📈 Translator Statistics</summary>
+                <div class="debug-content">
+                    <pre>{{ translator_stats | json }}</pre>
+                </div>
+            </details>
         </div>
+
+        <div class="debug-section">
+            <details>
+                <summary>🔐 Session Information</summary>
+                <div class="debug-content">
+                    <pre>{{ session_info | json }}</pre>
+                </div>
+            </details>
+        </div>
+
+        <div class="debug-section">
+            <details>
+                <summary>🛡️ CSRF Debug Information</summary>
+                <div class="debug-content">
+                    <pre>{{ csrf_debug | json }}</pre>
+                    <div style="margin-top: 15px; padding: 10px; background: #4a5568; border-radius: 4px;">
+                        <strong>CSRF Token Field:</strong><br>
+                        {{ csrf_token_field | raw }}
+                    </div>
+                </div>
+            </details>
+        </div>
+
+        {% if demo_translations %}
+        <div class="debug-section">
+            <details>
+                <summary>🗂️ Translation Data Structure</summary>
+                <div class="debug-content">
+                    <pre>{{ demo_translations | json }}</pre>
+                </div>
+            </details>
+        </div>
+        {% endif %}
     </section>
 </div>
 
+<!-- Flash Messages Container -->
+<div id="flash-messages" class="flash-messages"></div>
+
+<!-- Loading Overlay -->
+<div id="loading-overlay" class="loading-overlay" style="display: none;">
+    <div class="loading-spinner"></div>
+</div>
+
 <script>
-    function submitLanguageChange(locale) {
+    /**
+     * Localization Demo JavaScript
+     * Handles language switching, debugging, and UI interactions
+     */
+
+// Global state
+    let isChangingLanguage = false;
+
+    // Initialize on DOM ready
+    document.addEventListener('DOMContentLoaded', function() {
+        initializeFlashMessages();
+        initializeDebugMode();
+        logPageLoad();
+    });
+
+    /**
+     * Handle language change
+     */
+    function handleLanguageChange(selectedLocale) {
+        if (isChangingLanguage) {
+            console.warn('Language change already in progress');
+            return;
+        }
+
         const form = document.getElementById('language-form');
-        const demo = document.getElementById('localization-demo');
+        const currentLocale = getCurrentLocale();
 
-        // Add loading visual feedback
-        demo.classList.add('locale-changing');
+        // Don't submit if same locale is selected
+        if (selectedLocale === currentLocale) {
+            console.log('Same locale selected, no change needed');
+            return;
+        }
 
-        // Add loading indicator
-        const select = form.querySelector('select');
-        const originalHTML = select.innerHTML;
-        select.innerHTML = '<option>Changing... <div class="loading"></div></option>';
-        select.disabled = true;
+        console.log(`Language change: ${currentLocale} -> ${selectedLocale}`);
 
-        // Submit the form
+        // Validate CSRF token before submission
+        if (!validateCsrfToken()) {
+            showFlashMessage('Security token missing. Please refresh the page.', 'error');
+            return;
+        }
+
+        // Start loading state
+        startLoadingState();
+
+        // Submit form with delay for visual feedback
         setTimeout(() => {
             form.submit();
-        }, 200);
+        }, 300);
     }
 
-    // Show success/error messages
-    document.addEventListener('DOMContentLoaded', function() {
-        // You can add flash message handling here
-        const urlParams = new URLSearchParams(window.location.search);
-        const success = urlParams.get('success');
-        const error = urlParams.get('error');
+    /**
+     * Validate CSRF token presence
+     */
+    function validateCsrfToken() {
+        const form = document.getElementById('language-form');
+        const csrfInput = form.querySelector('input[name="_token"]');
+        const metaToken = document.querySelector('meta[name="csrf-token"]');
 
-        if (success) {
+        if (!csrfInput || !csrfInput.value) {
+            console.error('CSRF token missing from form');
+            return false;
+        }
+
+        if (!metaToken || !metaToken.content) {
+            console.warn('CSRF meta token missing, but form token exists');
+            // Form token is sufficient, continue
+        }
+
+        console.log('CSRF token validated:', csrfInput.value.substring(0, 8) + '...');
+        return true;
+    }
+
+    /**
+     * Start loading state
+     */
+    function startLoadingState() {
+        isChangingLanguage = true;
+
+        const demo = document.getElementById('localization-demo');
+        const overlay = document.getElementById('loading-overlay');
+        const select = document.querySelector('.language-select');
+
+        demo.classList.add('language-changing');
+        overlay.style.display = 'flex';
+        select.disabled = true;
+
+        console.log('Loading state started');
+    }
+
+    /**
+     * Get current locale from page
+     */
+    function getCurrentLocale() {
+        const select = document.querySelector('.language-select');
+        return select ? select.value : 'unknown';
+    }
+
+    /**
+     * Debug Functions
+     */
+    function debugFormData() {
+        const form = document.getElementById('language-form');
+        const formData = new FormData(form);
+        const output = document.getElementById('debug-output');
+
+        let debugInfo = 'FORM DEBUG:\n';
+        debugInfo += '='.repeat(50) + '\n';
+
+        for (let [key, value] of formData.entries()) {
+            debugInfo += `${key}: ${value}\n`;
+        }
+
+        debugInfo += '\nForm Action: ' + form.action + '\n';
+        debugInfo += 'Form Method: ' + form.method + '\n';
+        debugInfo += 'Current Locale: ' + getCurrentLocale() + '\n';
+
+        output.textContent = debugInfo;
+        output.classList.add('visible');
+
+        console.log('Form Debug:', debugInfo);
+    }
+
+    function debugCsrfToken() {
+        const form = document.getElementById('language-form');
+        const csrfInput = form.querySelector('input[name="_token"]');
+        const metaToken = document.querySelector('meta[name="csrf-token"]');
+        const output = document.getElementById('debug-output');
+
+        let debugInfo = 'CSRF TOKEN DEBUG:\n';
+        debugInfo += '='.repeat(50) + '\n';
+        debugInfo += `Form Token: ${csrfInput ? csrfInput.value : 'NOT FOUND'}\n`;
+        debugInfo += `Meta Token: ${metaToken ? metaToken.content : 'NOT FOUND'}\n`;
+        debugInfo += `Tokens Match: ${csrfInput && metaToken ? (csrfInput.value === metaToken.content ? 'YES' : 'NO') : 'UNKNOWN'}\n`;
+        debugInfo += `Form Token Length: ${csrfInput ? csrfInput.value.length : 0}\n`;
+        debugInfo += `Token Valid: ${csrfInput && csrfInput.value.length > 0 ? 'YES' : 'NO'}\n`;
+
+        output.textContent = debugInfo;
+        output.classList.add('visible');
+
+        console.log('CSRF Debug:', debugInfo);
+    }
+
+    function debugSession() {
+        const output = document.getElementById('debug-output');
+
+        let debugInfo = 'SESSION DEBUG:\n';
+        debugInfo += '='.repeat(50) + '\n';
+
+        // Enhanced session debugging
+        debugInfo += `Document Cookie: ${document.cookie || 'Empty'}\n`;
+        debugInfo += `Session ID from Cookie: ${getCookie('PHPSESSID') || 'Not Found'}\n`;
+        debugInfo += `Alternative Session Cookies: ${getCookie('sess_') || 'Not Found'}\n`;
+        debugInfo += `Locale Cookie: ${getCookie('app_locale') || 'Not Set'}\n`;
+        debugInfo += `Browser Language: ${navigator.language}\n`;
+        debugInfo += `Browser Languages: ${navigator.languages.join(', ')}\n`;
+        debugInfo += `Cookie Enabled: ${navigator.cookieEnabled}\n`;
+        debugInfo += `Current Domain: ${window.location.hostname}\n`;
+        debugInfo += `Current Protocol: ${window.location.protocol}\n`;
+        debugInfo += `Current Port: ${window.location.port || 'default'}\n`;
+
+        // Check for session issues
+        if (!document.cookie) {
+            debugInfo += '\n⚠️  WARNING: No cookies found! Session may not be working.\n';
+            debugInfo += 'Possible causes:\n';
+            debugInfo += '- Cookies disabled in browser\n';
+            debugInfo += '- HTTPS/secure cookie mismatch\n';
+            debugInfo += '- Domain/path configuration issue\n';
+            debugInfo += '- Session not started properly\n';
+        }
+
+        output.textContent = debugInfo;
+        output.classList.add('visible');
+
+        console.log('Session Debug:', debugInfo);
+    }
+
+    /**
+     * Flash Messages
+     */
+    function initializeFlashMessages() {
+        // Check URL parameters for messages
+        const urlParams = new URLSearchParams(window.location.search);
+
+        if (urlParams.get('success')) {
             showFlashMessage('Language changed successfully!', 'success');
         }
 
-        if (error) {
+        if (urlParams.get('error')) {
             showFlashMessage('Failed to change language. Please try again.', 'error');
         }
-    });
 
-    function showFlashMessage(message, type) {
-        const flashDiv = document.createElement('div');
-        flashDiv.className = `flash-message flash-${type}`;
-        flashDiv.textContent = message;
+        // Clean URL
+        if (urlParams.has('success') || urlParams.has('error')) {
+            const cleanUrl = window.location.pathname;
+            window.history.replaceState({}, document.title, cleanUrl);
+        }
+    }
 
-        const container = document.querySelector('.locale-transition');
-        container.insertBefore(flashDiv, container.firstChild);
+    function showFlashMessage(message, type = 'info') {
+        const container = document.getElementById('flash-messages');
+        const messageEl = document.createElement('div');
+
+        messageEl.className = `flash-message flash-${type}`;
+        messageEl.textContent = message;
+        messageEl.onclick = () => messageEl.remove();
+
+        container.appendChild(messageEl);
 
         // Auto-remove after 5 seconds
         setTimeout(() => {
-            flashDiv.remove();
+            if (messageEl.parentNode) {
+                messageEl.remove();
+            }
         }, 5000);
+
+        console.log(`Flash message [${type}]:`, message);
     }
+
+    /**
+     * Utility Functions
+     */
+    function getCookie(name) {
+        const value = `; ${document.cookie}`;
+        const parts = value.split(`; ${name}=`);
+        if (parts.length === 2) return parts.pop().split(';').shift();
+
+        // Try alternative session cookie patterns
+        if (name === 'PHPSESSID') {
+            // Check for other possible session cookie names
+            const altNames = ['sess_', 'session_', 'sid_'];
+            for (const altName of altNames) {
+                const altParts = value.split(`; ${altName}`);
+                if (altParts.length > 1) {
+                    return altParts[1].split('=')[1]?.split(';')[0];
+                }
+            }
+        }
+
+        return null;
+    }
+
+    function getAllCookies() {
+        const cookies = {};
+        document.cookie.split(';').forEach(cookie => {
+            const [name, value] = cookie.trim().split('=');
+            if (name && value) {
+                cookies[name] = value;
+            }
+        });
+        return cookies;
+    }
+
+    function initializeDebugMode() {
+        // Add keyboard shortcut for debug mode
+        document.addEventListener('keydown', function(e) {
+            if (e.ctrlKey && e.shiftKey && e.key === 'D') {
+                e.preventDefault();
+                toggleDebugOutput();
+            }
+        });
+
+        console.log('Debug mode initialized. Press Ctrl+Shift+D to toggle debug output.');
+    }
+
+    function toggleDebugOutput() {
+        const output = document.getElementById('debug-output');
+        output.classList.toggle('visible');
+
+        if (output.classList.contains('visible') && !output.textContent.trim()) {
+            output.textContent = 'Debug mode activated. Use the debug buttons to see information.';
+        }
+    }
+
+    function testSessionWrite() {
+        const output = document.getElementById('debug-output');
+
+        // Make a test request to check session functionality
+        fetch('/test/localization', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: 'test_session=1&_token=' + encodeURIComponent(getCurrentCsrfToken())
+        })
+            .then(response => {
+                let debugInfo = 'SESSION TEST RESULT:\n';
+                debugInfo += '='.repeat(50) + '\n';
+                debugInfo += `Response Status: ${response.status}\n`;
+                debugInfo += `Response Headers:\n`;
+
+                for (let [key, value] of response.headers.entries()) {
+                    debugInfo += `  ${key}: ${value}\n`;
+                }
+
+                // Check if new cookies were set
+                const cookies = getAllCookies();
+                debugInfo += `\nCookies after request:\n`;
+                for (let [name, value] of Object.entries(cookies)) {
+                    debugInfo += `  ${name}: ${value}\n`;
+                }
+
+                if (Object.keys(cookies).length === 0) {
+                    debugInfo += '\n⚠️  CRITICAL: No cookies set! Session is not working.\n';
+                    debugInfo += 'Check PHP session configuration and browser settings.\n';
+                }
+
+                output.textContent = debugInfo;
+                output.classList.add('visible');
+
+                console.log('Session Test:', debugInfo);
+            })
+            .catch(error => {
+                output.textContent = 'SESSION TEST ERROR:\n' + error.message;
+                output.classList.add('visible');
+                console.error('Session test failed:', error);
+            });
+    }
+
+    function getCurrentCsrfToken() {
+        const form = document.getElementById('language-form');
+        const csrfInput = form.querySelector('input[name="_token"]');
+        return csrfInput ? csrfInput.value : '';
+    }
+
+    function logPageLoad() {
+        console.log('Localization Demo loaded');
+        console.log('Current locale:', getCurrentLocale());
+        console.log('Available debug functions: debugFormData(), debugCsrfToken(), debugSession(), testSessionWrite()');
+
+        // Immediate session check
+        if (!document.cookie) {
+            console.warn('⚠️  No cookies found! Session may not be working.');
+            showFlashMessage('Warning: No session cookies detected. Language changes may not persist.', 'info');
+        }
+    }
+
+    // Global error handler
+    window.addEventListener('error', function(e) {
+        console.error('JavaScript Error:', e.error);
+        showFlashMessage('A JavaScript error occurred. Check the console for details.', 'error');
+    });
+
+    // Handle form submission errors
+    document.getElementById('language-form').addEventListener('submit', function(e) {
+        if (!validateCsrfToken()) {
+            e.preventDefault();
+            showFlashMessage('Cannot submit form: Security token is missing.', 'error');
+            return false;
+        }
+    });
 </script>
 {% endblock %}
