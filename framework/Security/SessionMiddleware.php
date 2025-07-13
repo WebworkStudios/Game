@@ -220,6 +220,18 @@ class SessionMiddleware implements MiddlewareInterface
     }
 
     /**
+     * Get middleware status for debugging
+     */
+    public function getStatus(): array
+    {
+        return [
+            'config' => $this->config,
+            'session_started' => $this->session->isStarted(),
+            'session_status' => $this->session->getStatus(),
+        ];
+    }
+
+    /**
      * Handle session locked
      */
     private function handleSessionLocked(Request $request): Response
@@ -404,17 +416,5 @@ class SessionMiddleware implements MiddlewareInterface
         } catch (\Throwable) {
             return false;
         }
-    }
-
-    /**
-     * Get middleware status for debugging
-     */
-    public function getStatus(): array
-    {
-        return [
-            'config' => $this->config,
-            'session_started' => $this->session->isStarted(),
-            'session_status' => $this->session->getStatus(),
-        ];
     }
 }

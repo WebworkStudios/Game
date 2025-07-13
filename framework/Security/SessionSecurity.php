@@ -185,60 +185,26 @@ class SessionSecurity
     }
 
     /**
-     * Record failed login attempt
+     * Clear security violations
      */
-    public function recordLoginAttempt(string $identifier): int
+    public function clearSecurityViolations(): void
     {
-        $key = self::LOGIN_ATTEMPTS_KEY . '.' . $identifier;
-        $attempts = $this->session->getFramework($key) ?? [];
-
-        // Add current attempt
-        $attempts[] = time();
-
-        // Clean old attempts outside window
-        $window = $this->config['login_attempt_window'];
-        $cutoff = time() - $window;
-        $attempts = array_filter($attempts, fn($time) => $time > $cutoff);
-
-        $this->session->setFramework($key, $attempts);
-
-        return count($attempts);
+        $this->session->removeFramework(self::SECURITY_VIOLATIONS);
     }
 
     /**
-     * Check if identifier is blocked due to too many login attempts
+     * Log security event
      */
-    public function isLoginBlocked(string $identifier): bool
+    private function logSecurityEvent(string $event, array $data = []): void
     {
-        $key = self::LOGIN_ATTEMPTS_KEY . '.' . $identifier;
-        $attempts = $this->session->getFramework($key) ?? [];
+        $logData = [
+            'event' => $event,
+            'data' => $data,
+            'session_id' => $this->session->getId(),
+            'timestamp' => time(),
+        ];
 
-        // Clean old attempts
-        $window = $this->config['login_attempt_window'];
-        $cutoff = time() - $window;
-        $attempts = array_filter($attempts, fn($time) => $time > $cutoff);
-
-        return count($attempts) >= $this->config['max_login_attempts'];
-    }
-
-    /**
-     * Get remaining login attempts for identifier
-     */
-    public function getRemainingLoginAttempts(string $identifier): int
-    {
-        if ($this->isLoginBlocked($identifier)) {
-            return 0;
-        }
-
-        $key = self::LOGIN_ATTEMPTS_KEY . '.' . $identifier;
-        $attempts = $this->session->getFramework($key) ?? [];
-
-        // Clean old attempts
-        $window = $this->config['login_attempt_window'];
-        $cutoff = time() - $window;
-        $attempts = array_filter($attempts, fn($time) => $time > $cutoff);
-
-        return max(0, $this->config['max_login_attempts'] - count($attempts));
+        error_log('SessionSecurity: ' . json_encode($logData));
     }
 
     /**
@@ -271,26 +237,60 @@ class SessionSecurity
     }
 
     /**
-     * Clear security violations
+     * Record failed login attempt
      */
-    public function clearSecurityViolations(): void
+    public function recordLoginAttempt(string $identifier): int
     {
-        $this->session->removeFramework(self::SECURITY_VIOLATIONS);
+        $key = self::LOGIN_ATTEMPTS_KEY . '.' . $identifier;
+        $attempts = $this->session->getFramework($key) ?? [];
+
+        // Add current attempt
+        $attempts[] = time();
+
+        // Clean old attempts outside window
+        $window = $this->config['login_attempt_window'];
+        $cutoff = time() - $window;
+        $attempts = array_filter($attempts, fn($time) => $time > $cutoff);
+
+        $this->session->setFramework($key, $attempts);
+
+        return count($attempts);
     }
 
     /**
-     * Log security event
+     * Get remaining login attempts for identifier
      */
-    private function logSecurityEvent(string $event, array $data = []): void
+    public function getRemainingLoginAttempts(string $identifier): int
     {
-        $logData = [
-            'event' => $event,
-            'data' => $data,
-            'session_id' => $this->session->getId(),
-            'timestamp' => time(),
-        ];
+        if ($this->isLoginBlocked($identifier)) {
+            return 0;
+        }
 
-        error_log('SessionSecurity: ' . json_encode($logData));
+        $key = self::LOGIN_ATTEMPTS_KEY . '.' . $identifier;
+        $attempts = $this->session->getFramework($key) ?? [];
+
+        // Clean old attempts
+        $window = $this->config['login_attempt_window'];
+        $cutoff = time() - $window;
+        $attempts = array_filter($attempts, fn($time) => $time > $cutoff);
+
+        return max(0, $this->config['max_login_attempts'] - count($attempts));
+    }
+
+    /**
+     * Check if identifier is blocked due to too many login attempts
+     */
+    public function isLoginBlocked(string $identifier): bool
+    {
+        $key = self::LOGIN_ATTEMPTS_KEY . '.' . $identifier;
+        $attempts = $this->session->getFramework($key) ?? [];
+
+        // Clean old attempts
+        $window = $this->config['login_attempt_window'];
+        $cutoff = time() - $window;
+        $attempts = array_filter($attempts, fn($time) => $time > $cutoff);
+
+        return count($attempts) >= $this->config['max_login_attempts'];
     }
 
     /**

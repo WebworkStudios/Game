@@ -1,14 +1,14 @@
 <?php
 
 // Template cache for: pages/team/overview
-// Generated at: 2025-07-13 17:45:47
+// Generated at: 2025-07-13 18:32:57
 // DO NOT EDIT - This file is auto-generated
 
 return array (
   'version' => '1.0',
   'template' => 'pages/team/overview',
   'template_path' => 'E:\\xampp\\htdocs\\kickerscup\\public\\..\\app\\Views\\pages\\team\\overview.html',
-  'compiled_at' => 1752428747,
+  'compiled_at' => 1752431577,
   'dependencies' => 
   array (
     'E:\\xampp\\htdocs\\kickerscup\\public\\..\\app\\Views\\pages\\team\\overview.html' => 1752417230,
@@ -2142,6 +2142,6 @@ return array (
   array (
     'tokens' => 101,
     'blocks' => 3,
-    'memory_usage' => 1948568,
+    'memory_usage' => 1915872,
   ),
 );

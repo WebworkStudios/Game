@@ -490,6 +490,14 @@ class Application
     }
 
     /**
+     * Get Session service
+     */
+    public function getSession(): Session
+    {
+        return $this->get('session');
+    }
+
+    /**
      * Get session status for debugging
      */
     public function getSessionStatus(): array
@@ -591,14 +599,6 @@ class Application
         } catch (\Throwable) {
             return false;
         }
-    }
-
-    /**
-     * Get Session service
-     */
-    public function getSession(): Session
-    {
-        return $this->get('session');
     }
 
     /**
