@@ -34,7 +34,7 @@
                 <div class="stat-label">Vorlagen</div>
             </div>
             <div class="stat-card">
-                <div class="stat-number">€{{ (team.total_market_value / 1000000)|number_format(0) }}M</div>
+                <div class="stat-number">€{{ (team.total_market_value / 1000000)|number_format:0 }}M</div>
                 <div class="stat-label">Marktwert</div>
             </div>
         </div>
@@ -50,15 +50,13 @@
     <!-- Injured Players Alert -->
     {% if team.injured_count > 0 %}
     <div class="alert alert-warning">
-        <i class="icon-warning">⚠️</i>
-        <span>
-            {{ team.injured_count }} Spieler {% if team.injured_count == 1 %}ist{% else %}sind{% endif %} verletzt
-        </span>
+        <strong>⚠️ {{ team.injured_count }} {{ team.injured_count|plural:'Spieler ist':'Spieler sind' }} verletzt!</strong>
+        <p>Einige Spieler stehen derzeit nicht zur Verfügung.</p>
     </div>
     {% endif %}
 
-    <!-- Squad by Position -->
-    <section class="squad-overview">
+    <!-- Players by Position -->
+    <section class="positions">
         {% for team.positions as position %}
         <div class="position-section">
             <div class="position-header">
@@ -76,21 +74,21 @@
                         <div class="player-info">
                             <h3 class="player-name">{{ player.name }}</h3>
                             <div class="player-meta">
-                                <span class="player-age">{{ player.age }} Jahre</span>
-                                {% if player.injured %}
-                                <span class="injury-status">🏥 bis {{ player.injury_until }}</span>
-                                {% endif %}
+                                <span class="age">{{ player.age }} Jahre</span>
+                                <span class="rating">{{ player.rating }}</span>
                             </div>
                         </div>
-                        <div class="player-rating">
-                            <span class="rating-value">{{ player.rating }}</span>
-                            <span class="rating-label">⭐</span>
+                        {% if player.injured %}
+                        <div class="injury-badge">
+                            <span class="injury-icon">🤕</span>
+                            <span class="injury-text">Verletzt bis {{ player.injury_until }}</span>
                         </div>
+                        {% endif %}
                     </div>
 
                     <!-- Player Stats -->
                     <div class="player-stats">
-                        <div class="stat-row">
+                        <div class="stats-row">
                             <div class="stat">
                                 <span class="stat-value">{{ player.goals }}</span>
                                 <span class="stat-name">Tore</span>
@@ -116,7 +114,7 @@
                     <div class="player-details">
                         <div class="market-value">
                             <span class="label">Marktwert:</span>
-                            <span class="value">€{{ (player.market_value / 1000000)|number_format(1) }}M</span>
+                            <span class="value">€{{ (player.market_value / 1000000)|number_format:1 }}M</span>
                         </div>
                         <div class="contract">
                             <span class="label">Vertrag bis:</span>
@@ -202,37 +200,39 @@
     }
 
     .wins {
-        background: #c6f6d5;
-        color: #22543d;
+        background: #48bb78;
+        color: white;
     }
 
     .draws {
-        background: #fed7aa;
-        color: #9c4221;
+        background: #ed8936;
+        color: white;
     }
 
     .losses {
-        background: #fed7d7;
-        color: #9b2c2c;
+        background: #f56565;
+        color: white;
     }
 
     /* Alert */
     .alert {
-        padding: 12px 16px;
-        border-radius: 6px;
+        padding: 15px;
         margin: 20px 0;
-        display: flex;
-        align-items: center;
-        gap: 10px;
+        border-radius: 8px;
+        border-left: 4px solid #ed8936;
+        background: #fefcbf;
     }
 
     .alert-warning {
-        background: #fef5e7;
-        border: 1px solid #f6ad55;
-        color: #744210;
+        border-color: #ed8936;
+        background: #fefcbf;
     }
 
     /* Position Sections */
+    .positions {
+        margin-top: 40px;
+    }
+
     .position-section {
         margin-bottom: 40px;
     }
@@ -247,19 +247,19 @@
     }
 
     .position-title {
+        font-size: 1.5rem;
         color: #2d3748;
         margin: 0;
     }
 
     .position-count {
         color: #718096;
-        font-size: 1.1rem;
+        font-size: 1rem;
     }
 
-    /* Players Grid */
     .players-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
         gap: 20px;
     }
 
@@ -274,15 +274,14 @@
 
     .player-card:hover {
         transform: translateY(-2px);
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
     }
 
     .player-card.injured {
         border-color: #f56565;
-        background: #fff5f5;
+        background: #fed7d7;
     }
 
-    /* Player Header */
     .player-header {
         display: flex;
         align-items: flex-start;
@@ -291,7 +290,7 @@
     }
 
     .player-number {
-        background: #4299e1;
+        background: #667eea;
         color: white;
         width: 40px;
         height: 40px;
@@ -301,6 +300,7 @@
         justify-content: center;
         font-weight: bold;
         font-size: 1.1rem;
+        flex-shrink: 0;
     }
 
     .player-info {
@@ -308,82 +308,101 @@
     }
 
     .player-name {
-        margin: 0 0 5px 0;
-        color: #2d3748;
+        margin: 0 0 8px 0;
         font-size: 1.1rem;
+        color: #2d3748;
     }
 
     .player-meta {
         display: flex;
-        gap: 10px;
+        gap: 15px;
         font-size: 0.9rem;
         color: #718096;
     }
 
-    .injury-status {
-        color: #e53e3e;
-        font-weight: 500;
+    .rating {
+        background: #f7fafc;
+        padding: 2px 8px;
+        border-radius: 4px;
+        border: 1px solid #e2e8f0;
     }
 
-    .player-rating {
+    .injury-badge {
+        background: #fed7d7;
+        border: 1px solid #f56565;
+        padding: 8px 12px;
+        border-radius: 6px;
+        font-size: 0.8rem;
         text-align: center;
     }
 
-    .rating-value {
+    .injury-icon {
         display: block;
-        font-size: 1.3rem;
-        font-weight: bold;
-        color: #2d3748;
+        font-size: 1.2rem;
+        margin-bottom: 4px;
     }
 
-    .rating-label {
-        font-size: 0.8rem;
+    .injury-text {
+        color: #c53030;
+        font-weight: 500;
     }
 
     /* Player Stats */
-    .stat-row {
-        display: flex;
-        justify-content: space-between;
+    .player-stats {
         margin-bottom: 15px;
+    }
+
+    .stats-row {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(60px, 1fr));
+        gap: 10px;
     }
 
     .stat {
         text-align: center;
-        flex: 1;
+        padding: 8px;
+        background: #f7fafc;
+        border-radius: 6px;
     }
 
     .stat-value {
         display: block;
-        font-size: 1.2rem;
         font-weight: bold;
         color: #2d3748;
+        font-size: 1.1rem;
     }
 
     .stat-name {
-        font-size: 0.8rem;
+        display: block;
+        font-size: 0.75rem;
         color: #718096;
+        margin-top: 2px;
     }
 
     /* Player Details */
     .player-details {
         border-top: 1px solid #e2e8f0;
-        padding-top: 12px;
+        padding-top: 15px;
+        display: flex;
+        justify-content: space-between;
+        gap: 15px;
         font-size: 0.9rem;
     }
 
-    .player-details > div {
-        display: flex;
-        justify-content: space-between;
-        margin-bottom: 5px;
+    .market-value, .contract {
+        flex: 1;
     }
 
-    .player-details .label {
+    .label {
+        display: block;
         color: #718096;
+        margin-bottom: 4px;
     }
 
-    .player-details .value {
+    .value {
+        display: block;
+        font-weight: 600;
         color: #2d3748;
-        font-weight: 500;
     }
 
     .empty-position {
@@ -392,10 +411,41 @@
         color: #718096;
         background: #f7fafc;
         border-radius: 8px;
+        border: 2px dashed #e2e8f0;
     }
 
-    /* Responsive */
+    /* Filter Controls */
+    .filter-controls {
+        margin-bottom: 20px;
+        text-align: center;
+    }
+
+    .filter-btn {
+        background: #667eea;
+        color: white;
+        border: none;
+        padding: 8px 16px;
+        margin: 0 5px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 0.9rem;
+        transition: background 0.2s;
+    }
+
+    .filter-btn:hover {
+        background: #5a67d8;
+    }
+
+    .filter-btn.active {
+        background: #4c51bf;
+    }
+
+    /* Responsive Design */
     @media (max-width: 768px) {
+        .team-overview {
+            padding: 10px;
+        }
+
         .stats-grid {
             grid-template-columns: repeat(2, 1fr);
         }
@@ -404,47 +454,60 @@
             grid-template-columns: 1fr;
         }
 
-        .stat-row {
-            flex-wrap: wrap;
+        .player-details {
+            flex-direction: column;
             gap: 10px;
-        }
-
-        .stat {
-            min-width: 70px;
         }
     }
 </style>
-{% endblock %}
 
-{% block scripts %}
+<!-- JavaScript for Player Filtering -->
 <script>
-    // Interaktivität für Spielerkarten
-    document.addEventListener('DOMContentLoaded', function () {
-        const playerCards = document.querySelectorAll('.player-card');
+    document.addEventListener('DOMContentLoaded', function() {
+        // Add filter buttons
+        const positionSections = document.querySelectorAll('.position-section');
 
-        playerCards.forEach(card => {
-            card.addEventListener('click', function () {
-                // Toggle expanded state
-                this.classList.toggle('expanded');
-            });
-        });
+        positionSections.forEach(section => {
+            const header = section.querySelector('.position-header');
+            const playersGrid = section.querySelector('.players-grid');
 
-        // Filter für verletzte Spieler
-        const filterButtons = document.querySelectorAll('[data-filter]');
-        filterButtons.forEach(button => {
-            button.addEventListener('click', function () {
-                const filter = this.dataset.filter;
+            if (playersGrid) {
+                // Create filter controls
+                const filterControls = document.createElement('div');
+                filterControls.className = 'filter-controls';
+                filterControls.innerHTML = `
+                    <button class="filter-btn active" data-filter="all">Alle</button>
+                    <button class="filter-btn" data-filter="injured">Verletzte</button>
+                    <button class="filter-btn" data-filter="available">Verfügbare</button>
+                `;
 
-                playerCards.forEach(card => {
-                    if (filter === 'all') {
-                        card.style.display = 'block';
-                    } else if (filter === 'injured') {
-                        card.style.display = card.classList.contains('injured') ? 'block' : 'none';
-                    } else if (filter === 'available') {
-                        card.style.display = card.classList.contains('injured') ? 'none' : 'block';
-                    }
+                header.appendChild(filterControls);
+
+                // Add filter functionality
+                const filterBtns = filterControls.querySelectorAll('.filter-btn');
+                const playerCards = playersGrid.querySelectorAll('.player-card');
+
+                filterBtns.forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        // Update active button
+                        filterBtns.forEach(b => b.classList.remove('active'));
+                        btn.classList.add('active');
+
+                        const filter = btn.dataset.filter;
+
+                        // Filter player cards
+                        playerCards.forEach(card => {
+                            if (filter === 'all') {
+                                card.style.display = 'block';
+                            } else if (filter === 'injured') {
+                                card.style.display = card.classList.contains('injured') ? 'block' : 'none';
+                            } else if (filter === 'available') {
+                                card.style.display = card.classList.contains('injured') ? 'none' : 'block';
+                            }
+                        });
+                    });
                 });
-            });
+            }
         });
     });
 </script>

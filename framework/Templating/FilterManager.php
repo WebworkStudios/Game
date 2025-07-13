@@ -65,7 +65,7 @@ class FilterManager
     }
 
     /**
-     * Wendet Filter auf Wert an (mit Lazy Loading)
+     * Wendet Filter auf Wert an (mit Lazy Loading und verbesserter Fehlerbehandlung)
      */
     public function apply(string $filterName, mixed $value, array $parameters = []): mixed
     {
@@ -75,11 +75,63 @@ class FilterManager
         }
 
         if (!isset($this->filters[$filterName])) {
-            throw new RuntimeException("Unknown filter: {$filterName}");
+            // Check if it looks like function syntax (contains parentheses)
+            if (str_contains($filterName, '(') && str_contains($filterName, ')')) {
+                // Extract actual filter name from function-like syntax
+                $actualFilterName = preg_replace('/\([^)]*\)/', '', $filterName);
+
+                throw new RuntimeException(
+                    "Unknown filter: '{$filterName}'. " .
+                    "Template syntax uses colon separators, not parentheses. " .
+                    "Try: |{$actualFilterName}:param instead of |{$filterName}"
+                );
+            }
+
+            // Check for common typos or similar filter names
+            $suggestion = $this->suggestSimilarFilter($filterName);
+            $errorMessage = "Unknown filter: '{$filterName}'";
+
+            if ($suggestion) {
+                $errorMessage .= ". Did you mean '{$suggestion}'?";
+            }
+
+            throw new RuntimeException($errorMessage);
         }
 
         $filter = $this->filters[$filterName];
         return call_user_func($filter, $value, ...$parameters);
+    }
+
+    /**
+     * Schlägt ähnliche Filter-Namen vor bei Tippfehlern
+     */
+    private function suggestSimilarFilter(string $filterName): ?string
+    {
+        $availableFilters = array_keys($this->lazyFilters);
+        $lowerFilterName = strtolower($filterName);
+
+        // Exact match case-insensitive
+        foreach ($availableFilters as $available) {
+            if (strtolower($available) === $lowerFilterName) {
+                return $available;
+            }
+        }
+
+        // Levenshtein distance for typos
+        $closest = null;
+        $shortestDistance = PHP_INT_MAX;
+
+        foreach ($availableFilters as $available) {
+            $distance = levenshtein($lowerFilterName, strtolower($available));
+
+            // Only suggest if distance is small (max 2 character difference)
+            if ($distance < $shortestDistance && $distance <= 2) {
+                $shortestDistance = $distance;
+                $closest = $available;
+            }
+        }
+
+        return $closest;
     }
 
     /**

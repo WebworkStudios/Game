@@ -1,14 +1,14 @@
 <?php
 
 // Template cache for: pages/home
-// Generated at: 2025-07-13 18:35:22
+// Generated at: 2025-07-13 18:50:48
 // DO NOT EDIT - This file is auto-generated
 
 return array (
   'version' => '1.0',
   'template' => 'pages/home',
   'template_path' => 'E:\\xampp\\htdocs\\kickerscup\\public\\..\\app\\Views\\pages\\home.html',
-  'compiled_at' => 1752431722,
+  'compiled_at' => 1752432648,
   'dependencies' => 
   array (
     'E:\\xampp\\htdocs\\kickerscup\\public\\..\\app\\Views\\pages\\home.html' => 1752349682,
@@ -957,6 +957,6 @@ return array (
   array (
     'tokens' => 76,
     'blocks' => 2,
-    'memory_usage' => 1838288,
+    'memory_usage' => 1844632,
   ),
 );
