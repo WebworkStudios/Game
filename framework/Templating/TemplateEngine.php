@@ -276,32 +276,86 @@ class TemplateEngine
     }
 
     /**
-     * Parst Variable mit Filtern
+     * Parst Variable mit Filtern und mathematischen Operationen
      */
     private function parseVariableWithFilters(string $expression): array
+    {
+        $parsed = $this->parseVariableExpression($expression);
+
+        // Handle backward compatibility
+        if (isset($parsed['variable_data'])) {
+            return [
+                'type' => 'variable',
+                'name' => $parsed, // Pass the whole structure
+                'filters' => $parsed['filters'] ?? []
+            ];
+        }
+
+        return $parsed;
+    }
+
+    /**
+     * Parst Variable-Expressions mit mathematischen Operationen und Filter-Support
+     */
+    private function parseVariableExpression(string $expression): array
     {
         // Debug what we're parsing
         error_log("Parsing variable expression: '$expression'");
 
-        // Prüfe auf Filter-Syntax: variable|filter:param1:param2
-        if (!str_contains($expression, '|')) {
-            return ['type' => 'variable', 'name' => $expression];
+        // Check for filters first: variable|filter:param1:param2
+        if (str_contains($expression, '|')) {
+            $parts = explode('|', $expression, 2);
+            $variableExpression = trim($parts[0]);
+            $filterChain = trim($parts[1]);
+
+            // Parse the variable part (might contain math)
+            $variableData = $this->parseVariablePart($variableExpression);
+
+            // Parse filters
+            $filters = $this->parseFilterChain($filterChain);
+
+            return [
+                'type' => 'variable',
+                'variable_data' => $variableData,
+                'filters' => $filters
+            ];
         }
 
-        $parts = explode('|', $expression, 2);
-        $variableName = trim($parts[0]);
-        $filterChain = trim($parts[1]);
-
-        // Debug
-        error_log("Variable name: '$variableName', Filter chain: '$filterChain'");
-
-        // Parse Filter-Chain
-        $filters = $this->parseFilterChain($filterChain);
+        // No filters, just parse the variable part
+        $variableData = $this->parseVariablePart($expression);
 
         return [
             'type' => 'variable',
-            'name' => $variableName,
-            'filters' => $filters
+            'variable_data' => $variableData
+        ];
+    }
+
+    /**
+     * Parst den Variable-Teil (mit mathematischen Operationen)
+     */
+    private function parseVariablePart(string $expression): array
+    {
+        $expression = trim($expression);
+
+        // Check for parentheses with math operations
+        if (preg_match('/^\(([^)]+)\)$/', $expression, $matches)) {
+            $innerExpression = $matches[1];
+
+            // Check for mathematical operations
+            if (preg_match('#^(.+?)\s*([+\-*/])\s*(.+)$#', $innerExpression, $mathMatches)) {
+                return [
+                    'type' => 'math',
+                    'left' => trim($mathMatches[1]),
+                    'operator' => trim($mathMatches[2]),
+                    'right' => trim($mathMatches[3])
+                ];
+            }
+        }
+
+        // Simple variable access
+        return [
+            'type' => 'simple',
+            'name' => $expression
         ];
     }
 
@@ -418,6 +472,27 @@ class TemplateEngine
     }
 
     /**
+     * Extrahiert extends und blocks aus Tokens
+     */
+    private function extractExtendsAndBlocks(array $tokens): void
+    {
+        foreach ($tokens as $i => $token) {
+            if ($token['type'] === 'extends') {
+                $this->parentTemplate = $token['template'];
+                error_log("Found extends: " . $this->parentTemplate);
+            } elseif ($token['type'] === 'block') {
+                $blockName = $token['name'];
+                $blockData = $this->extractBlock($tokens, $i);
+                $this->blocks[$blockName] = $blockData['content'];
+                error_log("Extracted child block '$blockName' with " . count($blockData['content']) . " tokens");
+                $i = $blockData['endIndex'];
+            }
+
+            $i++;
+        }
+    }
+
+    /**
      * Rendert geparste Tokens mit Block-Replacement für Inheritance
      */
     private function renderParsed(array $tokens): string
@@ -436,7 +511,15 @@ class TemplateEngine
 
                 case 'variable':
                     $filters = $token['filters'] ?? [];
-                    $output .= $this->renderVariable($token['name'], $filters);
+
+                    // Handle both old and new token structures
+                    if (is_array($token['name'])) {
+                        // New structure - pass the entire token to renderVariable
+                        $output .= $this->renderVariable($token, $filters);
+                    } else {
+                        // Legacy structure - pass name as string
+                        $output .= $this->renderVariable($token['name'], $filters);
+                    }
                     break;
 
                 case 'extends':
@@ -502,42 +585,58 @@ class TemplateEngine
     /**
      * Rendert Variable mit Filter-Support und automatischem XSS-Schutz (UPDATED)
      */
-    private function renderVariable(string $name, array $filters = []): string
+    private function renderVariable(string|array $nameOrToken, array $filters = []): string
     {
-        error_log("Rendering variable: name='$name', filters=" . json_encode(array_column($filters, 'name')));
+        error_log("Rendering variable: " . (is_array($nameOrToken) ? 'ARRAY_TOKEN' : "name='$nameOrToken'"));
 
-        // Handle string literals in quotes
-        if ((str_starts_with($name, "'") && str_ends_with($name, "'")) ||
-            (str_starts_with($name, '"') && str_ends_with($name, '"'))) {
-            $value = substr($name, 1, -1);
-            error_log("String literal detected: '$value'");
+        // Handle token structure vs simple name
+        if (is_array($nameOrToken)) {
+            // This is a token structure
+            if (isset($nameOrToken['variable_data'])) {
+                // New math-enabled structure
+                $value = $this->evaluateVariableData($nameOrToken['variable_data']);
+                $filters = array_merge($nameOrToken['filters'] ?? [], $filters);
+            } elseif (isset($nameOrToken['name'])) {
+                // Legacy token structure
+                $name = $nameOrToken['name'];
+                if (is_string($name)) {
+                    $value = $this->getValue($name);
+                } else {
+                    $value = '';
+                }
+                $filters = array_merge($nameOrToken['filters'] ?? [], $filters);
+            } else {
+                $value = '';
+            }
         } else {
-            $value = $this->getValue($name);
-            error_log("Variable lookup for '$name': " . json_encode($value));
+            // Simple string name (legacy)
+            $name = $nameOrToken;
+            if ((str_starts_with($name, "'") && str_ends_with($name, "'")) ||
+                (str_starts_with($name, '"') && str_ends_with($name, '"'))) {
+                $value = substr($name, 1, -1);
+            } else {
+                $value = $this->getValue($name);
+            }
         }
 
         if ($value === null) {
             $value = '';
         }
 
-        // Filter anwenden
+        // Apply filters
         foreach ($filters as $filter) {
             $filterName = $filter['name'];
             $parameters = $filter['parameters'];
 
-            error_log("Applying filter '$filterName' with params: " . json_encode($parameters));
-
             try {
                 $value = $this->filterManager->apply($filterName, $value, $parameters);
-                error_log("Filter result: '$value'");
             } catch (\Throwable $e) {
                 error_log("Filter error: {$e->getMessage()}");
             }
         }
 
-        // *** XSS-SCHUTZ: Automatisches HTML-Escaping ***
+        // XSS protection
         if ($this->autoEscape && is_string($value)) {
-            // Prüfe ob der 'raw' Filter verwendet wurde
             $hasRawFilter = false;
             foreach ($filters as $filter) {
                 if ($filter['name'] === 'raw') {
@@ -546,18 +645,65 @@ class TemplateEngine
                 }
             }
 
-            // Nur escapen wenn kein 'raw' Filter vorhanden ist
             if (!$hasRawFilter) {
-                $value = htmlspecialchars(
-                    $value,
-                    ENT_QUOTES | ENT_HTML5 | ENT_SUBSTITUTE,
-                    'UTF-8',
-                    true
-                );
+                $value = htmlspecialchars($value, ENT_QUOTES | ENT_HTML5 | ENT_SUBSTITUTE, 'UTF-8', true);
             }
         }
 
         return (string)$value;
+    }
+
+    /**
+     * Evaluiert verschiedene Variable-Data-Typen
+     */
+    private function evaluateVariableData(array $variableData): mixed
+    {
+        return match($variableData['type']) {
+            'simple' => $this->getValue($variableData['name']),
+            'math' => $this->evaluateMathExpression($variableData),
+            default => null
+        };
+    }
+
+    /**
+     * Evaluiert mathematische Ausdrücke
+     */
+    private function evaluateMathExpression(array $expression): float|int
+    {
+        $left = $this->resolveValue($expression['left']);
+        $right = $this->resolveValue($expression['right']);
+
+        // Ensure numeric values
+        if (!is_numeric($left) || !is_numeric($right)) {
+            throw new RuntimeException("Mathematical operations require numeric values");
+        }
+
+        $left = is_float($left) ? (float)$left : (int)$left;
+        $right = is_float($right) ? (float)$right : (int)$right;
+
+        return match($expression['operator']) {
+            '+' => $left + $right,
+            '-' => $left - $right,
+            '*' => $left * $right,
+            '/' => $right != 0 ? $left / $right : throw new RuntimeException("Division by zero"),
+            default => throw new RuntimeException("Unsupported operator: {$expression['operator']}")
+        };
+    }
+
+    /**
+     * Löst einen Wert auf (Variable oder Literal)
+     */
+    private function resolveValue(string $value): mixed
+    {
+        $value = trim($value);
+
+        // Check if it's a number
+        if (is_numeric($value)) {
+            return str_contains($value, '.') ? (float)$value : (int)$value;
+        }
+
+        // Otherwise treat as variable
+        return $this->getValue($value);
     }
 
     /**
@@ -671,7 +817,13 @@ class TemplateEngine
                     $output .= $token['content'];
                 } elseif ($token['type'] === 'variable') {
                     $filters = $token['filters'] ?? [];
-                    $output .= $this->renderVariable($token['name'], $filters);
+
+                    // Handle both old and new token structures
+                    if (is_array($token['name'])) {
+                        $output .= $this->renderVariable($token, $filters);
+                    } else {
+                        $output .= $this->renderVariable($token['name'], $filters);
+                    }
                 } elseif ($token['type'] === 'if') {
                     // Handle nested if
                     $nestedResult = $this->renderIf($tokens, $i);
@@ -749,33 +901,56 @@ class TemplateEngine
         }
 
         $array = $this->getValue($arrayVar);
-
         if (!is_array($array)) {
             return ['output' => '', 'endIndex' => $this->findEndFor($tokens, $startIndex)];
         }
 
+        $originalData = $this->data;
         $output = '';
-        $loopContent = $this->extractForContent($tokens, $startIndex);
+        $i = $startIndex + 1;
+        $forDepth = 1;
 
-        foreach ($array as $item) {
-            // Backup current data
-            $originalData = $this->data;
+        // Find content between for and endfor
+        $forContent = [];
+        while ($i < count($tokens) && $forDepth > 0) {
+            $token = $tokens[$i];
 
-            // Add loop item to data
-            $this->data[$itemVar] = $item;
+            if ($token['type'] === 'for') {
+                $forDepth++;
+            } elseif ($token['type'] === 'endfor') {
+                $forDepth--;
+                if ($forDepth === 0) {
+                    break;
+                }
+            }
 
-            // Render loop content
-            $output .= $this->renderParsed($loopContent['content']);
-
-            // Restore original data
-            $this->data = $originalData;
+            $forContent[] = $token;
+            $i++;
         }
 
-        return ['output' => $output, 'endIndex' => $loopContent['endIndex']];
+        // Render for each item
+        foreach ($array as $key => $item) {
+            $this->data[$itemVar] = $item;
+            $this->data['loop'] = [
+                'index' => $key,
+                'index0' => $key,
+                'revindex' => count($array) - $key,
+                'revindex0' => count($array) - $key - 1,
+                'first' => $key === 0,
+                'last' => $key === count($array) - 1,
+                'length' => count($array),
+            ];
+
+            $output .= $this->renderParsed($forContent);
+        }
+
+        $this->data = $originalData; // Restore original data
+
+        return ['output' => $output, 'endIndex' => $i];
     }
 
     /**
-     * Findet endfor Position
+     * Findet das Ende einer FOR-Schleife
      */
     private function findEndFor(array $tokens, int $startIndex): int
     {
@@ -795,60 +970,6 @@ class TemplateEngine
         }
 
         return $i - 1;
-    }
-
-    /**
-     * Extrahiert FOR-Content
-     */
-    private function extractForContent(array $tokens, int $startIndex): array
-    {
-        $content = [];
-        $forDepth = 1;
-        $i = $startIndex + 1;
-
-        while ($i < count($tokens) && $forDepth > 0) {
-            $token = $tokens[$i];
-
-            if ($token['type'] === 'for') {
-                $forDepth++;
-            } elseif ($token['type'] === 'endfor') {
-                $forDepth--;
-                if ($forDepth === 0) {
-                    break;
-                }
-            }
-
-            $content[] = $token;
-            $i++;
-        }
-
-        return ['content' => $content, 'endIndex' => $i];
-    }
-
-    /**
-     * First pass: Extract extends and blocks from child template
-     */
-    private function extractExtendsAndBlocks(array $tokens): void
-    {
-        $i = 0;
-        $count = count($tokens);
-
-        while ($i < $count) {
-            $token = $tokens[$i];
-
-            if ($token['type'] === 'extends') {
-                $this->parentTemplate = $token['template'];
-                error_log("Found extends: " . $this->parentTemplate);
-            } elseif ($token['type'] === 'block') {
-                $blockName = $token['name'];
-                $blockData = $this->extractBlock($tokens, $i);
-                $this->blocks[$blockName] = $blockData['content'];
-                error_log("Extracted child block '$blockName' with " . count($blockData['content']) . " tokens");
-                $i = $blockData['endIndex'];
-            }
-
-            $i++;
-        }
     }
 
     /**
@@ -957,31 +1078,22 @@ class TemplateEngine
             if ($token['type'] === 'control') {
                 $control = $token['content'] ?? '';
 
-                // Parse {% cache ttl:300 tags:player,team %}
+                // Parse cache directives like {% cache 300 %}
                 if (str_starts_with($control, 'cache ')) {
-                    if (preg_match('/ttl:(\d+)/', $control, $matches)) {
-                        $directives['ttl'] = (int)$matches[1];
+                    $parts = explode(' ', $control);
+                    if (isset($parts[1]) && is_numeric($parts[1])) {
+                        $directives['ttl'] = (int)$parts[1];
                     }
-                    if (preg_match('/tags:([a-zA-Z0-9,_-]+)/', $control, $matches)) {
-                        $directives['tags'] = array_map('trim', explode(',', $matches[1]));
-                    }
+                }
+
+                // Parse tag directives like {% tag player %}
+                if (str_starts_with($control, 'tag ')) {
+                    $tag = trim(substr($control, 4));
+                    $directives['tags'][] = $tag;
                 }
             }
         }
 
         return $directives;
-    }
-
-    /**
-     * HTML-Escaping für XSS-Schutz
-     */
-    private function escapeHtml(string $value): string
-    {
-        return htmlspecialchars(
-            $value,
-            ENT_QUOTES | ENT_HTML5 | ENT_SUBSTITUTE,
-            'UTF-8',
-            true
-        );
     }
 }

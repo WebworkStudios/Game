@@ -1,5 +1,4 @@
 <?php
-
 // app/Actions/SecurityDemoAction.php
 
 declare(strict_types=1);
@@ -11,7 +10,7 @@ use Framework\Http\Request;
 use Framework\Http\Response;
 use Framework\Routing\Route;
 
-#[Route(path: '/security-demo', methods: ['GET'])]
+#[Route(path: '/security-demo', methods: ['GET', 'POST'])]
 class SecurityDemoAction
 {
     public function __construct(
@@ -21,6 +20,25 @@ class SecurityDemoAction
     }
 
     public function __invoke(Request $request): Response
+    {
+        if ($request->isPost()) {
+            // POST-Request verarbeiten (CSRF wird durch CsrfMiddleware validiert)
+            return $this->handlePostRequest($request);
+        }
+
+        // GET-Request: Demo-Seite anzeigen
+        return $this->showDemoPage();
+    }
+
+    private function handlePostRequest(Request $request): Response
+    {
+        $session = $this->app->getSession();
+        $session->flashSuccess('Security Demo: Form submitted successfully!');
+
+        return Response::redirect('/security-demo');
+    }
+
+    private function showDemoPage(): Response
     {
         // Simuliere verschiedene Arten von potentiell gefährlichen Eingaben
         $data = [
@@ -53,6 +71,8 @@ class SecurityDemoAction
             ],
         ];
 
-        return $this->app->view('pages/security-demo', $data);
+        // ViewRenderer verwenden statt veraltete view() Methode
+        $viewRenderer = $this->app->getViewRenderer();
+        return $viewRenderer->render('pages/security-demo', $data);
     }
 }
