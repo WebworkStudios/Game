@@ -6,14 +6,17 @@ namespace Framework\Core;
 
 use Framework\Database\ConnectionManager;
 use Framework\Database\DatabaseServiceProvider;
-use Framework\Database\QueryBuilder;
+use Framework\Http\HttpStatus;
 use Framework\Http\Request;
 use Framework\Http\Response;
+use Framework\Localization\LocalizationServiceProvider;
+use Framework\Localization\Translator;
 use Framework\Routing\Router;
 use Framework\Routing\RouterCache;
 use Framework\Security\Csrf;
 use Framework\Security\SecurityServiceProvider;
 use Framework\Security\Session;
+use Framework\Security\SessionSecurity;
 use Framework\Templating\TemplateEngine;
 use Framework\Templating\TemplatingServiceProvider;
 use Framework\Templating\ViewRenderer;
@@ -24,7 +27,8 @@ use RuntimeException;
 use Throwable;
 
 /**
- * Application - Bootstrap und Orchestrierung des Frameworks (Database, Security, Validation & Templating)
+ * Application - Bootstrap und Orchestrierung des Frameworks
+ * Core Framework Application with Database, Security, Validation, Templating & Localization
  */
 class Application
 {
@@ -39,6 +43,9 @@ class Application
     /** @var callable|null */
     private $errorHandler = null;
 
+    /** @var callable|null */
+    private $notFoundHandler = null;
+
     public function __construct(string $basePath)
     {
         $this->basePath = rtrim($basePath, '/');
@@ -47,6 +54,9 @@ class Application
         $this->bootstrap();
     }
 
+    /**
+     * Bootstrap Framework Components
+     */
     private function bootstrap(): void
     {
         $this->setupEnvironment();
@@ -77,10 +87,12 @@ class Application
         ini_set('default_charset', self::DEFAULT_CHARSET);
         mb_internal_encoding(self::DEFAULT_CHARSET);
 
-        // Session (wird später durch SecurityServiceProvider verwaltet)
-        // Hier bewusst nicht starten, da SessionMiddleware das übernimmt
+        // Session wird durch SecurityServiceProvider verwaltet
     }
 
+    /**
+     * Load application configuration
+     */
     private function loadAppConfig(): void
     {
         try {
@@ -95,7 +107,6 @@ class Application
             }
         } catch (\Exception) {
             // Config nicht gefunden - Default-Werte aus setupEnvironment verwenden
-            // Kein Error, da app.php optional ist (hat sinnvolle Defaults)
         }
     }
 
@@ -140,33 +151,28 @@ class Application
                 actionsPath: $this->basePath . '/app/Actions'
             );
         });
-
-        // Router registrieren
-        $this->container->singleton(Router::class, function (ServiceContainer $container) {
-            return new Router(
-                container: $container,
-                cache: $container->get(RouterCache::class)
-            );
-        });
-
-        $this->container->singleton(\Framework\Templating\ViewRenderer::class, function (ServiceContainer $container) {
-            return new \Framework\Templating\ViewRenderer(
-                engine: $container->get(\Framework\Templating\TemplateEngine::class)
-            );
-        });
     }
 
     /**
-     * Registriert einen Service
+     * Register Instance
      */
-    public function singleton(string $abstract, string|callable|null $concrete = null): self
+    public function instance(string $abstract, mixed $instance): self
+    {
+        $this->container->instance($abstract, $instance);
+        return $this;
+    }
+
+    /**
+     * Register Singleton Service
+     */
+    public function singleton(string $abstract, callable|string|null $concrete = null): self
     {
         $this->container->singleton($abstract, $concrete);
         return $this;
     }
 
     /**
-     * Registriert Database-Services
+     * Registriert Database Services
      */
     private function registerDatabaseServices(): void
     {
@@ -175,16 +181,29 @@ class Application
     }
 
     /**
-     * Registriert Security-Services
+     * Registriert Security Services (Session, CSRF, etc.)
      */
     private function registerSecurityServices(): void
     {
         $provider = new SecurityServiceProvider($this->container, $this);
         $provider->register();
+
+        // Services direkt im Application-Container verfügbar machen
+        $this->container->singleton('session', fn() => $this->container->get(Session::class));
+        $this->container->singleton('session_security', fn() => $this->container->get(SessionSecurity::class));
+        $this->container->singleton('csrf', fn() => $this->container->get(Csrf::class));
     }
 
     /**
-     * Registriert Validation-Services
+     * Generic Service Access
+     */
+    public function get(string $abstract): mixed
+    {
+        return $this->container->get($abstract);
+    }
+
+    /**
+     * Registriert Validation Services
      */
     private function registerValidationServices(): void
     {
@@ -193,269 +212,178 @@ class Application
     }
 
     /**
-     * Registriert Localization-Services
+     * Registriert Localization Services
      */
     private function registerLocalizationServices(): void
     {
-        $provider = new \Framework\Localization\LocalizationServiceProvider($this->container, $this);
+        $provider = new LocalizationServiceProvider($this->container, $this);
         $provider->register();
     }
 
     /**
-     * Registriert Templating-Services
+     * Registriert Templating Services
      */
     private function registerTemplatingServices(): void
     {
         $provider = new TemplatingServiceProvider($this->container, $this);
         $provider->register();
-
-        // ViewRenderer registrieren
-        $this->container->singleton(ViewRenderer::class, function (ServiceContainer $container) {
-            return new ViewRenderer(
-                engine: $container->get(TemplateEngine::class)
-            );
-        });
     }
 
-
     /**
-     * Setup des Routers
+     * Setup Router
      */
     private function setupRouter(): void
     {
         $this->router = $this->container->get(Router::class);
 
-        // GLOBALE MIDDLEWARE REGISTRIEREN
-        $this->router->addGlobalMiddleware(\Framework\Security\SessionMiddleware::class);
-        $this->router->addGlobalMiddleware(\Framework\Security\CsrfMiddleware::class);
-        $this->router->addGlobalMiddleware(\Framework\Localization\LanguageMiddleware::class);
+        // Globale Middleware registrieren (falls die Methoden existieren)
+        if (method_exists($this->router, 'addGlobalMiddleware')) {
+            $this->router->addGlobalMiddleware(\Framework\Security\SessionMiddleware::class);
+            $this->router->addGlobalMiddleware(\Framework\Security\CsrfMiddleware::class);
+        }
 
-
-        // Standard 404 Handler
-        $this->router->setNotFoundHandler(function (Request $request) {
-            return $this->render404Page($request);
-        });
-
-        // Standard 405 Handler
-        $this->router->setMethodNotAllowedHandler(function (Request $request) {
-            return Response::methodNotAllowed('Method Not Allowed');
-        });
-    }
-
-    /**
-     * Setzt 404-Handler
-     */
-    public function setNotFoundHandler(callable $handler): self
-    {
-        $this->router->setNotFoundHandler($handler);
-        return $this;
-    }
-
-    /**
-     * Rendert 404-Seite
-     */
-    private function render404Page(Request $request): Response
-    {
-        // Versuche Template zu laden, falls verfügbar
-        try {
-            return $this->view('errors/404', [
-                'path' => $request->getPath(),
-                'method' => $request->getMethod()->value,
-            ]);
-        } catch (Throwable) {
-            // Fallback zu HTML
-            $html = "
-            <!DOCTYPE html>
-            <html lang=de>
-            <head>
-                <title>404 - Page Not Found</title>
-                <meta charset='utf-8'>
-                <style>
-                    body { font-family: Arial, sans-serif; text-align: center; margin-top: 100px; }
-                    .error { color: #666; }
-                    .code { font-size: 4em; font-weight: bold; color: #333; }
-                    .message { font-size: 1.2em; margin: 20px 0; }
-                    .path { background: #f5f5f5; padding: 10px; border-radius: 5px; margin: 20px auto; max-width: 600px; }
-                </style>
-            </head>
-            <body>
-                <div class='error'>
-                    <div class='code'>404</div>
-                    <div class='message'>Page Not Found</div>
-                    <div class='path'>Path: {$request->getPath()}</div>
-                    <a href='/'>← Back to Home</a>
-                </div>
-            </body>
-            </html>";
-
-            return Response::notFound($html);
+        // 404 Handler setzen (falls die Methode existiert)
+        if (method_exists($this->router, 'setNotFoundHandler')) {
+            $this->router->setNotFoundHandler(function (Request $request) {
+                return $this->handleNotFound($request);
+            });
         }
     }
 
     /**
-     * Render template to Response
+     * Handle 404 Not Found
      */
-    public function view(string $template, array $data = []): Response
+    private function handleNotFound(Request $request): Response
     {
-        return $this->getViewRenderer()->render($template, $data);
+        if ($this->notFoundHandler) {
+            $response = ($this->notFoundHandler)($request);
+            if ($response instanceof Response) {
+                return $response;
+            }
+        }
+
+        if ($request->expectsJson()) {
+            return Response::json([
+                'error' => 'Route not found',
+                'path' => $request->getPath(),
+                'method' => $request->getMethod()->value,
+            ], HttpStatus::NOT_FOUND);
+        }
+
+        return Response::notFound('Page Not Found');
     }
 
     /**
-     * Render template
-     */
-    public function render(string $template, array $data = []): string
-    {
-        return $this->getTemplateEngine()->render($template, $data);
-    }
-
-    /**
-     * Holt Template Engine
-     */
-    public function getTemplateEngine(): TemplateEngine
-    {
-        return $this->container->get(TemplateEngine::class);
-    }
-
-
-    /**
-     * Holt View Renderer
-     */
-    public function getViewRenderer(): ViewRenderer
-    {
-        return $this->container->get(ViewRenderer::class);
-    }
-
-    /**
-     * Startet die Anwendung und verarbeitet Request
+     * Run Application
      */
     public function run(): void
     {
-        try {
-            $request = Request::fromGlobals();
-            $response = $this->handle($request);
-            $response->send();
-        } catch (Throwable $e) {
-            $this->handleException($e)->send();
-        }
+        $request = Request::fromGlobals();
+        $response = $this->handle($request);
+        $response->send();
     }
 
     /**
-     * Verarbeitet HTTP-Request und gibt Response zurück
+     * Handle HTTP Request
      */
     public function handle(Request $request): Response
     {
         try {
             return $this->router->handle($request);
         } catch (Throwable $e) {
-            return $this->handleException($e);
+            return $this->handleException($e, $request);
         }
     }
 
     /**
-     * Behandelt Exceptions
+     * Handle Exceptions
      */
-    private function handleException(Throwable $e): Response
+    private function handleException(Throwable $e, Request $request): Response
     {
         // Custom Error Handler
-        if ($this->errorHandler !== null) {
-            try {
-                $response = ($this->errorHandler)($e);
-                if ($response instanceof Response) {
-                    return $response;
-                }
-            } catch (Throwable) {
-                // Fallback zu Standard-Handler
+        if ($this->errorHandler) {
+            $customResponse = ($this->errorHandler)($e, $request);
+            if ($customResponse instanceof Response) {
+                return $customResponse;
             }
         }
 
-        // Debug-Modus: Detaillierte Fehlerausgabe
+        // Log Error
+        error_log(sprintf(
+            "Application Error: %s in %s:%d\nStack trace:\n%s",
+            $e->getMessage(),
+            $e->getFile(),
+            $e->getLine(),
+            $e->getTraceAsString()
+        ));
+
+        // Debug Mode: Show detailed error
         if ($this->debug) {
-            return $this->renderDebugError($e);
+            return $this->renderDebugError($e, $request);
         }
 
-        // Production: Generische Fehlerseite
-        return $this->renderProductionError($e);
+        // Production Mode: Show generic error
+        return $this->renderProductionError($e, $request);
     }
 
     /**
-     * Rendert Debug-Fehlerseite
+     * Render Debug Error
      */
-    private function renderDebugError(Throwable $e): Response
+    private function renderDebugError(Throwable $e, Request $request): Response
     {
-        $html = "
-        <!DOCTYPE html>
-        <html lang=de>
-        <head>
-            <title>Error - {$e->getMessage()}</title>
-            <meta charset='utf-8'>
-            <style>
-                body { font-family: monospace; margin: 20px; background: #f8f8f8; }
-                .error { background: white; padding: 20px; border-left: 5px solid #e74c3c; }
-                .message { font-size: 1.2em; font-weight: bold; color: #e74c3c; margin-bottom: 10px; }
-                .file { color: #666; margin-bottom: 20px; }
-                .trace { background: #f5f5f5; padding: 15px; border-radius: 5px; overflow-x: auto; }
-                pre { margin: 0; white-space: pre-wrap; }
-            </style>
-        </head>
-        <body>
-            <div class='error'>
-                <div class='message'>" . get_class($e) . ": {$e->getMessage()}</div>
-                <div class='file'>File: {$e->getFile()}:{$e->getLine()}</div>
-                <div class='trace'>
-                    <strong>Stack Trace:</strong>
-                    <pre>{$e->getTraceAsString()}</pre>
+        $html = sprintf('
+            <!DOCTYPE html>
+            <html lang=de>
+            <head>
+                <title>Error - %s</title>
+                <style>
+                    body { font-family: monospace; padding: 20px; background: #f8f8f8; }
+                    .error { background: #fff; padding: 20px; border-left: 5px solid #ff0000; }
+                    .trace { background: #f0f0f0; padding: 10px; margin-top: 20px; }
+                    pre { white-space: pre-wrap; }
+                </style>
+            </head>
+            <body>
+                <div class="error">
+                    <h1>%s</h1>
+                    <p><strong>File:</strong> %s</p>
+                    <p><strong>Line:</strong> %d</p>
+                    <p><strong>Message:</strong> %s</p>
                 </div>
-            </div>
-        </body>
-        </html>";
+                <div class="trace">
+                    <h3>Stack Trace:</h3>
+                    <pre>%s</pre>
+                </div>
+            </body>
+            </html>',
+            get_class($e),
+            get_class($e),
+            htmlspecialchars($e->getFile()),
+            $e->getLine(),
+            htmlspecialchars($e->getMessage()),
+            htmlspecialchars($e->getTraceAsString())
+        );
 
         return Response::serverError($html);
     }
 
     /**
-     * Rendert Production-Fehlerseite
+     * Render Production Error
      */
-    private function renderProductionError(Throwable $e): Response
+    private function renderProductionError(Throwable $e, Request $request): Response
     {
-        // Log error
-        error_log("Application Error: " . $e->getMessage() . " in " . $e->getFile() . ":" . $e->getLine());
-
-        // Versuche Template zu laden
-        try {
-            return $this->view('errors/500', [
-                'message' => 'Something went wrong. Please try again later.',
-            ]);
-        } catch (Throwable) {
-            // Fallback zu HTML
-            $html = "
-            <!DOCTYPE html>
-            <html lang=de>
-            <head>
-                <title>500 - Internal Server Error</title>
-                <meta charset='utf-8'>
-                <style>
-                    body { font-family: Arial, sans-serif; text-align: center; margin-top: 100px; }
-                    .error { color: #666; }
-                    .code { font-size: 4em; font-weight: bold; color: #e74c3c; }
-                    .message { font-size: 1.2em; margin: 20px 0; }
-                </style>
-            </head>
-            <body>
-                <div class='error'>
-                    <div class='code'>500</div>
-                    <div class='message'>Internal Server Error</div>
-                    <p>Something went wrong. Please try again later.</p>
-                    <a href='/'>← Back to Home</a>
-                </div>
-            </body>
-            </html>";
-
-            return Response::serverError($html);
+        if ($request->expectsJson()) {
+            return Response::json([
+                'error' => 'Internal Server Error',
+                'message' => 'An unexpected error occurred'
+            ], HttpStatus::INTERNAL_SERVER_ERROR);
         }
+
+        return Response::serverError('Internal Server Error');
     }
 
     /**
-     * Prüft Debug-Modus
+     * Check if Debug Mode is enabled
      */
     public function isDebug(): bool
     {
@@ -463,33 +391,46 @@ class Application
     }
 
     /**
-     * Setzt Debug-Modus
+     * Set Debug Mode
      */
     public function setDebug(bool $debug): self
     {
         $this->debug = $debug;
+
+        // Update error display based on debug mode
+        ini_set('display_errors', $debug ? '1' : '0');
+
         return $this;
     }
 
     /**
-     * Setzt Custom Error Handler
+     * Set Custom Error Handler
      */
-    public function setErrorHandler(callable $handler): self
+    public function setErrorHandler(?callable $handler): self
     {
         $this->errorHandler = $handler;
         return $this;
     }
 
     /**
-     * Holt Service Container
+     * Get Custom 404 Handler
      */
-    public function getContainer(): ServiceContainer
+    public function getNotFoundHandler(): ?callable
     {
-        return $this->container;
+        return $this->notFoundHandler;
     }
 
     /**
-     * Holt Base Path
+     * Set Custom 404 Handler
+     */
+    public function setNotFoundHandler(?callable $handler): self
+    {
+        $this->notFoundHandler = $handler;
+        return $this;
+    }
+
+    /**
+     * Get Base Path
      */
     public function getBasePath(): string
     {
@@ -497,25 +438,31 @@ class Application
     }
 
     /**
-     * Erstellt neuen QueryBuilder
+     * Get Service Container
      */
-    public function query(string $connectionName = 'default'): QueryBuilder
+    public function getContainer(): ServiceContainer
     {
-        /** @var callable $factory */
-        $factory = $this->container->get('query_builder_factory');
-        return $factory($connectionName);
+        return $this->container;
     }
 
     /**
-     * Führt Database-Transaktion aus
+     * Get Router
      */
-    public function transaction(callable $callback, string $connectionName = 'default'): mixed
+    public function getRouter(): Router
+    {
+        return $this->router;
+    }
+
+    /**
+     * Database Transaction Helper
+     */
+    public function transaction(callable $callback, ?string $connectionName = null): mixed
     {
         return $this->getDatabase()->transaction($callback, $connectionName);
     }
 
     /**
-     * Holt Database Connection Manager
+     * Get Database Connection Manager
      */
     public function getDatabase(): ConnectionManager
     {
@@ -523,23 +470,163 @@ class Application
     }
 
     /**
-     * Holt Session-Service
-     */
-    public function getSession(): Session
-    {
-        return $this->container->get(Session::class);
-    }
-
-    /**
-     * Holt CSRF-Service
+     * Get CSRF service
      */
     public function getCsrf(): Csrf
     {
-        return $this->container->get(Csrf::class);
+        return $this->get('csrf');
     }
 
     /**
-     * Validiert Daten und gibt Validator zurück
+     * Force session start (useful for testing)
+     */
+    public function startSession(): bool
+    {
+        try {
+            return $this->getSession()->start();
+        } catch (\Throwable) {
+            return false;
+        }
+    }
+
+    /**
+     * Get session status for debugging
+     */
+    public function getSessionStatus(): array
+    {
+        try {
+            $session = $this->getSession();
+            $sessionSecurity = $this->getSessionSecurity();
+
+            return [
+                'session' => $session->getStatus(),
+                'security' => $sessionSecurity->getSecurityStatus(),
+            ];
+        } catch (\Throwable $e) {
+            return [
+                'error' => $e->getMessage(),
+                'session' => ['started' => false],
+                'security' => ['enabled' => false],
+            ];
+        }
+    }
+
+    /**
+     * Get SessionSecurity service
+     */
+    public function getSessionSecurity(): SessionSecurity
+    {
+        return $this->get('session_security');
+    }
+
+    /**
+     * Get framework status for health checks
+     */
+    public function getStatus(): array
+    {
+        return [
+            'name' => $this->name(),
+            'version' => $this->version(),
+            'debug' => $this->debug,
+            'installed' => $this->isInstalled(),
+            'php_version' => PHP_VERSION,
+            'memory_usage' => memory_get_usage(true),
+            'peak_memory' => memory_get_peak_usage(true),
+            'session_status' => $this->hasValidSession(),
+            'services' => [
+                'database' => $this->container->has(ConnectionManager::class),
+                'session' => $this->container->has(Session::class),
+                'csrf' => $this->container->has(Csrf::class),
+                'templates' => $this->container->has(TemplateEngine::class),
+                'validation' => $this->container->has(ValidatorFactory::class),
+                'localization' => $this->container->has(Translator::class),
+            ],
+        ];
+    }
+
+    /**
+     * Get Application Name
+     */
+    public function name(): string
+    {
+        try {
+            $config = $this->loadConfig('app/Config/app.php');
+            return $config['name'] ?? 'PHP Framework';
+        } catch (\Exception) {
+            return 'PHP Framework';
+        }
+    }
+
+    /**
+     * Get Application Version
+     */
+    public function version(): string
+    {
+        try {
+            $config = $this->loadConfig('app/Config/app.php');
+            return $config['version'] ?? '1.0.0';
+        } catch (\Exception) {
+            return '1.0.0';
+        }
+    }
+
+    /**
+     * Check if application is installed
+     */
+    public function isInstalled(): bool
+    {
+        return file_exists($this->basePath . '/app/Config/app.php') &&
+            file_exists($this->basePath . '/app/Config/database.php') &&
+            file_exists($this->basePath . '/app/Config/security.php');
+    }
+
+    /**
+     * Check if session is active and valid
+     */
+    public function hasValidSession(): bool
+    {
+        try {
+            $session = $this->getSession();
+            return $session->isStarted() && !$session->isExpired();
+        } catch (\Throwable) {
+            return false;
+        }
+    }
+
+    /**
+     * Get Session service
+     */
+    public function getSession(): Session
+    {
+        return $this->get('session');
+    }
+
+    /**
+     * Get Template Engine
+     */
+    public function getTemplateEngine(): TemplateEngine
+    {
+        return $this->container->get(TemplateEngine::class);
+    }
+
+    /**
+     * Get View Renderer
+     */
+    public function getViewRenderer(): ViewRenderer
+    {
+        return $this->container->get(ViewRenderer::class);
+    }
+
+    /**
+     * Get Translator
+     */
+    public function getTranslator(): Translator
+    {
+        return $this->container->get(Translator::class);
+    }
+
+    /**
+     * Validate data and return Validator
      */
     public function validate(array $data, array $rules, ?string $connectionName = null): Validator
     {
@@ -547,7 +634,7 @@ class Application
     }
 
     /**
-     * Erstellt Validator-Instanz
+     * Create Validator instance
      */
     public function validator(array $data, array $rules, ?string $connectionName = null): Validator
     {
@@ -557,7 +644,7 @@ class Application
     }
 
     /**
-     * Validiert Daten oder wirft Exception bei Fehler
+     * Validate data or throw exception on failure
      */
     public function validateOrFail(array $data, array $rules, ?string $connectionName = null): array
     {
@@ -565,7 +652,7 @@ class Application
     }
 
     /**
-     * Registriert Transient Service
+     * Register Transient Service
      */
     public function transient(string $abstract, string|callable|null $concrete = null): self
     {
@@ -574,7 +661,7 @@ class Application
     }
 
     /**
-     * Bindet Interface an Implementierung
+     * Bind Interface to Implementation
      */
     public function bind(string $interface, string $implementation): self
     {
@@ -583,15 +670,16 @@ class Application
     }
 
     /**
-     * Installiert Framework (erstellt Verzeichnisse und Konfigurationen)
+     * Install Framework (create directories and configurations)
      */
     public function install(): bool
     {
         $success = true;
 
-        // Erstelle Verzeichnisse (bleibt gleich)
+        // Create Directories
         $directories = [
             'storage/cache',
+            'storage/cache/data',
             'storage/cache/views',
             'storage/logs',
             'storage/sessions',
@@ -603,36 +691,44 @@ class Application
             'app/Views/layouts',
             'app/Views/components',
             'app/Views/pages',
-            'app/Languages', // ← NEU für Localization
+            'app/Languages',
             'app/Languages/de',
             'app/Languages/en',
             'app/Languages/fr',
             'app/Languages/es',
+            'app/Domain',
+            'app/Domain/User',
+            'app/Domain/User/Entities',
+            'app/Domain/User/ValueObjects',
+            'app/Domain/User/Repositories',
+            'app/Domain/User/Services',
+            'app/Repositories',
+            'app/Services',
         ];
 
         foreach ($directories as $dir) {
             $fullPath = $this->basePath . '/' . $dir;
-            if (!is_dir($fullPath) && !mkdir($fullPath, 0755, true)) {
-                echo "Failed to create directory: {$fullPath}\n";
-                $success = false;
+            if (!is_dir($fullPath)) {
+                if (!mkdir($fullPath, 0755, true)) {
+                    $success = false;
+                    error_log("Failed to create directory: {$fullPath}");
+                }
             }
         }
 
-        // Erstelle alle Konfigurationsdateien
+        // Create Configuration Files
         $configs = [
-            'App' => [$this, 'createAppConfig'],
-            'Database' => [DatabaseServiceProvider::class, 'publishConfig'],
-            'Security' => [SecurityServiceProvider::class, 'publishConfig'],
-            'Localization' => [\Framework\Localization\LocalizationServiceProvider::class, 'publishConfig'], // ← NEU
-            'Templating' => [TemplatingServiceProvider::class, 'publishConfig'],
+            'app' => $this->createAppConfig(),
+            'database' => DatabaseServiceProvider::publishConfig($this->basePath),
+            'security' => SecurityServiceProvider::publishConfig($this->basePath),
+            'templating' => TemplatingServiceProvider::publishConfig($this->basePath),
+            'localization' => LocalizationServiceProvider::publishConfig($this->basePath),
         ];
 
-        foreach ($configs as $name => $callback) {
-            if (!call_user_func($callback, $this->basePath)) {
-                echo "Failed to create {$name} config\n";
+        foreach ($configs as $name => $created) {
+            if (!$created) {
                 $success = false;
-            } else {
-                echo "✅ Created {$name} config\n";
+                error_log("Failed to create {$name} configuration");
             }
         }
 
@@ -640,37 +736,14 @@ class Application
     }
 
     /**
-     * Clear all caches (for development)
+     * Create app configuration file
      */
-    public function clearCaches(): void
+    private function createAppConfig(): bool
     {
-        if ($this->debug) {
+        $configPath = $this->basePath . '/app/Config/app.php';
 
-            // Clear route cache
-            $this->getRouter()->clearCache();
-
-            echo "✅ All caches cleared!\n";
-        }
-    }
-
-    /**
-     * Holt Router
-     */
-    public function getRouter(): Router
-    {
-        return $this->router;
-    }
-
-    /**
-     * Erstellt App-Konfiguration
-     */
-    private function createAppConfig(string $basePath): bool
-    {
-        $configPath = $basePath . '/app/Config/app.php';
-        $configDir = dirname($configPath);
-
-        if (!is_dir($configDir) && !mkdir($configDir, 0755, true)) {
-            return false;
+        if (file_exists($configPath)) {
+            return true; // Already exists
         }
 
         $content = <<<'PHP'
@@ -684,32 +757,36 @@ return [
     | Application Configuration
     |--------------------------------------------------------------------------
     */
-    
-    'name' => 'Football Manager',
+    'name' => 'Football Manager Game',
     'version' => '1.0.0',
     'debug' => true, // Set to false in production
-    'timezone' => 'UTC',
-    'locale' => 'en',
+    'timezone' => 'Europe/Berlin',
+    'locale' => 'de',
+    'fallback_locale' => 'en',
     
     /*
     |--------------------------------------------------------------------------
-    | Application URL
+    | Framework Settings
     |--------------------------------------------------------------------------
     */
-    
-    'url' => 'http://localhost:8000',
+    'cache_routes' => true,
+    'cache_templates' => false, // Set to true in production
     
     /*
     |--------------------------------------------------------------------------
-    | Logging Configuration
+    | Security Settings
     |--------------------------------------------------------------------------
     */
+    'key' => 'your-32-character-secret-key-here!',
+    'cipher' => 'AES-256-CBC',
     
-    'log' => [
-        'level' => 'debug', // debug, info, warning, error
-        'path' => 'storage/logs/app.log',
-        'max_files' => 7, // Keep 7 days of logs
-    ],
+    /*
+    |--------------------------------------------------------------------------
+    | Logging
+    |--------------------------------------------------------------------------
+    */
+    'log_level' => 'debug', // emergency, alert, critical, error, warning, notice, info, debug
+    'log_path' => 'storage/logs/app.log',
 ];
 PHP;
 

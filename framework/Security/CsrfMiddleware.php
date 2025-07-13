@@ -261,19 +261,6 @@ class CsrfMiddleware implements MiddlewareInterface
         ));
     }
 
-    private function logSuccessfulValidation(Request $request): void
-    {
-        if (!$this->config['log_successful_validations']) {
-            return;
-        }
-
-        error_log(sprintf(
-            'CSRF validation successful: %s %s',
-            $request->getMethod()->value,
-            $request->getPath()
-        ));
-    }
-
     /**
      * Behandelt CSRF-Validierungsfehler
      */
@@ -290,6 +277,19 @@ class CsrfMiddleware implements MiddlewareInterface
 
         // HTML-Response für normale Requests
         return Response::serverError('Security validation failed');
+    }
+
+    private function logSuccessfulValidation(Request $request): void
+    {
+        if (!$this->config['log_successful_validations']) {
+            return;
+        }
+
+        error_log(sprintf(
+            'CSRF validation successful: %s %s',
+            $request->getMethod()->value,
+            $request->getPath()
+        ));
     }
 
     /**

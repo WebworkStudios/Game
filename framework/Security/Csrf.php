@@ -1,16 +1,14 @@
 <?php
 
-
 declare(strict_types=1);
 
 namespace Framework\Security;
 
 use Framework\Http\Request;
 use Random\RandomException;
-use RuntimeException;
 
 /**
- * CSRF Protection - Cross-Site Request Forgery Schutz
+ * Enhanced CSRF Protection - Cross-Site Request Forgery Schutz mit Session Integration
  */
 class Csrf
 {
@@ -20,10 +18,28 @@ class Csrf
     private const int TOKEN_LENGTH = 32;
     private const int DEFAULT_LIFETIME = 7200; // 2 Stunden
 
+    private array $config;
+
     public function __construct(
-        private readonly Session $session
+        private readonly Session $session,
+        array                    $config = []
     )
     {
+        $this->config = array_merge($this->getDefaultConfig(), $config);
+    }
+
+    /**
+     * Default CSRF configuration
+     */
+    private function getDefaultConfig(): array
+    {
+        return [
+            'token_lifetime' => self::DEFAULT_LIFETIME,
+            'regenerate_on_login' => true,
+            'require_for_safe_methods' => false,
+            'strict_referer_check' => false,
+            'auto_cleanup_expired' => true,
+        ];
     }
 
     /**
@@ -73,7 +89,7 @@ class Csrf
         $this->session->setFramework(self::TOKEN_KEY, [
             'token' => $token,
             'created_at' => time(),
-            'expires_at' => time() + self::DEFAULT_LIFETIME,
+            'expires_at' => time() + $this->config['token_lifetime'],
         ]);
 
         return $token;
@@ -104,6 +120,16 @@ class Csrf
     }
 
     /**
+     * Handle login events
+     */
+    public function handleLogin(): void
+    {
+        if ($this->config['regenerate_on_login']) {
+            $this->refreshToken();
+        }
+    }
+
+    /**
      * Erneuert den CSRF-Token (z.B. nach Login)
      */
     public function refreshToken(): string
@@ -117,30 +143,23 @@ class Csrf
      */
     public function clearToken(): void
     {
-        $this->session->remove('_framework.' . self::TOKEN_KEY);
+        $this->session->removeFramework(self::TOKEN_KEY);
     }
 
     /**
-     * Validiert Request und wirft Exception bei Fehler
+     * Handle logout events
      */
-    public function validateOrFail(Request $request): void
+    public function handleLogout(): void
     {
-        if (!$this->requiresValidation($request)) {
-            return;
-        }
-
-        if (!$this->validateToken($request)) {
-            throw new CsrfException('CSRF token validation failed');
-        }
+        $this->clearToken();
     }
 
     /**
-     * Prüft ob Request CSRF-Validierung benötigt
+     * Enhanced validation with referer check
      */
-    public function requiresValidation(Request $request): bool
+    public function validateWithReferer(Request $request): bool
     {
-        // Nur state-changing HTTP-Methoden validieren
-        return in_array($request->getMethod()->value, ['POST', 'PUT', 'PATCH', 'DELETE'], true);
+        return $this->validateToken($request) && $this->validateReferer($request);
     }
 
     /**
@@ -148,13 +167,35 @@ class Csrf
      */
     public function validateToken(Request $request): bool
     {
-        $requestToken = $this->getTokenFromRequest($request);
+        // Skip validation for safe HTTP methods unless configured otherwise
+        if (!$this->requiresValidation($request)) {
+            return true;
+        }
 
-        if ($requestToken === null) {
+        $token = $this->getTokenFromRequest($request);
+
+        if (!$token) {
             return false;
         }
 
-        return $this->isValidToken($requestToken);
+        return $this->isValidToken($token);
+    }
+
+    /**
+     * Prüft ob CSRF-Validierung erforderlich ist
+     */
+    public function requiresValidation(Request $request): bool
+    {
+        $method = strtoupper($request->getMethod()->value);  // ← .value für enum
+
+        // Safe methods don't need CSRF protection unless explicitly configured
+        $safeMethods = ['GET', 'HEAD', 'OPTIONS', 'TRACE'];
+
+        if (in_array($method, $safeMethods) && !$this->config['require_for_safe_methods']) {
+            return false;
+        }
+
+        return true;
     }
 
     /**
@@ -162,29 +203,37 @@ class Csrf
      */
     private function getTokenFromRequest(Request $request): ?string
     {
-        // 1. POST/Form-Daten prüfen
-        $token = $request->input(self::TOKEN_FIELD_NAME);
-        if ($token !== null) {
+        // 1. Try POST body/form data
+        $allInput = $request->all();  // ← Verwende all() statt input()
+        $token = $allInput[self::TOKEN_FIELD_NAME] ?? null;
+
+        if ($token) {
             return (string)$token;
         }
 
-        // 2. HTTP-Header prüfen (für AJAX)
-        $token = $request->getHeader(strtolower(self::TOKEN_HEADER_NAME));
-        if ($token !== null) {
+        // 2. Try headers
+        $token = $request->getHeader(self::TOKEN_HEADER_NAME);
+
+        if ($token) {
             return $token;
         }
 
-        // 3. JSON-Body prüfen
-        $json = $request->json();
-        if (isset($json[self::TOKEN_FIELD_NAME])) {
-            return (string)$json[self::TOKEN_FIELD_NAME];
+        // 3. Try alternative header names (lowercase)
+        $token = $request->getHeader('x-csrf-token');
+        if ($token) {
+            return $token;
+        }
+
+        $token = $request->getHeader('x-xsrf-token');
+        if ($token) {
+            return $token;
         }
 
         return null;
     }
 
     /**
-     * Validiert einen spezifischen Token
+     * Validiert einen gegebenen Token
      */
     public function isValidToken(string $token): bool
     {
@@ -194,18 +243,124 @@ class Csrf
             return false;
         }
 
-        // Token abgelaufen
+        // Check expiration
         if ($this->isTokenExpired($tokenData)) {
-            $this->clearToken();
+            if ($this->config['auto_cleanup_expired']) {
+                $this->clearToken();
+            }
             return false;
         }
 
-        // Hash-sicherer Vergleich
+        // Constant-time comparison to prevent timing attacks
         return hash_equals($tokenData['token'], $token);
     }
 
     /**
-     * Holt Token-Informationen für Debugging
+     * Validate referer header (additional security layer)
+     */
+    public function validateReferer(Request $request): bool
+    {
+        if (!$this->config['strict_referer_check']) {
+            return true;
+        }
+
+        $referer = $request->getHeader('referer');  // ← getHeader() statt header()
+        $host = $request->getHeader('host');        // ← getHeader() statt header()
+
+        if (!$referer || !$host) {
+            return false;
+        }
+
+        $refererHost = parse_url($referer, PHP_URL_HOST);
+        return $refererHost === $host;
+    }
+
+    /**
+     * Get CSRF configuration
+     */
+    public function getConfig(): array
+    {
+        return $this->config;
+    }
+
+    /**
+     * Set configuration option
+     */
+    public function setConfig(string $key, mixed $value): void
+    {
+        $this->config[$key] = $value;
+    }
+
+    /**
+     * Generate multiple tokens (for forms with multiple submit buttons)
+     */
+    public function generateMultipleTokens(int $count = 3): array
+    {
+        $tokens = [];
+        $baseToken = $this->getToken();
+
+        for ($i = 0; $i < $count; $i++) {
+            $tokens[] = hash('sha256', $baseToken . $i);
+        }
+
+        // Store valid tokens
+        $this->session->setFramework(self::TOKEN_KEY . '_multi', [
+            'tokens' => $tokens,
+            'base_token' => $baseToken,
+            'created_at' => time(),
+            'expires_at' => time() + $this->config['token_lifetime'],
+        ]);
+
+        return $tokens;
+    }
+
+    /**
+     * Validate multiple tokens
+     */
+    public function validateMultipleTokens(string $token): bool
+    {
+        $multiTokenData = $this->session->getFramework(self::TOKEN_KEY . '_multi');
+
+        if (!$multiTokenData || $this->isTokenExpired($multiTokenData)) {
+            return false;
+        }
+
+        return in_array($token, $multiTokenData['tokens'], true);
+    }
+
+    /**
+     * Clean up expired tokens
+     */
+    public function cleanup(): void
+    {
+        $tokenData = $this->session->getFramework(self::TOKEN_KEY);
+        $multiTokenData = $this->session->getFramework(self::TOKEN_KEY . '_multi');
+
+        if ($tokenData && $this->isTokenExpired($tokenData)) {
+            $this->clearToken();
+        }
+
+        if ($multiTokenData && $this->isTokenExpired($multiTokenData)) {
+            $this->session->removeFramework(self::TOKEN_KEY . '_multi');
+        }
+    }
+
+    /**
+     * Get debug information
+     */
+    public function getDebugInfo(): array
+    {
+        return [
+            'config' => $this->config,
+            'token_info' => $this->getTokenInfo(),
+            'field_name' => self::TOKEN_FIELD_NAME,
+            'header_name' => self::TOKEN_HEADER_NAME,
+            'session_started' => $this->session->isStarted(),
+        ];
+    }
+
+    /**
+     * Get token information for debugging/monitoring
      */
     public function getTokenInfo(): array
     {
@@ -214,34 +369,22 @@ class Csrf
         if (!$tokenData) {
             return [
                 'exists' => false,
-                'token' => null,
+                'is_expired' => false,
                 'created_at' => null,
                 'expires_at' => null,
-                'is_expired' => null,
-                'remaining_time' => null,
+                'remaining_lifetime' => 0,
             ];
         }
 
         $now = time();
+        $isExpired = $this->isTokenExpired($tokenData);
 
         return [
             'exists' => true,
-            'token' => $tokenData['token'],
+            'is_expired' => $isExpired,
             'created_at' => $tokenData['created_at'],
             'expires_at' => $tokenData['expires_at'],
-            'is_expired' => $this->isTokenExpired($tokenData),
-            'remaining_time' => max(0, $tokenData['expires_at'] - $now),
+            'remaining_lifetime' => max(0, $tokenData['expires_at'] - $now),
         ];
-    }
-}
-
-/**
- * CSRF-Exception
- */
-class CsrfException extends RuntimeException
-{
-    public function __construct(string $message = 'CSRF token validation failed', int $code = 419)
-    {
-        parent::__construct($message, $code);
     }
 }
