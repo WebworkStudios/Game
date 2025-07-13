@@ -16,18 +16,15 @@
 <!-- Language Switcher -->
 <div class="language-switcher">
     <h3>🔄 Change Language</h3>
-    <form method="POST">
-        {{ csrf_token_field | raw }}
-        <input name="change_language" type="hidden" value="1">
+    <form method="POST" action="/test/localization">
+        {{ csrf_field() }}
+        <input type="hidden" name="change_language" value="1">
+
         <select name="locale" onchange="this.form.submit()">
-            <option current_locale== if value="de" {%
-            'de' %} selected{% endif %}>Deutsch</option>
-            <option current_locale== if value="en" {%
-            'en' %} selected{% endif %}>English</option>
-            <option current_locale== if value="fr" {%
-            'fr' %} selected{% endif %}>Français</option>
-            <option current_locale== if value="es" {%
-            'es' %} selected{% endif %}>Español</option>
+            <option value="de" {{ current_locale == 'de' ? 'selected' : '' }}>Deutsch</option>
+            <option value="en" {{ current_locale == 'en' ? 'selected' : '' }}>English</option>
+            <option value="fr" {{ current_locale == 'fr' ? 'selected' : '' }}>Français</option>
+            <option value="es" {{ current_locale == 'es' ? 'selected' : '' }}>Español</option>
         </select>
     </form>
 </div>
