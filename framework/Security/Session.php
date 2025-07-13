@@ -42,7 +42,7 @@ class Session
     }
 
     /**
-     * Konfiguriert Session-Parameter
+     * Konfiguriert Session-Parameter - FIXED: Robust Array-Handling
      */
     private function configureSession(): void
     {
@@ -51,20 +51,31 @@ class Session
             return;
         }
 
-        // Cookie-Parameter setzen
+        // Robust array value extraction (handles arrays from array_merge_recursive)
+        $lifetime = is_array($this->config['lifetime']) ? end($this->config['lifetime']) : $this->config['lifetime'];
+        $path = is_array($this->config['path']) ? end($this->config['path']) : $this->config['path'];
+        $domain = is_array($this->config['domain']) ? end($this->config['domain']) : $this->config['domain'];
+        $secure = is_array($this->config['secure']) ? end($this->config['secure']) : $this->config['secure'];
+        $httponly = is_array($this->config['httponly']) ? end($this->config['httponly']) : $this->config['httponly'];
+        $samesite = is_array($this->config['samesite']) ? end($this->config['samesite']) : $this->config['samesite'];
+        $gc_maxlifetime = is_array($this->config['gc_maxlifetime']) ? end($this->config['gc_maxlifetime']) : $this->config['gc_maxlifetime'];
+        $gc_probability = is_array($this->config['gc_probability']) ? end($this->config['gc_probability']) : $this->config['gc_probability'];
+        $gc_divisor = is_array($this->config['gc_divisor']) ? end($this->config['gc_divisor']) : $this->config['gc_divisor'];
+
+        // Cookie-Parameter setzen - mit korrekten Types
         session_set_cookie_params([
-            'lifetime' => $this->config['lifetime'],
-            'path' => $this->config['path'],
-            'domain' => $this->config['domain'],
-            'secure' => $this->config['secure'],
-            'httponly' => $this->config['httponly'],
-            'samesite' => $this->config['samesite'],
+            'lifetime' => (int)$lifetime,
+            'path' => (string)$path,
+            'domain' => (string)$domain,
+            'secure' => (bool)$secure,
+            'httponly' => (bool)$httponly,
+            'samesite' => (string)$samesite,
         ]);
 
-        // Garbage Collection
-        ini_set('session.gc_maxlifetime', (string)$this->config['gc_maxlifetime']);
-        ini_set('session.gc_probability', (string)$this->config['gc_probability']);
-        ini_set('session.gc_divisor', (string)$this->config['gc_divisor']);
+        // Garbage Collection - FIXED: Explizite Type-Casts für ini_set
+        ini_set('session.gc_maxlifetime', (string)(int)$gc_maxlifetime);
+        ini_set('session.gc_probability', (string)(int)$gc_probability);
+        ini_set('session.gc_divisor', (string)(int)$gc_divisor);
 
         // Security-Einstellungen
         ini_set('session.use_only_cookies', '1');
@@ -244,26 +255,17 @@ class Session
     }
 
     /**
-     * Prüft ob Flash-Message existiert
-     */
-    public function hasFlash(string $key): bool
-    {
-        $this->ensureStarted();
-        return isset($_SESSION[self::FLASH_NAMESPACE][$key]);
-    }
-
-    /**
      * Setzt Flash-Success-Message
      */
     public function flashSuccess(string $message): void
     {
-        $this->flash('success', $message);
+        $this->setFlash('success', $message);
     }
 
     /**
-     * Setzt eine Flash-Message
+     * Setzt Flash-Message
      */
-    public function flash(string $key, mixed $value): void
+    public function setFlash(string $key, mixed $value): void
     {
         $this->ensureStarted();
         $_SESSION[self::FLASH_NAMESPACE][$key] = $value;
@@ -274,7 +276,7 @@ class Session
      */
     public function flashError(string $message): void
     {
-        $this->flash('error', $message);
+        $this->setFlash('error', $message);
     }
 
     /**
@@ -282,7 +284,7 @@ class Session
      */
     public function flashInfo(string $message): void
     {
-        $this->flash('info', $message);
+        $this->setFlash('info', $message);
     }
 
     /**
@@ -290,7 +292,7 @@ class Session
      */
     public function flashWarning(string $message): void
     {
-        $this->flash('warning', $message);
+        $this->setFlash('warning', $message);
     }
 
     /**
@@ -302,7 +304,7 @@ class Session
     }
 
     /**
-     * Holt eine Flash-Message und entfernt sie
+     * Holt Flash-Message und entfernt sie
      */
     public function getFlash(string $key, mixed $default = null): mixed
     {

@@ -14,6 +14,7 @@ use ReflectionException;
 
 /**
  * Enhanced CSRF Middleware - Automatische CSRF-Validierung mit SessionSecurity-Integration
+ * FIXED: Entfernt spezielle Test-Route-Behandlung, nutzt nur noch Konfiguration
  */
 class CsrfMiddleware implements MiddlewareInterface
 {
@@ -32,7 +33,7 @@ class CsrfMiddleware implements MiddlewareInterface
     }
 
     /**
-     * Default configuration
+     * Default configuration - FIXED: Spezifische Exemptions
      */
     private function getDefaultConfig(): array
     {
@@ -40,7 +41,9 @@ class CsrfMiddleware implements MiddlewareInterface
             'exempt_routes' => [
                 '/api/*',
                 '/webhooks/*',
-                '/test/*',
+                '/test/template-functions',
+                '/test/validation',
+                // NOTE: /test/localization und /test/security sind NICHT exempt!
             ],
             'require_https' => false,
             'auto_cleanup' => true,
@@ -111,7 +114,7 @@ class CsrfMiddleware implements MiddlewareInterface
             return Response::json([
                 'error' => 'HTTPS required',
                 'message' => 'This action requires a secure connection'
-            ], HttpStatus::BAD_REQUEST); // Use BAD_REQUEST instead of UPGRADE_REQUIRED
+            ], HttpStatus::BAD_REQUEST);
         }
 
         // Redirect to HTTPS
@@ -120,7 +123,7 @@ class CsrfMiddleware implements MiddlewareInterface
     }
 
     /**
-     * Prüft ob Request von CSRF-Validierung ausgenommen ist
+     * Prüft ob Request von CSRF-Validierung befreit ist - FIXED: Nur noch Konfiguration
      */
     private function isExempt(Request $request): bool
     {
@@ -138,10 +141,7 @@ class CsrfMiddleware implements MiddlewareInterface
             return true;
         }
 
-        // 3. Spezielle Test-Route-Behandlung
-        if ($this->isTestRoute($request)) {
-            return $this->shouldExemptTestRoute($request);
-        }
+        // REMOVED: Spezielle Test-Route-Behandlung - nutze nur noch Konfiguration!
 
         return false;
     }
@@ -230,30 +230,6 @@ class CsrfMiddleware implements MiddlewareInterface
         ));
     }
 
-    /**
-     * Special handling for test routes
-     */
-    private function isTestRoute(Request $request): bool
-    {
-        return str_starts_with($request->getPath(), '/test/');
-    }
-
-    /**
-     * Determines if test route should be exempt
-     */
-    private function shouldExemptTestRoute(Request $request): bool
-    {
-        $path = $request->getPath();
-
-        // Security test route should NOT be exempt (we want to test CSRF)
-        if ($path === '/test/security') {
-            return false;
-        }
-
-        // Other test routes can be exempt
-        return true;
-    }
-
     private function logExemption(Request $request): void
     {
         if (!$this->config['log_violations']) {
@@ -285,6 +261,19 @@ class CsrfMiddleware implements MiddlewareInterface
         ));
     }
 
+    private function logSuccessfulValidation(Request $request): void
+    {
+        if (!$this->config['log_successful_validations']) {
+            return;
+        }
+
+        error_log(sprintf(
+            'CSRF validation successful: %s %s',
+            $request->getMethod()->value,
+            $request->getPath()
+        ));
+    }
+
     /**
      * Behandelt CSRF-Validierungsfehler
      */
@@ -295,369 +284,56 @@ class CsrfMiddleware implements MiddlewareInterface
             return Response::json([
                 'error' => 'CSRF token validation failed',
                 'message' => 'The request could not be completed due to invalid security token.',
-                'code' => 419,
-                'new_token' => $this->generateNewTokenForResponse()
+                'code' => 'CSRF_TOKEN_MISMATCH'
             ], HttpStatus::PAGE_EXPIRED);
         }
 
-        // HTML-Response für Web-Requests
-        return $this->createCsrfErrorResponse($request);
+        // HTML-Response für normale Requests
+        return Response::serverError('Security validation failed');
     }
 
     /**
-     * Rendert erweiterte CSRF-Fehlerseite
-     */
-
-    /**
-     * Generates new token for failed requests (if not in strict mode)
-     */
-    private function generateNewTokenForResponse(): ?string
-    {
-        if ($this->config['strict_mode']) {
-            return null;
-        }
-
-        try {
-            return $this->csrf->generateToken();
-        } catch (\Exception) {
-            return null;
-        }
-    }
-
-    /**
-     * Erstellt CSRF-Fehler Response
-     */
-    private function createCsrfErrorResponse(Request $request): Response
-    {
-        $html = $this->renderCsrfErrorPage($request);
-
-        return new Response(
-            status: HttpStatus::PAGE_EXPIRED,
-            headers: [
-                'Content-Type' => 'text/html; charset=UTF-8',
-                'Cache-Control' => 'no-cache, no-store, must-revalidate'
-            ],
-            body: $html
-        );
-    }
-
-    /**
-     * Rendert erweiterte CSRF-Fehlerseite
-     */
-    private function renderCsrfErrorPage(Request $request): string
-    {
-        $newToken = $this->generateNewTokenForResponse();
-        $tokenMeta = $newToken ? "<meta name='csrf-token' content='{$newToken}'>" : '';
-
-        return "
-        <!DOCTYPE html>
-        <html lang='en'>
-        <head>
-            <title>419 - CSRF Token Mismatch</title>
-            <meta charset='utf-8'>
-            <meta name='viewport' content='width=device-width, initial-scale=1'>
-            {$tokenMeta}
-            <style>
-                * { margin: 0; padding: 0; box-sizing: border-box; }
-                body { 
-                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                    min-height: 100vh;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    color: #333;
-                }
-                .container {
-                    background: white;
-                    padding: 40px;
-                    border-radius: 15px;
-                    box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-                    max-width: 600px;
-                    width: 90%;
-                    text-align: center;
-                }
-                .code { 
-                    font-size: 4em; 
-                    font-weight: bold; 
-                    color: #e74c3c; 
-                    margin-bottom: 20px;
-                    text-shadow: 2px 2px 4px rgba(0,0,0,0.1);
-                }
-                .title { 
-                    font-size: 1.5em; 
-                    margin-bottom: 15px; 
-                    color: #333;
-                    font-weight: 600;
-                }
-                .message {
-                    color: #666;
-                    margin-bottom: 25px;
-                    line-height: 1.6;
-                    font-size: 1.1em;
-                }
-                .details {
-                    background: #f8f9fa;
-                    padding: 20px;
-                    border-radius: 8px;
-                    margin: 20px 0;
-                    border-left: 4px solid #e74c3c;
-                    text-align: left;
-                }
-                .details h4 {
-                    color: #e74c3c;
-                    margin-bottom: 10px;
-                    font-size: 1.1em;
-                }
-                .details ul {
-                    color: #555;
-                    line-height: 1.5;
-                    padding-left: 20px;
-                }
-                .details li {
-                    margin: 8px 0;
-                }
-                .actions {
-                    margin-top: 30px;
-                    display: flex;
-                    gap: 15px;
-                    justify-content: center;
-                    flex-wrap: wrap;
-                }
-                .btn {
-                    padding: 12px 24px;
-                    border: none;
-                    border-radius: 6px;
-                    cursor: pointer;
-                    font-size: 1em;
-                    text-decoration: none;
-                    display: inline-block;
-                    transition: all 0.3s ease;
-                    font-weight: 500;
-                }
-                .btn-primary {
-                    background: #007bff;
-                    color: white;
-                }
-                .btn-primary:hover {
-                    background: #0056b3;
-                    transform: translateY(-1px);
-                }
-                .btn-secondary {
-                    background: #6c757d;
-                    color: white;
-                }
-                .btn-secondary:hover {
-                    background: #545b62;
-                    transform: translateY(-1px);
-                }
-                .security-info {
-                    background: #e3f2fd;
-                    border: 1px solid #bbdefb;
-                    border-radius: 8px;
-                    padding: 15px;
-                    margin: 20px 0;
-                    color: #1565c0;
-                    font-size: 0.9em;
-                }
-                @media (max-width: 480px) {
-                    .container { padding: 20px; }
-                    .code { font-size: 3em; }
-                    .actions { flex-direction: column; }
-                }
-            </style>
-        </head>
-        <body>
-            <div class='container'>
-                <div class='code'>419</div>
-                <h1 class='title'>CSRF Token Mismatch</h1>
-                <p class='message'>Your session has expired or the security token is invalid. This protection prevents unauthorized requests.</p>
-                
-                <div class='details'>
-                    <h4>🔒 Why did this happen?</h4>
-                    <ul>
-                        <li>Your session may have expired</li>
-                        <li>You might have opened this page in multiple tabs</li>
-                        <li>Your browser cookies could be disabled</li>
-                        <li>The security token was modified or corrupted</li>
-                    </ul>
-                </div>
-
-                <div class='security-info'>
-                    <strong>🛡️ Security Note:</strong> This protection helps prevent Cross-Site Request Forgery (CSRF) attacks and keeps your data safe.
-                </div>
-                
-                <div class='actions'>
-                    <button onclick='refreshPage()' class='btn btn-primary' id='refreshBtn'>🔄 Refresh Page</button>
-                    <a href='/' class='btn btn-secondary'>🏠 Go Home</a>
-                </div>
-            </div>
-
-            <script>
-                // Auto-refresh countdown
-                let countdown = 10;
-                const refreshBtn = document.getElementById('refreshBtn');
-                const originalText = refreshBtn.textContent;
-                
-                function refreshPage() {
-                    window.location.reload();
-                }
-                
-                const timer = setInterval(() => {
-                    refreshBtn.textContent = `🔄 Refresh Page (\${countdown}s)`;
-                    countdown--;
-                    
-                    if (countdown < 0) {
-                        clearInterval(timer);
-                        refreshPage();
-                    }
-                }, 1000);
-                
-                // Stop countdown on user interaction
-                document.addEventListener('click', () => {
-                    clearInterval(timer);
-                    refreshBtn.textContent = originalText;
-                });
-                
-                document.addEventListener('keypress', () => {
-                    clearInterval(timer);
-                    refreshBtn.textContent = originalText;
-                });
-
-                // Update CSRF token if provided
-                if (document.querySelector('meta[name=\"csrf-token\"]')) {
-                    console.log('New CSRF token provided for retry');
-                }
-            </script>
-        </body>
-        </html>";
-    }
-
-    private function logSuccessfulValidation(Request $request): void
-    {
-        // Only log successful validations if explicitly enabled in config
-        // This avoids log spam in production
-        if ($this->config['log_successful_validations'] ?? false) {
-            error_log(sprintf(
-                'CSRF validation successful: %s %s',
-                $request->getMethod()->value,
-                $request->getPath()
-            ));
-        }
-    }
-
-    /**
-     * Post-processing after successful request
+     * Performs post-request processing
      */
     private function performPostProcessing(Request $request): void
     {
+        // Auto-cleanup: Check if token is expired and clean it up
         if ($this->config['auto_cleanup']) {
             $this->cleanupExpiredTokens();
         }
 
-        // Integrate with SessionSecurity for login/logout events
+        // Handle session security integration
         if ($this->sessionSecurity) {
             $this->handleSessionSecurityIntegration($request);
         }
     }
 
     /**
-     * Cleans up expired tokens
+     * Cleans up expired CSRF tokens
      */
     private function cleanupExpiredTokens(): void
     {
         try {
-            // Get token info and check if expired
             $tokenInfo = $this->csrf->getTokenInfo();
 
+            // If token exists and is expired, clear it
             if ($tokenInfo['exists'] && $tokenInfo['is_expired']) {
                 $this->csrf->clearToken();
             }
-        } catch (\Exception $e) {
-            $this->logError($e, null, 'Token cleanup failed');
+        } catch (\Throwable $e) {
+            // Log error but don't break the application
+            error_log('CSRF token cleanup failed: ' . $e->getMessage());
         }
     }
 
     /**
-     * Integrates with SessionSecurity for token management
+     * Handles session security integration
      */
     private function handleSessionSecurityIntegration(Request $request): void
     {
-        // Check if this was a login request that succeeded
-        if ($this->isSuccessfulLoginRequest($request)) {
-            $this->csrf->refreshToken();
-            $this->logTokenRefresh('login', $request);
-        }
-
-        // Check if this was a logout request
-        if ($this->isLogoutRequest($request)) {
-            $this->csrf->refreshToken();
-            $this->logTokenRefresh('logout', $request);
-        }
-
-        // Check for privilege escalation
-        if ($this->sessionSecurity->isAuthenticated()) {
-            $this->handlePrivilegeChange($request);
-        }
-    }
-
-    /**
-     * Checks if request was a successful login
-     */
-    private function isSuccessfulLoginRequest(Request $request): bool
-    {
-        if (!$request->isPost()) {
-            return false;
-        }
-
-        $path = $request->getPath();
-        $loginPaths = ['/login', '/auth/login', '/api/login'];
-
-        foreach ($loginPaths as $loginPath) {
-            if (str_starts_with($path, $loginPath)) {
-                // Check if SessionSecurity indicates successful authentication
-                return $this->sessionSecurity && $this->sessionSecurity->isAuthenticated();
-            }
-        }
-
-        return false;
-    }
-
-    private function logTokenRefresh(string $reason, Request $request): void
-    {
-        error_log(sprintf(
-            'CSRF token refreshed (%s): %s %s',
-            $reason,
-            $request->getMethod()->value,
-            $request->getPath()
-        ));
-    }
-
-    /**
-     * Checks if request was a logout
-     */
-    private function isLogoutRequest(Request $request): bool
-    {
-        $path = $request->getPath();
-        $logoutPaths = ['/logout', '/auth/logout', '/api/logout'];
-
-        foreach ($logoutPaths as $logoutPath) {
-            if (str_starts_with($path, $logoutPath)) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    /**
-     * Handles privilege level changes
-     */
-    private function handlePrivilegeChange(Request $request): void
-    {
-        // This would require tracking previous privilege level
-        // Implementation depends on how privilege escalation is detected
-        // For now, this is a placeholder for future enhancement
+        // This integration allows CSRF middleware to work with session security
+        // for things like privilege escalation detection, etc.
+        // Implementation depends on specific requirements
     }
 
     /**

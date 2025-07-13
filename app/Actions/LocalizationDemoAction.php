@@ -29,9 +29,6 @@ class LocalizationDemoAction
             return $this->handleLanguageChange($request);
         }
 
-        // WICHTIG: Sprache aus Session laden BEVOR Demo-Daten geladen werden
-        $this->ensureCorrectLocale();
-
         // Clear caches in debug mode for development
         if ($this->app->isDebug()) {
             $this->app->clearCaches();
@@ -44,29 +41,6 @@ class LocalizationDemoAction
             'detection_info' => $this->getDetectionInfo($request),
             'translator_stats' => $this->getTranslatorStats(),
         ]);
-    }
-
-    /**
-     * Ensure translator has correct locale from session
-     */
-    private function ensureCorrectLocale(): void
-    {
-        try {
-            $detector = \Framework\Core\ServiceRegistry::get(\Framework\Localization\LanguageDetector::class);
-            $translator = \Framework\Core\ServiceRegistry::get(\Framework\Localization\Translator::class);
-
-            // Get stored user locale from session
-            $sessionLocale = $detector->getUserLocale();
-
-            if ($sessionLocale && $sessionLocale !== $translator->getLocale()) {
-                // Session has different locale than translator - sync them
-                $translator->setLocale($sessionLocale);
-                $translator->clearCache(); // Clear cache to load new language files
-            }
-        } catch (\Throwable $e) {
-            // Log but don't break the application
-            error_log("Failed to sync translator locale: " . $e->getMessage());
-        }
     }
 
     /**
@@ -169,16 +143,24 @@ class LocalizationDemoAction
      */
     private function changeLanguage(string $locale): void
     {
+        // Debug: Log current session state BEFORE change
+        error_log("BEFORE language change: Session locale = " . $this->getSessionLocale() . ", Target locale = {$locale}");
+
         // Update language detector (stores in session)
         $detector = \Framework\Core\ServiceRegistry::get(\Framework\Localization\LanguageDetector::class);
         $detector->setUserLocale($locale);
 
+        // Debug: Verify session was updated
+        $newSessionLocale = $detector->getUserLocale();
+        error_log("AFTER setUserLocale: Session locale = {$newSessionLocale}");
+
         // Update current translator instance
         $translator = \Framework\Core\ServiceRegistry::get(\Framework\Localization\Translator::class);
         $translator->setLocale($locale);
-
-        // WICHTIG: Cache clearen, damit neue Sprache geladen wird
         $translator->clearCache();
+
+        // Debug: Verify translator was updated
+        error_log("AFTER setLocale: Translator locale = " . $translator->getLocale());
     }
 
     /**
@@ -244,27 +226,23 @@ class LocalizationDemoAction
                 ['key' => 'auth.password', 'translated' => $translator->translate('auth.password')],
                 ['key' => 'auth.register', 'translated' => $translator->translate('auth.register')],
                 ['key' => 'auth.logout', 'translated' => $translator->translate('auth.logout')],
-                ['key' => 'auth.email', 'translated' => $translator->translate('auth.email')],
-                ['key' => 'auth.remember_me', 'translated' => $translator->translate('auth.remember_me')],
             ],
 
-            // Game-specific translations (simplified to avoid translatePlural issues)
+            // Game statistics translations
             'game_stats' => [
                 ['key' => 'game.stats.goals', 'translated' => $translator->translate('game.stats.goals')],
                 ['key' => 'game.stats.assists', 'translated' => $translator->translate('game.stats.assists')],
-                ['key' => 'game.stats.wins', 'translated' => $translator->translate('game.stats.wins')],
-                ['key' => 'game.stats.losses', 'translated' => $translator->translate('game.stats.losses')],
+                ['key' => 'game.stats.points', 'translated' => $translator->translate('game.stats.points')],
             ],
 
             // Match events translations
             'match_events' => [
                 ['key' => 'match.events.goal', 'translated' => $translator->translate('match.events.goal')],
-                ['key' => 'match.events.yellow_card', 'translated' => $translator->translate('match.events.yellow_card')],
-                ['key' => 'match.events.red_card', 'translated' => $translator->translate('match.events.red_card')],
+                ['key' => 'match.events.card', 'translated' => $translator->translate('match.events.card')],
                 ['key' => 'match.events.substitution', 'translated' => $translator->translate('match.events.substitution')],
             ],
 
-            // Common actions
+            // Actions
             'actions' => [
                 ['key' => 'common.actions.save', 'translated' => $translator->translate('common.actions.save')],
                 ['key' => 'common.actions.cancel', 'translated' => $translator->translate('common.actions.cancel')],

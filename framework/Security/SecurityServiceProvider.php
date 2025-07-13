@@ -21,7 +21,7 @@ class SecurityServiceProvider
     }
 
     /**
-     * Erstellt Standard-Konfigurationsdatei
+     * Erstellt Standard-Konfigurationsdatei - FIXED: Spezifische CSRF-Exemptions
      */
     public static function publishConfig(string $basePath): bool
     {
@@ -57,16 +57,18 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | CSRF Protection
+    | CSRF Protection - FIXED: Specific exemptions only
     |--------------------------------------------------------------------------
     */
     'csrf' => [
         'token_lifetime' => 7200, // 2 hours
         'regenerate_on_login' => true,
         'exempt_routes' => [
-            '/api/*',      // API routes (use different auth)
-            '/webhooks/*', // Webhook routes
-            '/test/*',     // Test routes (except /test/security)
+            '/api/*',                    // API routes (use different auth)
+            '/webhooks/*',               // Webhook routes
+            '/test/template-functions',  // Template testing (no sensitive data)
+            '/test/validation',          // Validation testing (no sensitive data)
+            // NOTE: /test/localization and /test/security have CSRF protection!
         ],
         'require_https' => false, // Set to true in production
         'auto_cleanup' => true,
@@ -120,7 +122,7 @@ PHP;
     }
 
     /**
-     * Lädt Security-Konfiguration
+     * Lädt Security-Konfiguration - FIXED: Verwende array_merge statt array_merge_recursive
      */
     private function loadSecurityConfig(): array
     {
@@ -133,12 +135,12 @@ PHP;
 
         $config = require $configPath;
 
-        // Merge mit Default-Werten
-        return array_merge_recursive($this->getDefaultConfig(), $config);
+        // FIXED: Verwende array_merge statt array_merge_recursive um Arrays zu vermeiden
+        return array_merge($this->getDefaultConfig(), $config);
     }
 
     /**
-     * Standard-Konfiguration als Fallback
+     * Standard-Konfiguration als Fallback - FIXED: Spezifische CSRF-Exemptions
      */
     private function getDefaultConfig(): array
     {
@@ -160,7 +162,9 @@ PHP;
                 'exempt_routes' => [
                     '/api/*',
                     '/webhooks/*',
-                    '/test/*',
+                    '/test/template-functions',
+                    '/test/validation',
+                    // NOTE: /test/localization und /test/security sind NICHT exempt!
                 ],
                 'require_https' => false,
                 'auto_cleanup' => true,

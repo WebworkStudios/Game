@@ -19,9 +19,16 @@ readonly class LanguageMiddleware implements MiddlewareInterface
 
     public function handle(Request $request, callable $next): Response
     {
-        // Detect and set locale for this request
-        $locale = $this->detector->detectLocale($request);
-        $this->translator->setLocale($locale);
+        // 1. Detect locale (respects session priority)
+        $detectedLocale = $this->detector->detectLocale($request);
+
+        // 2. Ensure translator is synced with detected locale
+        $currentTranslatorLocale = $this->translator->getLocale();
+
+        if ($detectedLocale !== $currentTranslatorLocale) {
+            $this->translator->setLocale($detectedLocale);
+            $this->translator->clearCache(); // Clear cache when locale changes
+        }
 
         return $next($request);
     }
