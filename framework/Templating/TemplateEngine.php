@@ -588,15 +588,19 @@ class TemplateEngine
         // Better debug logging with detailed information
         if (is_array($nameOrToken)) {
             if (isset($nameOrToken['variable_data'])) {
-                $debugInfo = "VARIABLE_DATA:{$nameOrToken['variable_data']['type']}";
-                if ($nameOrToken['variable_data']['type'] === 'simple') {
+                $debugInfo = "VARIABLE_DATA:" . ($nameOrToken['variable_data']['type'] ?? 'MISSING_TYPE');
+                if (($nameOrToken['variable_data']['type'] ?? '') === 'simple') {
                     $variableName = $nameOrToken['variable_data']['name'] ?? 'MISSING_NAME';
                     $debugInfo .= "($variableName)";
-                } elseif ($nameOrToken['variable_data']['type'] === 'math') {
-                    $debugInfo .= "({$nameOrToken['variable_data']['left']}{$nameOrToken['variable_data']['operator']}{$nameOrToken['variable_data']['right']})";
+                } elseif (($nameOrToken['variable_data']['type'] ?? '') === 'math') {
+                    $left = $nameOrToken['variable_data']['left'] ?? 'MISSING_LEFT';
+                    $operator = $nameOrToken['variable_data']['operator'] ?? 'MISSING_OP';
+                    $right = $nameOrToken['variable_data']['right'] ?? 'MISSING_RIGHT';
+                    $debugInfo .= "($left$operator$right)";
                 }
             } elseif (isset($nameOrToken['name'])) {
-                $debugInfo = "LEGACY_TOKEN(" . (is_string($nameOrToken['name']) ? $nameOrToken['name'] : gettype($nameOrToken['name'])) . ")";
+                $name = $nameOrToken['name'];
+                $debugInfo = "LEGACY_TOKEN(" . (is_string($name) ? $name : gettype($name)) . ")";
             } else {
                 $debugInfo = "UNKNOWN_ARRAY_TOKEN";
             }
@@ -646,8 +650,12 @@ class TemplateEngine
 
         // Apply filters
         foreach ($filters as $filter) {
-            $filterName = $filter['name'];
-            $parameters = $filter['parameters'];
+            $filterName = $filter['name'] ?? '';
+            $parameters = $filter['parameters'] ?? [];
+
+            if (empty($filterName)) {
+                continue;
+            }
 
             try {
                 $value = $this->filterManager->apply($filterName, $value, $parameters);
@@ -660,7 +668,7 @@ class TemplateEngine
         if ($this->autoEscape && is_string($value)) {
             $hasRawFilter = false;
             foreach ($filters as $filter) {
-                if ($filter['name'] === 'raw') {
+                if (($filter['name'] ?? '') === 'raw') {
                     $hasRawFilter = true;
                     break;
                 }
@@ -674,9 +682,6 @@ class TemplateEngine
         return (string)$value;
     }
 
-    /**
-     * Evaluiert verschiedene Variable-Data-Typen
-     */
     /**
      * Evaluiert verschiedene Variable-Data-Typen
      */
@@ -854,11 +859,19 @@ class TemplateEngine
                 } elseif ($token['type'] === 'variable') {
                     $filters = $token['filters'] ?? [];
 
-                    // Handle both old and new token structures
-                    if (is_array($token['name'])) {
+                    // Handle both old and new token structures - FIXED
+                    if (isset($token['name'])) {
+                        if (is_array($token['name'])) {
+                            $output .= $this->renderVariable($token, $filters);
+                        } else {
+                            $output .= $this->renderVariable($token['name'], $filters);
+                        }
+                    } elseif (isset($token['variable_data'])) {
+                        // New token structure with variable_data
                         $output .= $this->renderVariable($token, $filters);
                     } else {
-                        $output .= $this->renderVariable($token['name'], $filters);
+                        error_log("WARNING: Variable token with invalid structure in renderIf");
+                        $output .= '';
                     }
                 } elseif ($token['type'] === 'if') {
                     // Handle nested if
