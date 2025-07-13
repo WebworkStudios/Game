@@ -280,20 +280,9 @@ class TemplateEngine
      */
     private function parseVariableWithFilters(string $expression): array
     {
-        $parsed = $this->parseVariableExpression($expression);
-
-        // Handle backward compatibility
-        if (isset($parsed['variable_data'])) {
-            return [
-                'type' => 'variable',
-                'name' => $parsed, // Pass the whole structure
-                'filters' => $parsed['filters'] ?? []
-            ];
-        }
-
-        return $parsed;
+        // Return the parsed structure directly without additional wrapping
+        return $this->parseVariableExpression($expression);
     }
-
     /**
      * Parst Variable-Expressions mit mathematischen Operationen und Filter-Support
      */
@@ -512,13 +501,16 @@ class TemplateEngine
                 case 'variable':
                     $filters = $token['filters'] ?? [];
 
-                    // Handle both old and new token structures
-                    if (is_array($token['name'])) {
+                    // Check if this is the new structure with variable_data
+                    if (isset($token['variable_data'])) {
                         // New structure - pass the entire token to renderVariable
                         $output .= $this->renderVariable($token, $filters);
-                    } else {
-                        // Legacy structure - pass name as string
+                    } elseif (isset($token['name']) && is_string($token['name'])) {
+                        // Legacy structure with string name
                         $output .= $this->renderVariable($token['name'], $filters);
+                    } else {
+                        error_log("WARNING: Variable token with invalid structure");
+                        $output .= '';
                     }
                     break;
 
@@ -583,11 +575,35 @@ class TemplateEngine
     }
 
     /**
-     * Rendert Variable mit Filter-Support und automatischem XSS-Schutz (UPDATED)
+     * Rendert Variable mit Filter-Support und automatischem XSS-Schutz (SECURED)
      */
-    private function renderVariable(string|array $nameOrToken, array $filters = []): string
+    private function renderVariable(string|array|null $nameOrToken, array $filters = []): string
     {
-        error_log("Rendering variable: " . (is_array($nameOrToken) ? 'ARRAY_TOKEN' : "name='$nameOrToken'"));
+        // Handle null input
+        if ($nameOrToken === null) {
+            error_log("WARNING: renderVariable called with null argument");
+            return '';
+        }
+
+        // Better debug logging with detailed information
+        if (is_array($nameOrToken)) {
+            if (isset($nameOrToken['variable_data'])) {
+                $debugInfo = "VARIABLE_DATA:{$nameOrToken['variable_data']['type']}";
+                if ($nameOrToken['variable_data']['type'] === 'simple') {
+                    $variableName = $nameOrToken['variable_data']['name'] ?? 'MISSING_NAME';
+                    $debugInfo .= "($variableName)";
+                } elseif ($nameOrToken['variable_data']['type'] === 'math') {
+                    $debugInfo .= "({$nameOrToken['variable_data']['left']}{$nameOrToken['variable_data']['operator']}{$nameOrToken['variable_data']['right']})";
+                }
+            } elseif (isset($nameOrToken['name'])) {
+                $debugInfo = "LEGACY_TOKEN(" . (is_string($nameOrToken['name']) ? $nameOrToken['name'] : gettype($nameOrToken['name'])) . ")";
+            } else {
+                $debugInfo = "UNKNOWN_ARRAY_TOKEN";
+            }
+            error_log("Rendering variable: $debugInfo");
+        } else {
+            error_log("Rendering variable: STRING('$nameOrToken')");
+        }
 
         // Handle token structure vs simple name
         if (is_array($nameOrToken)) {
@@ -601,11 +617,16 @@ class TemplateEngine
                 $name = $nameOrToken['name'];
                 if (is_string($name)) {
                     $value = $this->getValue($name);
+                } elseif (is_array($name)) {
+                    // Handle nested array structure
+                    error_log("WARNING: Nested array in legacy token name - this should not happen");
+                    $value = '';
                 } else {
                     $value = '';
                 }
                 $filters = array_merge($nameOrToken['filters'] ?? [], $filters);
             } else {
+                error_log("WARNING: Array token without variable_data or name");
                 $value = '';
             }
         } else {
@@ -656,15 +677,25 @@ class TemplateEngine
     /**
      * Evaluiert verschiedene Variable-Data-Typen
      */
+    /**
+     * Evaluiert verschiedene Variable-Data-Typen
+     */
     private function evaluateVariableData(array $variableData): mixed
     {
+        // Debug what we're evaluating
+        error_log("Evaluating variable data: " . json_encode($variableData));
+
+        if (!isset($variableData['type'])) {
+            error_log("WARNING: Variable data missing 'type' key");
+            return null;
+        }
+
         return match($variableData['type']) {
-            'simple' => $this->getValue($variableData['name']),
+            'simple' => $this->getValue($variableData['name'] ?? ''),
             'math' => $this->evaluateMathExpression($variableData),
             default => null
         };
     }
-
     /**
      * Evaluiert mathematische Ausdrücke
      */
@@ -711,6 +742,11 @@ class TemplateEngine
      */
     private function getValue(string $name): mixed
     {
+        // Handle empty name
+        if (empty($name)) {
+            return null;
+        }
+
         if (str_contains($name, '.')) {
             $parts = explode('.', $name);
             $current = $this->data;
