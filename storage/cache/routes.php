@@ -1,7 +1,7 @@
 <?php
 
 // Auto-generated route cache - DO NOT EDIT
-// Generated at: 2025-07-13 19:02:26
+// Generated at: 2025-07-13 19:30:27
 
 return array (
   0 => 
@@ -186,22 +186,6 @@ return array (
     ),
   ),
   11 => 
-  array (
-    'pattern' => '#^/test/template-functions$#',
-    'methods' => 
-    array (
-      0 => 'GET',
-    ),
-    'action' => 'App\\Actions\\TestTemplateFunctionsAction',
-    'middlewares' => 
-    array (
-    ),
-    'name' => 'test.template.functions',
-    'parameters' => 
-    array (
-    ),
-  ),
-  12 => 
   array (
     'pattern' => '#^/test/validation$#',
     'methods' => 

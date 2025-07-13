@@ -5,295 +5,293 @@ declare(strict_types=1);
 namespace App\Actions;
 
 use Framework\Core\Application;
+use Framework\Http\HttpStatus;
 use Framework\Http\Request;
 use Framework\Http\Response;
 use Framework\Routing\Route;
 
 /**
- * Test Action für Security-Features
+ * Test Action für Security-Features des Frameworks
+ *
+ * Demonstriert:
+ * - CSRF Protection (automatisch durch CsrfMiddleware)
+ * - Session Security
+ * - Input Validation
+ * - Sichere Request/Response Behandlung
  */
 #[Route(path: '/test/security', methods: ['GET', 'POST'], name: 'test.security')]
 class TestSecurityAction
 {
     public function __construct(
         private readonly Application $app
-    )
-    {
-    }
+    ) {}
 
     public function __invoke(Request $request): Response
     {
-        $session = $this->app->getSession();
-        $csrf = $this->app->getCsrf();
-
         if ($request->isPost()) {
-            // AJAX-Request erkennen
-            if ($request->isJson() || $request->isAjax()) {
-                return $this->handleAjaxRequest($request, $session);
-            }
-
-            // Normaler Form-Submit
-            $session->flashSuccess('Form submitted successfully!');
-            return Response::redirect('/test/security');
+            return $this->handlePostRequest($request);
         }
 
-        // GET-Request: Formular anzeigen
-        $html = $this->renderSecurityTestPage($csrf, $session);
-        return Response::ok($html);
+        // GET-Request: Security-Test-Seite anzeigen
+        return $this->showSecurityTestPage($request);
     }
 
     /**
-     * Verarbeitet AJAX-Requests für Session-Tests
+     * Behandelt POST-Requests (Form-Submit oder AJAX)
      */
-    private function handleAjaxRequest(Request $request, $session): Response
+    private function handlePostRequest(Request $request): Response
     {
-        $json = $request->json();
-        $action = $json['action'] ?? null;
+        // AJAX/JSON-Request behandeln
+        if ($request->expectsJson() || $request->isAjax()) {
+            return $this->handleAjaxRequest($request);
+        }
+
+        // Normaler Form-Submit
+        return $this->handleFormSubmit($request);
+    }
+
+    /**
+     * Behandelt AJAX-Requests für Session- und Security-Tests
+     */
+    private function handleAjaxRequest(Request $request): Response
+    {
+        $session = $this->app->getSession();
+        $data = $request->expectsJson() ? $request->json() : $request->all();
+        $action = $data['action'] ?? 'test';
 
         switch ($action) {
             case 'set_session':
-                $key = $json['key'] ?? 'test_key';
-                $value = $json['value'] ?? 'Default value';
-                $session->set($key, $value);
+                $key = $data['key'] ?? 'test_key';
+                $value = $data['value'] ?? 'Default value';
+
+                // Input sanitization für Session-Werte
+                $sanitizedValue = htmlspecialchars($value, ENT_QUOTES, 'UTF-8');
+                $session->set($key, $sanitizedValue);
 
                 return Response::json([
                     'success' => true,
-                    'message' => "Session value '{$key}' set to '{$value}'"
+                    'message' => "Session value '{$key}' set successfully",
+                    'original_value' => $value,
+                    'sanitized_value' => $sanitizedValue
                 ]);
 
             case 'get_session':
-                $key = $json['key'] ?? 'test_key';
+                $key = $data['key'] ?? 'test_key';
                 $value = $session->get($key, 'Not found');
 
                 return Response::json([
                     'success' => true,
                     'key' => $key,
-                    'value' => $value
+                    'value' => $value,
+                    'session_id' => $session->getId()
                 ]);
 
             case 'clear_session':
                 $session->clear();
+                return Response::json([
+                    'success' => true,
+                    'message' => 'Session cleared successfully'
+                ]);
+
+            case 'test_xss':
+                $input = $data['input'] ?? '<script>alert("XSS")</script>';
+                $escaped = htmlspecialchars($input, ENT_QUOTES, 'UTF-8');
 
                 return Response::json([
                     'success' => true,
-                    'message' => 'Session cleared'
+                    'original' => $input,
+                    'escaped' => $escaped,
+                    'safe' => $escaped !== $input
+                ]);
+
+            case 'test_csrf':
+                $csrf = $this->app->getCsrf();
+                return Response::json([
+                    'success' => true,
+                    'csrf_token' => $csrf->getToken(),
+                    'token_info' => $csrf->getTokenInfo(),
+                    'message' => 'CSRF token retrieved successfully'
                 ]);
 
             default:
                 return Response::json([
                     'success' => true,
-                    'message' => 'AJAX test successful'
+                    'message' => 'AJAX Security test successful',
+                    'timestamp' => time()
                 ]);
         }
     }
 
-    private function renderSecurityTestPage($csrf, $session): string
+    /**
+     * Behandelt normalen Form-Submit
+     */
+    private function handleFormSubmit(Request $request): Response
     {
-        $csrfField = $csrf->getTokenField();
-        $csrfMeta = $csrf->getTokenMeta();
-        $tokenInfo = $csrf->getTokenInfo();
-        $sessionStatus = $session->getStatus();
-        $flashMessages = $session->getAllFlash();
+        $session = $this->app->getSession();
 
-        return "
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <title>Security Test Page</title>
-            <meta charset='utf-8'>
-            {$csrfMeta}
-            <style>
-                body { font-family: Arial, sans-serif; margin: 40px; }
-                .section { margin: 30px 0; padding: 20px; border: 1px solid #ddd; border-radius: 5px; }
-                .token-info { background: #f8f9fa; padding: 15px; border-radius: 5px; font-family: monospace; }
-                .flash { padding: 10px; border-radius: 5px; margin: 10px 0; }
-                .flash.success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
-                .flash.error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
-                form { margin: 20px 0; }
-                input, button { margin: 5px 0; padding: 8px; }
-                button { background: #007bff; color: white; border: none; border-radius: 3px; cursor: pointer; }
-                button:hover { background: #0056b3; }
-            </style>
-        </head>
-        <body>
-            <h1>🔐 Security Test Page</h1>
+        // Validation der Form-Daten
+        try {
+            $validated = $this->app->validateOrFail($request->all(), [
+                'test_input' => 'required|string|max:1000',
+                'user_name' => 'nullable|string|max:100',
+                'email' => 'nullable|email'
+            ]);
 
-            " . $this->renderFlashMessages($flashMessages) . "
+            // Sichere Verarbeitung der Eingaben
+            $testInput = htmlspecialchars($validated['test_input'], ENT_QUOTES, 'UTF-8');
+            $userName = htmlspecialchars($validated['user_name'] ?? '', ENT_QUOTES, 'UTF-8');
 
-            <div class='section'>
-                <h2>CSRF Protection Test</h2>
-                <form method='POST'>
-                    {$csrfField}
-                    <div>
-                        <label>Test Input:</label><br>
-                        <input type='text' name='test_input' placeholder='Enter something...'>
-                    </div>
-                    <div>
-                        <button type='submit'>Submit with CSRF Token</button>
-                    </div>
-                </form>
+            // Session-Daten setzen
+            $session->set('last_test_input', $testInput);
+            $session->set('last_user_name', $userName);
 
-                <form method='POST' action='/test/security'>
-                    <!-- Kein CSRF-Token - sollte fehlschlagen -->
-                    <div>
-                        <label>Unsafe Form (no CSRF token):</label><br>
-                        <input type='text' name='unsafe_input' placeholder='This will fail...'>
-                    </div>
-                    <div>
-                        <button type='submit'>Submit without CSRF Token</button>
-                    </div>
-                </form>
-            </div>
+            $session->flashSuccess('Security test completed successfully!');
 
-            <div class='section'>
-                <h2>Session Test</h2>
-                <p><strong>Session ID:</strong> {$sessionStatus['id']}</p>
-                <p><strong>Session Status:</strong> {$sessionStatus['status']}</p>
-                
-                <div>
-                    <button onclick='setSessionValue()'>Set Session Value</button>
-                    <button onclick='getSessionValue()'>Get Session Value</button>
-                    <button onclick='clearSession()'>Clear Session</button>
-                </div>
-                <div id='session-result'></div>
-            </div>
+        } catch (\Exception $e) {
+            $session->flashError('Validation failed: ' . $e->getMessage());
+        }
 
-            <div class='section'>
-                <h2>CSRF Token Information</h2>
-                <div class='token-info'>
-                    <pre>" . json_encode($tokenInfo, JSON_PRETTY_PRINT) . "</pre>
-                </div>
-            </div>
-
-            <div class='section'>
-                <h2>JavaScript CSRF Example</h2>
-                <button onclick='makeAjaxRequest()'>Make AJAX Request with CSRF</button>
-                <div id='ajax-result'></div>
-            </div>
-
-            <script>
-                // CSRF-Token für JavaScript holen
-                const csrfToken = document.querySelector('meta[name=\"csrf-token\"]').getAttribute('content');
-
-                function setSessionValue() {
-                    fetch('/test/security', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'X-CSRF-TOKEN': csrfToken
-                        },
-                        body: JSON.stringify({
-                            _token: csrfToken,
-                            action: 'set_session',
-                            key: 'test_key',
-                            value: 'Hello from JavaScript! ' + Date.now()
-                        })
-                    })
-                    .then(response => response.json())
-                    .then(data => {
-                        document.getElementById('session-result').innerHTML = 
-                            '<strong>✅ ' + data.message + '</strong>';
-                    })
-                    .catch(error => {
-                        document.getElementById('session-result').innerHTML = 
-                            '<strong>❌ Error: ' + error + '</strong>';
-                    });
-                }
-
-                function getSessionValue() {
-                    fetch('/test/security', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'X-CSRF-TOKEN': csrfToken
-                        },
-                        body: JSON.stringify({
-                            _token: csrfToken,
-                            action: 'get_session',
-                            key: 'test_key'
-                        })
-                    })
-                    .then(response => response.json())
-                    .then(data => {
-                        document.getElementById('session-result').innerHTML = 
-                            '<strong>📖 Key: ' + data.key + '</strong><br>' +
-                            '<strong>💾 Value: ' + data.value + '</strong>';
-                    })
-                    .catch(error => {
-                        document.getElementById('session-result').innerHTML = 
-                            '<strong>❌ Error: ' + error + '</strong>';
-                    });
-                }
-
-                function clearSession() {
-                    if (!confirm('Are you sure you want to clear the entire session?')) {
-                        return;
-                    }
-                    
-                    fetch('/test/security', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'X-CSRF-TOKEN': csrfToken
-                        },
-                        body: JSON.stringify({
-                            _token: csrfToken,
-                            action: 'clear_session'
-                        })
-                    })
-                    .then(response => response.json())
-                    .then(data => {
-                        document.getElementById('session-result').innerHTML = 
-                            '<strong>🗑️ ' + data.message + '</strong>';
-                        
-                        // Page nach 2 Sekunden neu laden (da Session gecleared)
-                        setTimeout(() => {
-                            window.location.reload();
-                        }, 2000);
-                    })
-                    .catch(error => {
-                        document.getElementById('session-result').innerHTML = 
-                            '<strong>❌ Error: ' + error + '</strong>';
-                    });
-                }
-
-                function makeAjaxRequest() {
-                    fetch('/test/security', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'X-CSRF-TOKEN': csrfToken
-                        },
-                        body: JSON.stringify({
-                            _token: csrfToken,
-                            ajax_test: true,
-                            message: 'Hello from AJAX!'
-                        })
-                    })
-                    .then(response => response.text())
-                    .then(data => {
-                        document.getElementById('ajax-result').innerHTML = 'AJAX successful!';
-                    })
-                    .catch(error => {
-                        document.getElementById('ajax-result').innerHTML = 'AJAX failed: ' + error;
-                    });
-                }
-            </script>
-        </body>
-        </html>";
+        return Response::redirect('/test/security');
     }
 
-    private function renderFlashMessages(array $messages): string
+    /**
+     * Zeigt die Security-Test-Seite an
+     */
+    private function showSecurityTestPage(Request $request): Response
     {
-        if (empty($messages)) {
-            return '';
+        $session = $this->app->getSession();
+        $csrf = $this->app->getCsrf();
+
+        // Test-Daten für verschiedene Security-Szenarien
+        $testData = [
+            'page_title' => 'Security Test Suite',
+            'csrf_token' => $csrf->getToken(),
+            'csrf_field' => $csrf->getTokenField(),
+            'csrf_meta' => $csrf->getTokenMeta(),
+            'csrf_info' => $csrf->getTokenInfo(),
+            'session_status' => $session->getStatus(),
+            'session_id' => $session->getId(),
+            'flash_messages' => $this->getFlashMessages($session),
+            'last_test_input' => $session->get('last_test_input', ''),
+            'last_user_name' => $session->get('last_user_name', ''),
+
+            // XSS-Test-Beispiele
+            'xss_examples' => [
+                [
+                    'name' => 'Basic Script Tag',
+                    'input' => '<script>alert("XSS")</script>',
+                    'context' => 'HTML Content'
+                ],
+                [
+                    'name' => 'Image with onerror',
+                    'input' => '<img src="x" onerror="alert(\'XSS\')">',
+                    'context' => 'HTML Content'
+                ],
+                [
+                    'name' => 'Event Handler',
+                    'input' => '" onmouseover="alert(1)"',
+                    'context' => 'HTML Attribute'
+                ],
+                [
+                    'name' => 'JavaScript URL',
+                    'input' => 'javascript:alert("XSS")',
+                    'context' => 'URL'
+                ]
+            ],
+
+            // Sichere Test-Eingaben
+            'safe_examples' => [
+                'Normal text input' => 'Hello World!',
+                'Special characters' => 'Special chars: <>&"\'',
+                'HTML entities' => '&lt;strong&gt;Bold&lt;/strong&gt;',
+                'Unicode' => 'Unicode: äöü ñ 中文'
+            ],
+
+            // Request-Informationen
+            'request_info' => [
+                'method' => $request->getMethod()->value,
+                'path' => $request->getPath(),
+                'is_ajax' => $request->isAjax(),
+                'is_json' => $request->expectsJson(),
+                'user_agent' => $request->getHeader('User-Agent'),
+                'ip_address' => $request->ip(),
+                'referrer' => $request->getHeader('Referer')
+            ],
+
+            // Security-Headers
+            'security_headers' => [
+                'X-Frame-Options' => 'DENY',
+                'X-Content-Type-Options' => 'nosniff',
+                'X-XSS-Protection' => '1; mode=block',
+                'Strict-Transport-Security' => 'max-age=31536000; includeSubDomains',
+                'Content-Security-Policy' => "default-src 'self'; script-src 'self' 'unsafe-inline';"
+            ]
+        ];
+
+        // ViewRenderer verwenden
+        $viewRenderer = $this->app->getViewRenderer();
+        $response = $viewRenderer->render('pages/security-test', $testData);
+
+        // Security-Headers hinzufügen
+        foreach ($testData['security_headers'] as $header => $value) {
+            $response->withHeader($header, $value);
         }
 
-        $html = '';
-        foreach ($messages as $type => $message) {
-            $html .= "<div class='flash {$type}'>{$message}</div>";
+        return $response;
+    }
+
+    /**
+     * Holt Flash-Messages (kompatibel mit Ihrem Session-System)
+     */
+    private function getFlashMessages($session): array
+    {
+        $flashMessages = [];
+
+        // Versuche verschiedene Flash-Message-Typen zu holen
+        $types = ['success', 'error', 'warning', 'info'];
+
+        foreach ($types as $type) {
+            if ($session->hasFlash($type)) {
+                $flashMessages[$type] = $session->getFlash($type);
+            }
         }
 
-        return $html;
+        return $flashMessages;
+    }
+
+    /**
+     * Hilfsmethode: Generiert sichere Demo-Inhalte
+     */
+    private function generateSecureContent(string $input): array
+    {
+        return [
+            'original' => $input,
+            'escaped' => htmlspecialchars($input, ENT_QUOTES, 'UTF-8'),
+            'length' => strlen($input),
+            'is_safe' => !preg_match('/<script|javascript:|on\w+=/i', $input),
+            'contains_html' => $input !== strip_tags($input)
+        ];
+    }
+
+    /**
+     * Hilfsmethode: Validiert Security-Parameter
+     */
+    private function validateSecurityInput(array $data): array
+    {
+        $validator = $this->app->validate($data, [
+            'test_input' => 'required|string|max:1000',
+            'security_level' => 'in:low,medium,high',
+            'enable_logging' => 'boolean',
+            'user_name' => 'nullable|string|max:100|regex:/^[a-zA-Z0-9\s\-_]+$/',
+            'email' => 'nullable|email',
+            'url' => 'nullable|url'
+        ]);
+
+        if ($validator->fails()) {
+            throw new \InvalidArgumentException('Security validation failed: ' .
+                implode(', ', $validator->errors()->all()));
+        }
+
+        return $validator->validated();
     }
 }
