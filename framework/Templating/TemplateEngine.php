@@ -17,13 +17,53 @@ class TemplateEngine
     private ?string $parentTemplate = null;
     private FilterManager $filterManager;
     private TemplateCache $cache;
-    private array $loadedTemplates = []; // Track dependencies
+    private array $loadedTemplates = [];
 
-    public function __construct(array $templatePaths = [], ?TemplateCache $cache = null)
+    // *** NEUE PROPERTY für Auto-Escape ***
+    private bool $autoEscape = true;
+
+    public function __construct(
+        array          $templatePaths = [],
+        ?TemplateCache $cache = null,
+        bool           $autoEscape = true // *** Default: XSS-Schutz AN ***
+    )
     {
         $this->paths = $templatePaths;
         $this->filterManager = new FilterManager();
         $this->cache = $cache ?? new TemplateCache(sys_get_temp_dir() . '/template_cache', false);
+        $this->autoEscape = $autoEscape;
+    }
+
+    /**
+     * Render widget/component with caching
+     */
+    public function renderWidget(string $template, array $data = [], int $ttl = 300, array $tags = []): string
+    {
+        return $this->renderCached($template, $data, $ttl, $tags);
+    }
+
+    /**
+     * Render template with optional caching
+     */
+    public function renderCached(string $template, array $data = [], int $ttl = 0, array $tags = []): string
+    {
+        if ($ttl <= 0) {
+            return $this->render($template, $data);
+        }
+
+        // Create cache key from template and data
+        $cacheKey = 'template_' . md5($template . serialize($data));
+
+        // Try to get from fragment cache
+        if ($cached = $this->cache->getFragment($cacheKey)) {
+            return $cached;
+        }
+
+        // Render and cache
+        $content = $this->render($template, $data);
+        $this->cache->storeFragment($cacheKey, $content, $ttl, $tags);
+
+        return $content;
     }
 
     /**
@@ -105,35 +145,29 @@ class TemplateEngine
     }
 
     /**
-     * Render template with optional caching
+     * Findet Template-Datei in den konfigurierten Pfaden
      */
-    public function renderCached(string $template, array $data = [], int $ttl = 0, array $tags = []): string
+    private function findTemplate(string $template): string
     {
-        if ($ttl <= 0) {
-            return $this->render($template, $data);
+        // Add .html extension if not present
+        if (!str_contains($template, '.')) {
+            $template .= '.html';
         }
 
-        // Create cache key from template and data
-        $cacheKey = 'template_' . md5($template . serialize($data));
+        foreach ($this->paths as $path) {
+            // Normalize path separators for Windows
+            $normalizedPath = str_replace(['/', '\\'], DIRECTORY_SEPARATOR, $path);
+            $normalizedTemplate = str_replace(['/', '\\'], DIRECTORY_SEPARATOR, $template);
 
-        // Try to get from fragment cache
-        if ($cached = $this->cache->getFragment($cacheKey)) {
-            return $cached;
+            $fullPath = rtrim($normalizedPath, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . ltrim($normalizedTemplate, DIRECTORY_SEPARATOR);
+
+            if (file_exists($fullPath)) {
+                error_log("Template found: $fullPath");
+                return $fullPath;
+            }
         }
 
-        // Render and cache
-        $content = $this->render($template, $data);
-        $this->cache->storeFragment($cacheKey, $content, $ttl, $tags);
-
-        return $content;
-    }
-
-    /**
-     * Render widget/component with caching
-     */
-    public function renderWidget(string $template, array $data = [], int $ttl = 300, array $tags = []): string
-    {
-        return $this->renderCached($template, $data, $ttl, $tags);
+        throw new RuntimeException("Template not found: {$template} in paths: " . implode(', ', $this->paths));
     }
 
     /**
@@ -158,55 +192,23 @@ class TemplateEngine
     }
 
     /**
-     * Parse cache directives from template
+     * Render with inheritance - load parent and inject blocks
      */
-    private function parseCacheDirectives(array $tokens): array
+    private function renderWithInheritance(): string
     {
-        $directives = ['ttl' => 0, 'tags' => []];
+        // Load parent template
+        $parentPath = $this->findTemplate($this->parentTemplate);
 
-        foreach ($tokens as $token) {
-            if ($token['type'] === 'control') {
-                $control = $token['content'] ?? '';
-
-                // Parse {% cache ttl:300 tags:player,team %}
-                if (str_starts_with($control, 'cache ')) {
-                    if (preg_match('/ttl:(\d+)/', $control, $matches)) {
-                        $directives['ttl'] = (int)$matches[1];
-                    }
-                    if (preg_match('/tags:([a-zA-Z0-9,_-]+)/', $control, $matches)) {
-                        $directives['tags'] = array_map('trim', explode(',', $matches[1]));
-                    }
-                }
-            }
+        // Track dependency
+        if (!in_array($parentPath, $this->loadedTemplates)) {
+            $this->loadedTemplates[] = $parentPath;
         }
 
-        return $directives;
-    }
+        $parentContent = file_get_contents($parentPath);
+        $parentTokens = $this->parseTemplate($parentContent);
 
-    /**
-     * Findet Template-Datei in den konfigurierten Pfaden
-     */
-    private function findTemplate(string $template): string
-    {
-        // Add .html extension if not present
-        if (!str_contains($template, '.')) {
-            $template .= '.html';
-        }
-
-        foreach ($this->paths as $path) {
-            // Normalize path separators for Windows
-            $normalizedPath = str_replace(['/', '\\'], DIRECTORY_SEPARATOR, $path);
-            $normalizedTemplate = str_replace(['/', '\\'], DIRECTORY_SEPARATOR, $template);
-
-            $fullPath = rtrim($normalizedPath, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . ltrim($normalizedTemplate, DIRECTORY_SEPARATOR);
-
-            if (file_exists($fullPath)) {
-                error_log("Template found: $fullPath");
-                return $fullPath;
-            }
-        }
-
-        throw new RuntimeException("Template not found: {$template} in paths: " . implode(', ', $this->paths));
+        // Render parent with child blocks
+        return $this->renderParsed($parentTokens);
     }
 
     /**
@@ -416,80 +418,6 @@ class TemplateEngine
     }
 
     /**
-     * First pass: Extract extends and blocks from child template
-     */
-    private function extractExtendsAndBlocks(array $tokens): void
-    {
-        $i = 0;
-        $count = count($tokens);
-
-        while ($i < $count) {
-            $token = $tokens[$i];
-
-            if ($token['type'] === 'extends') {
-                $this->parentTemplate = $token['template'];
-                error_log("Found extends: " . $this->parentTemplate);
-            } elseif ($token['type'] === 'block') {
-                $blockName = $token['name'];
-                $blockData = $this->extractBlock($tokens, $i);
-                $this->blocks[$blockName] = $blockData['content'];
-                error_log("Extracted child block '$blockName' with " . count($blockData['content']) . " tokens");
-                $i = $blockData['endIndex'];
-            }
-
-            $i++;
-        }
-    }
-
-    /**
-     * Extrahiert Block-Content zwischen block und endblock
-     */
-    private function extractBlock(array $tokens, int $startIndex): array
-    {
-        $content = [];
-        $blockDepth = 1;
-        $i = $startIndex + 1;
-
-        while ($i < count($tokens) && $blockDepth > 0) {
-            $token = $tokens[$i];
-
-            if ($token['type'] === 'block') {
-                $blockDepth++;
-            } elseif ($token['type'] === 'endblock') {
-                $blockDepth--;
-                if ($blockDepth === 0) {
-                    break;
-                }
-            }
-
-            $content[] = $token;
-            $i++;
-        }
-
-        return ['content' => $content, 'endIndex' => $i];
-    }
-
-    /**
-     * Render with inheritance - load parent and inject blocks
-     */
-    private function renderWithInheritance(): string
-    {
-        // Load parent template
-        $parentPath = $this->findTemplate($this->parentTemplate);
-
-        // Track dependency
-        if (!in_array($parentPath, $this->loadedTemplates)) {
-            $this->loadedTemplates[] = $parentPath;
-        }
-
-        $parentContent = file_get_contents($parentPath);
-        $parentTokens = $this->parseTemplate($parentContent);
-
-        // Render parent with child blocks
-        return $this->renderParsed($parentTokens);
-    }
-
-    /**
      * Rendert geparste Tokens mit Block-Replacement für Inheritance
      */
     private function renderParsed(array $tokens): string
@@ -572,21 +500,18 @@ class TemplateEngine
     }
 
     /**
-     * Rendert Variable mit Filter-Support
+     * Rendert Variable mit Filter-Support und automatischem XSS-Schutz (UPDATED)
      */
     private function renderVariable(string $name, array $filters = []): string
     {
-        // Debug
         error_log("Rendering variable: name='$name', filters=" . json_encode(array_column($filters, 'name')));
 
         // Handle string literals in quotes
         if ((str_starts_with($name, "'") && str_ends_with($name, "'")) ||
             (str_starts_with($name, '"') && str_ends_with($name, '"'))) {
-            // String literal - remove quotes
             $value = substr($name, 1, -1);
             error_log("String literal detected: '$value'");
         } else {
-            // Regular variable lookup
             $value = $this->getValue($name);
             error_log("Variable lookup for '$name': " . json_encode($value));
         }
@@ -595,7 +520,7 @@ class TemplateEngine
             $value = '';
         }
 
-        // Wende Filter an
+        // Filter anwenden
         foreach ($filters as $filter) {
             $filterName = $filter['name'];
             $parameters = $filter['parameters'];
@@ -607,28 +532,36 @@ class TemplateEngine
                 error_log("Filter result: '$value'");
             } catch (\Throwable $e) {
                 error_log("Filter error: {$e->getMessage()}");
-                // Bei Filter-Fehlern: Original-Wert beibehalten
             }
         }
 
-        // Raw-Filter überspringt HTML-Escaping
-        $hasRawFilter = false;
-        foreach ($filters as $filter) {
-            if ($filter['name'] === 'raw') {
-                $hasRawFilter = true;
-                break;
+        // *** XSS-SCHUTZ: Automatisches HTML-Escaping ***
+        if ($this->autoEscape && is_string($value)) {
+            // Prüfe ob der 'raw' Filter verwendet wurde
+            $hasRawFilter = false;
+            foreach ($filters as $filter) {
+                if ($filter['name'] === 'raw') {
+                    $hasRawFilter = true;
+                    break;
+                }
             }
-        }
 
-        if (!$hasRawFilter) {
-            $value = htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8');
+            // Nur escapen wenn kein 'raw' Filter vorhanden ist
+            if (!$hasRawFilter) {
+                $value = htmlspecialchars(
+                    $value,
+                    ENT_QUOTES | ENT_HTML5 | ENT_SUBSTITUTE,
+                    'UTF-8',
+                    true
+                );
+            }
         }
 
         return (string)$value;
     }
 
     /**
-     * Holt Wert mit Dot-Notation (z.B. user.name)
+     * Holt Wert mit Dot-Notation (z.B. user.name) - KORRIGIERT
      */
     private function getValue(string $name): mixed
     {
@@ -650,6 +583,34 @@ class TemplateEngine
         }
 
         return $this->data[$name] ?? null;
+    }
+
+    /**
+     * Extrahiert Block-Content zwischen block und endblock
+     */
+    private function extractBlock(array $tokens, int $startIndex): array
+    {
+        $content = [];
+        $blockDepth = 1;
+        $i = $startIndex + 1;
+
+        while ($i < count($tokens) && $blockDepth > 0) {
+            $token = $tokens[$i];
+
+            if ($token['type'] === 'block') {
+                $blockDepth++;
+            } elseif ($token['type'] === 'endblock') {
+                $blockDepth--;
+                if ($blockDepth === 0) {
+                    break;
+                }
+            }
+
+            $content[] = $token;
+            $i++;
+        }
+
+        return ['content' => $content, 'endIndex' => $i];
     }
 
     /**
@@ -865,6 +826,40 @@ class TemplateEngine
     }
 
     /**
+     * First pass: Extract extends and blocks from child template
+     */
+    private function extractExtendsAndBlocks(array $tokens): void
+    {
+        $i = 0;
+        $count = count($tokens);
+
+        while ($i < $count) {
+            $token = $tokens[$i];
+
+            if ($token['type'] === 'extends') {
+                $this->parentTemplate = $token['template'];
+                error_log("Found extends: " . $this->parentTemplate);
+            } elseif ($token['type'] === 'block') {
+                $blockName = $token['name'];
+                $blockData = $this->extractBlock($tokens, $i);
+                $this->blocks[$blockName] = $blockData['content'];
+                error_log("Extracted child block '$blockName' with " . count($blockData['content']) . " tokens");
+                $i = $blockData['endIndex'];
+            }
+
+            $i++;
+        }
+    }
+
+    /**
+     * *** NEUE METHODE: Auto-Escape Check ***
+     */
+    public function isAutoEscapeEnabled(): bool
+    {
+        return $this->autoEscape;
+    }
+
+    /**
      * Fügt Template-Pfad hinzu
      */
     public function addPath(string $path): void
@@ -889,14 +884,6 @@ class TemplateEngine
     }
 
     /**
-     * Set template cache
-     */
-    public function setCache(TemplateCache $cache): void
-    {
-        $this->cache = $cache;
-    }
-
-    /**
      * Get template cache
      */
     public function getCache(): TemplateCache
@@ -905,19 +892,19 @@ class TemplateEngine
     }
 
     /**
+     * Set template cache
+     */
+    public function setCache(TemplateCache $cache): void
+    {
+        $this->cache = $cache;
+    }
+
+    /**
      * Clear template cache
      */
     public function clearCache(): int
     {
         return $this->cache->clearAll();
-    }
-
-    /**
-     * Get cache statistics
-     */
-    public function getCacheStats(): array
-    {
-        return $this->cache->getStats();
     }
 
     /**
@@ -949,5 +936,52 @@ class TemplateEngine
             'cache_stats' => $this->getCacheStats(),
             'loaded_templates' => $this->loadedTemplates,
         ];
+    }
+
+    /**
+     * Get cache statistics
+     */
+    public function getCacheStats(): array
+    {
+        return $this->cache->getStats();
+    }
+
+    /**
+     * Parse cache directives from template
+     */
+    private function parseCacheDirectives(array $tokens): array
+    {
+        $directives = ['ttl' => 0, 'tags' => []];
+
+        foreach ($tokens as $token) {
+            if ($token['type'] === 'control') {
+                $control = $token['content'] ?? '';
+
+                // Parse {% cache ttl:300 tags:player,team %}
+                if (str_starts_with($control, 'cache ')) {
+                    if (preg_match('/ttl:(\d+)/', $control, $matches)) {
+                        $directives['ttl'] = (int)$matches[1];
+                    }
+                    if (preg_match('/tags:([a-zA-Z0-9,_-]+)/', $control, $matches)) {
+                        $directives['tags'] = array_map('trim', explode(',', $matches[1]));
+                    }
+                }
+            }
+        }
+
+        return $directives;
+    }
+
+    /**
+     * HTML-Escaping für XSS-Schutz
+     */
+    private function escapeHtml(string $value): string
+    {
+        return htmlspecialchars(
+            $value,
+            ENT_QUOTES | ENT_HTML5 | ENT_SUBSTITUTE,
+            'UTF-8',
+            true
+        );
     }
 }

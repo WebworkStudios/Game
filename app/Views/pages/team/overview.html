@@ -172,7 +172,7 @@
         border-radius: 8px;
         padding: 20px;
         text-align: center;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
     }
 
     .stat-number {
@@ -201,9 +201,20 @@
         font-size: 0.9rem;
     }
 
-    .wins { background: #c6f6d5; color: #22543d; }
-    .draws { background: #fed7aa; color: #9c4221; }
-    .losses { background: #fed7d7; color: #9b2c2c; }
+    .wins {
+        background: #c6f6d5;
+        color: #22543d;
+    }
+
+    .draws {
+        background: #fed7aa;
+        color: #9c4221;
+    }
+
+    .losses {
+        background: #fed7d7;
+        color: #9b2c2c;
+    }
 
     /* Alert */
     .alert {
@@ -257,13 +268,13 @@
         border: 1px solid #e2e8f0;
         border-radius: 12px;
         padding: 20px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
         transition: transform 0.2s, box-shadow 0.2s;
     }
 
     .player-card:hover {
         transform: translateY(-2px);
-        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
     }
 
     .player-card.injured {
@@ -408,11 +419,11 @@
 {% block scripts %}
 <script>
     // Interaktivität für Spielerkarten
-    document.addEventListener('DOMContentLoaded', function() {
+    document.addEventListener('DOMContentLoaded', function () {
         const playerCards = document.querySelectorAll('.player-card');
 
         playerCards.forEach(card => {
-            card.addEventListener('click', function() {
+            card.addEventListener('click', function () {
                 // Toggle expanded state
                 this.classList.toggle('expanded');
             });
@@ -421,7 +432,7 @@
         // Filter für verletzte Spieler
         const filterButtons = document.querySelectorAll('[data-filter]');
         filterButtons.forEach(button => {
-            button.addEventListener('click', function() {
+            button.addEventListener('click', function () {
                 const filter = this.dataset.filter;
 
                 playerCards.forEach(card => {

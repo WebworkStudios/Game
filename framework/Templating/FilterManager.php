@@ -7,7 +7,7 @@ namespace Framework\Templating;
 use RuntimeException;
 
 /**
- * Filter Manager - Verwaltet alle Template-Filter mit Lazy Loading
+ * Filter Manager - Verwaltet alle Template-Filter mit Lazy Loading und XSS-Schutz
  */
 class FilterManager
 {
@@ -31,7 +31,7 @@ class FilterManager
         $this->lazyFilters['capitalize'] = fn() => fn(string $value) => ucfirst(strtolower($value));
         $this->lazyFilters['truncate'] = fn() => [$this, 'truncateFilter'];
         $this->lazyFilters['default'] = fn() => [$this, 'defaultFilter'];
-        $this->lazyFilters['raw'] = fn() => fn(string $value) => $value;
+        $this->lazyFilters['raw'] = fn() => [$this, 'rawFilter'];
 
         // Number/Format Filter
         $this->lazyFilters['number_format'] = fn() => [$this, 'numberFormatFilter'];
@@ -58,6 +58,10 @@ class FilterManager
         // Translation filters (heavy - definitely lazy load)
         $this->lazyFilters['t'] = fn() => [$this, 'translateFilter'];
         $this->lazyFilters['t_plural'] = fn() => [$this, 'translatePluralFilter'];
+
+        // *** XSS-SCHUTZ FILTER ***
+        $this->lazyFilters['escape'] = fn() => [$this, 'escapeFilter'];
+        $this->lazyFilters['e'] = fn() => [$this, 'escapeFilter']; // Alias
     }
 
     /**
@@ -138,6 +142,75 @@ class FilterManager
         $this->lazyFilters[$name] = $loader;
     }
 
+    // ===================================================================
+    // FILTER IMPLEMENTATIONS
+    // ===================================================================
+
+    /**
+     * Raw Filter - Gibt Inhalt ohne HTML-Escaping aus
+     */
+    private function rawFilter(mixed $value): mixed
+    {
+        // Raw Filter macht nichts - verhindert nur das automatische Escaping
+        return $value;
+    }
+
+    /**
+     * Escape Filter - Explizites HTML-Escaping mit verschiedenen Strategien
+     */
+    private function escapeFilter(mixed $value, string $strategy = 'html'): mixed
+    {
+        if (!is_string($value)) {
+            return $value;
+        }
+
+        return match ($strategy) {
+            'html' => htmlspecialchars(
+                $value,
+                ENT_QUOTES | ENT_HTML5 | ENT_SUBSTITUTE,
+                'UTF-8',
+                true
+            ),
+            'attr' => htmlspecialchars(
+                $value,
+                ENT_QUOTES | ENT_HTML5 | ENT_SUBSTITUTE,
+                'UTF-8',
+                true
+            ),
+            'js', 'json' => $this->jsonFilter($value), // Nutze existierenden jsonFilter
+            'css' => $this->escapeCss($value),
+            'url' => rawurlencode($value),
+            default => htmlspecialchars(
+                $value,
+                ENT_QUOTES | ENT_HTML5 | ENT_SUBSTITUTE,
+                'UTF-8',
+                true
+            ),
+        };
+    }
+
+    /**
+     * JSON Filter - Konvertiert Array zu JSON-String
+     */
+    private function jsonFilter(mixed $value, int $flags = JSON_UNESCAPED_UNICODE): string
+    {
+        try {
+            return json_encode($value, JSON_THROW_ON_ERROR | $flags);
+        } catch (\JsonException $e) {
+            error_log("JSON filter error: " . $e->getMessage());
+            return '{}'; // Fallback
+        }
+    }
+
+    /**
+     * CSS-String escaping
+     */
+    private function escapeCss(string $value): string
+    {
+        // Entferne gefährliche CSS-Zeichen
+        return preg_replace('/[^a-zA-Z0-9\-_\s]/', '', $value);
+    }
+
     /**
      * Truncate Filter - Kürzt Text mit Ellipsis
      */
@@ -203,19 +276,18 @@ class FilterManager
     }
 
     /**
-     * Date Filter - Formatiert Datumsangaben
+     * Date Filter - Formatiert Datum
      */
-    private function dateFilter(mixed $value, string $format = 'Y-m-d'): string
+    private function dateFilter(mixed $value, string $format = 'Y-m-d H:i:s'): string
     {
         if (empty($value)) {
             return '';
         }
 
-        // String zu Timestamp konvertieren
         if (is_string($value)) {
             $timestamp = strtotime($value);
             if ($timestamp === false) {
-                return (string)$value; // Fallback: Original-String
+                return $value; // Return original if parsing fails
             }
         } elseif (is_int($value)) {
             $timestamp = $value;
@@ -227,7 +299,7 @@ class FilterManager
     }
 
     /**
-     * Plural Filter - Einfache Pluralisierung
+     * Plural Filter - Singular/Plural basierend auf Anzahl
      */
     private function pluralFilter(mixed $value, string $singular, string $plural): string
     {
@@ -300,19 +372,6 @@ class FilterManager
     private function stripTagsFilter(string $value, string $allowedTags = ''): string
     {
         return strip_tags($value, $allowedTags);
-    }
-
-    /**
-     * JSON Filter - Konvertiert Array zu JSON-String
-     */
-    private function jsonFilter(mixed $value, int $flags = JSON_UNESCAPED_UNICODE): string
-    {
-        try {
-            return json_encode($value, JSON_THROW_ON_ERROR | $flags);
-        } catch (\JsonException $e) {
-            error_log("JSON filter error: " . $e->getMessage());
-            return '{}'; // Fallback
-        }
     }
 
     /**

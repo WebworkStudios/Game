@@ -47,13 +47,13 @@
     <div class="operation-group">
         <h4>Basic Operations</h4>
         <div class="button-group">
-            <button onclick="clearCache()" class="btn btn-danger">
+            <button class="btn btn-danger" onclick="clearCache()">
                 🗑️ Clear All Cache
             </button>
-            <button onclick="warmupCache()" class="btn btn-primary">
+            <button class="btn btn-primary" onclick="warmupCache()">
                 🔥 Warmup Cache
             </button>
-            <button onclick="refreshStats()" class="btn btn-secondary">
+            <button class="btn btn-secondary" onclick="refreshStats()">
                 🔄 Refresh Stats
             </button>
         </div>
@@ -67,7 +67,7 @@
             <div class="tag-item">
                 <span class="tag-name">{{ tag }}</span>
                 <span class="tag-description">{{ description }}</span>
-                <button onclick="clearTag('{{ tag }}')" class="btn btn-small btn-warning">Clear</button>
+                <button class="btn btn-small btn-warning" onclick="clearTag('{{ tag }}')">Clear</button>
             </div>
             {% endfor %}
         </div>
@@ -77,10 +77,10 @@
     <div class="operation-group">
         <h4>Fragment & Tag Testing</h4>
         <div class="button-group">
-            <button onclick="testFragmentCaching()" class="btn btn-info">
+            <button class="btn btn-info" onclick="testFragmentCaching()">
                 🧪 Test Fragment Caching
             </button>
-            <button onclick="testTaggedCaching()" class="btn btn-info">
+            <button class="btn btn-info" onclick="testTaggedCaching()">
                 🏷️ Test Tagged Caching
             </button>
         </div>
@@ -122,7 +122,8 @@
             <p><strong>Available:</strong> {{ engine_stats.filter_stats.available }}</p>
             <p><strong>Loaded:</strong> {{ engine_stats.filter_stats.loaded }}</p>
             <p><strong>Lazy Remaining:</strong> {{ engine_stats.filter_stats.lazy_remaining }}</p>
-            <p><strong>Load Ratio:</strong> {{ (engine_stats.filter_stats.loaded / engine_stats.filter_stats.available * 100) | number_format:1 }}%</p>
+            <p><strong>Load Ratio:</strong> {{ (engine_stats.filter_stats.loaded / engine_stats.filter_stats.available *
+                100) | number_format:1 }}%</p>
         </div>
 
         <div class="detail-card">
@@ -156,7 +157,7 @@
         {% for templates_tested as template %}
         <div class="test-item">
             <strong>{{ template }}</strong>
-            <button onclick="testTemplate('{{ template }}')" class="btn btn-small">Test Render</button>
+            <button class="btn btn-small" onclick="testTemplate('{{ template }}')">Test Render</button>
             <div id="test-result-{{ template | slug }}"></div>
         </div>
         {% endfor %}
@@ -512,13 +513,13 @@ $cache->invalidateByTags([
 
 <script>
     // Wait for DOM to be ready
-    document.addEventListener('DOMContentLoaded', function() {
+    document.addEventListener('DOMContentLoaded', function () {
         // Get CSRF token
         const csrfMeta = document.querySelector('meta[name="csrf-token"]');
         const csrfToken = csrfMeta ? csrfMeta.getAttribute('content') : '';
 
         // Global functions for cache operations
-        window.clearCache = async function() {
+        window.clearCache = async function () {
             try {
                 showResult('Clearing all cache...', 'info');
 
@@ -547,7 +548,7 @@ $cache->invalidateByTags([
             }
         };
 
-        window.warmupCache = async function() {
+        window.warmupCache = async function () {
             try {
                 showResult('Warming up cache...', 'info');
 
@@ -576,7 +577,7 @@ $cache->invalidateByTags([
             }
         };
 
-        window.clearTag = async function(tag) {
+        window.clearTag = async function (tag) {
             try {
                 showResult(`Clearing tag '${tag}'...`, 'info');
 
@@ -605,7 +606,7 @@ $cache->invalidateByTags([
             }
         };
 
-        window.testFragmentCaching = async function() {
+        window.testFragmentCaching = async function () {
             try {
                 showResult('Testing fragment caching...', 'info');
 
@@ -633,7 +634,7 @@ $cache->invalidateByTags([
             }
         };
 
-        window.testTaggedCaching = async function() {
+        window.testTaggedCaching = async function () {
             try {
                 showResult('Testing tagged caching...', 'info');
 
@@ -661,12 +662,12 @@ $cache->invalidateByTags([
             }
         };
 
-        window.refreshStats = function() {
+        window.refreshStats = function () {
             showResult('🔄 Refreshing...', 'info');
             setTimeout(() => location.reload(), 500);
         };
 
-        window.testTemplate = async function(template) {
+        window.testTemplate = async function (template) {
             const templateSlug = template.replace(/[^a-z0-9]/gi, '-').toLowerCase();
             const resultElement = document.getElementById('test-result-' + templateSlug);
 

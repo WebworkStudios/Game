@@ -17,10 +17,38 @@ class TemplateCache
 
     public function __construct(
         private readonly string $cacheDir,
-        private readonly bool $enabled = true
+        private readonly bool   $enabled = true
     )
     {
         $this->ensureCacheDirectory();
+    }
+
+    /**
+     * Ensure cache directory exists
+     */
+    private function ensureCacheDirectory(): void
+    {
+        if (!is_dir($this->cacheDir) && !mkdir($this->cacheDir, 0755, true)) {
+            throw new RuntimeException("Cannot create cache directory: {$this->cacheDir}");
+        }
+
+        // Create subdirectories
+        $this->ensureFragmentDirectory();
+    }
+
+    private function ensureFragmentDirectory(): void
+    {
+        $dirs = [
+            $this->cacheDir . '/templates',
+            $this->cacheDir . '/fragments',
+            $this->cacheDir . '/tags'
+        ];
+
+        foreach ($dirs as $dir) {
+            if (!is_dir($dir)) {
+                mkdir($dir, 0755, true);
+            }
+        }
     }
 
     /**
@@ -83,6 +111,18 @@ class TemplateCache
             error_log("Cache validation error: " . $e->getMessage());
             return false;
         }
+    }
+
+    /**
+     * Generate cache file path
+     */
+    private function getCacheFile(string $template): string
+    {
+        // Normalize template path and create safe filename
+        $normalized = str_replace(['/', '\\', '.'], '_', $template);
+        $hash = substr(md5($template), 0, 8);
+
+        return $this->cacheDir . '/templates/' . $normalized . '_' . $hash . self::CACHE_EXTENSION;
     }
 
     /**
@@ -162,6 +202,34 @@ class TemplateCache
         return $result;
     }
 
+    private function storeTagMapping(string $cacheKey, array $tags): void
+    {
+        foreach ($tags as $tag) {
+            $tagFile = $this->getTagFile($tag);
+            $existingKeys = [];
+
+            if (file_exists($tagFile)) {
+                try {
+                    $existingKeys = require $tagFile;
+                } catch (\Throwable) {
+                    $existingKeys = [];
+                }
+            }
+
+            if (!in_array($cacheKey, $existingKeys)) {
+                $existingKeys[] = $cacheKey;
+            }
+
+            $content = "<?php\nreturn " . var_export($existingKeys, true) . ";\n";
+            file_put_contents($tagFile, $content, LOCK_EX);
+        }
+    }
+
+    private function getTagFile(string $tag): string
+    {
+        return $this->cacheDir . '/tags/' . $tag . '.php';
+    }
+
     /**
      * Store fragment with TTL and tags
      */
@@ -192,6 +260,14 @@ class TemplateCache
         return $result;
     }
 
+    private function getFragmentFile(string $key): string
+    {
+        $hash = substr(md5($key), 0, 8);
+        return $this->cacheDir . '/fragments/' . $hash . '.php';
+    }
+
+    // Private helper methods
+
     /**
      * Get fragment if not expired
      */
@@ -220,6 +296,26 @@ class TemplateCache
         } catch (\Throwable) {
             return null;
         }
+    }
+
+    private function clearFragment(string $key): bool
+    {
+        $fragmentFile = $this->getFragmentFile($key);
+        return file_exists($fragmentFile) ? unlink($fragmentFile) : false;
+    }
+
+    /**
+     * Invalidate multiple tags at once
+     */
+    public function invalidateByTags(array $tags): int
+    {
+        $totalCleared = 0;
+
+        foreach ($tags as $tag) {
+            $totalCleared += $this->invalidateByTag($tag);
+        }
+
+        return $totalCleared;
     }
 
     /**
@@ -252,18 +348,21 @@ class TemplateCache
         return $cleared;
     }
 
-    /**
-     * Invalidate multiple tags at once
-     */
-    public function invalidateByTags(array $tags): int
+    private function clearByKey(string $key): bool
     {
-        $totalCleared = 0;
-
-        foreach ($tags as $tag) {
-            $totalCleared += $this->invalidateByTag($tag);
+        // Try template cache
+        $templateFile = $this->getCacheFile($key);
+        if (file_exists($templateFile)) {
+            return unlink($templateFile);
         }
 
-        return $totalCleared;
+        // Try fragment cache
+        $fragmentFile = $this->getFragmentFile($key);
+        if (file_exists($fragmentFile)) {
+            return unlink($fragmentFile);
+        }
+
+        return false;
     }
 
     /**
@@ -351,8 +450,6 @@ class TemplateCache
         return $stats;
     }
 
-    // Private helper methods
-
     private function getDirectoryStats(string $subDir): array
     {
         $dir = $this->cacheDir . $subDir;
@@ -374,102 +471,5 @@ class TemplateCache
         }
 
         return $stats;
-    }
-
-    private function storeTagMapping(string $cacheKey, array $tags): void
-    {
-        foreach ($tags as $tag) {
-            $tagFile = $this->getTagFile($tag);
-            $existingKeys = [];
-
-            if (file_exists($tagFile)) {
-                try {
-                    $existingKeys = require $tagFile;
-                } catch (\Throwable) {
-                    $existingKeys = [];
-                }
-            }
-
-            if (!in_array($cacheKey, $existingKeys)) {
-                $existingKeys[] = $cacheKey;
-            }
-
-            $content = "<?php\nreturn " . var_export($existingKeys, true) . ";\n";
-            file_put_contents($tagFile, $content, LOCK_EX);
-        }
-    }
-
-    private function clearByKey(string $key): bool
-    {
-        // Try template cache
-        $templateFile = $this->getCacheFile($key);
-        if (file_exists($templateFile)) {
-            return unlink($templateFile);
-        }
-
-        // Try fragment cache
-        $fragmentFile = $this->getFragmentFile($key);
-        if (file_exists($fragmentFile)) {
-            return unlink($fragmentFile);
-        }
-
-        return false;
-    }
-
-    private function clearFragment(string $key): bool
-    {
-        $fragmentFile = $this->getFragmentFile($key);
-        return file_exists($fragmentFile) ? unlink($fragmentFile) : false;
-    }
-
-    /**
-     * Generate cache file path
-     */
-    private function getCacheFile(string $template): string
-    {
-        // Normalize template path and create safe filename
-        $normalized = str_replace(['/', '\\', '.'], '_', $template);
-        $hash = substr(md5($template), 0, 8);
-
-        return $this->cacheDir . '/templates/' . $normalized . '_' . $hash . self::CACHE_EXTENSION;
-    }
-
-    private function getFragmentFile(string $key): string
-    {
-        $hash = substr(md5($key), 0, 8);
-        return $this->cacheDir . '/fragments/' . $hash . '.php';
-    }
-
-    private function getTagFile(string $tag): string
-    {
-        return $this->cacheDir . '/tags/' . $tag . '.php';
-    }
-
-    /**
-     * Ensure cache directory exists
-     */
-    private function ensureCacheDirectory(): void
-    {
-        if (!is_dir($this->cacheDir) && !mkdir($this->cacheDir, 0755, true)) {
-            throw new RuntimeException("Cannot create cache directory: {$this->cacheDir}");
-        }
-
-        // Create subdirectories
-        $this->ensureFragmentDirectory();
-    }
-
-    private function ensureFragmentDirectory(): void
-    {
-        $dirs = [
-            $this->cacheDir . '/templates',
-            $this->cacheDir . '/fragments',
-            $this->cacheDir . '/tags'
-        ];
-
-        foreach ($dirs as $dir) {
-            if (!is_dir($dir)) {
-                mkdir($dir, 0755, true);
-            }
-        }
     }
 }
