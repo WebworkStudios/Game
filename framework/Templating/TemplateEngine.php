@@ -592,13 +592,13 @@ class TemplateEngine
     }
 
     /**
-     * Render single token (unified for if/for/normal rendering) - NEW
+     * Render single token (unified for if/for/normal rendering) - FIXED
      */
     private function renderSingleToken(array $tokens, int &$index, array $token): string
     {
         return match ($token['type']) {
             'text' => $token['content'],
-            'variable' => $this->renderVariable($token, []),
+            'variable' => $this->renderVariable($token, []), // Token selbst enthält bereits alle Daten
             'include' => $this->renderInclude($token['template']),
             'block' => $this->renderBlock($token['name'], $tokens, $index),
             default => ''
@@ -824,19 +824,20 @@ class TemplateEngine
     }
 
     /**
-     * Render block
+     * Render block - FIXED for inheritance
      */
     private function renderBlock(string $blockName, array $tokens, int &$index): string
     {
-        // If we have a child block, use it
+        // Extract the block content from parent template
+        $blockData = $this->extractBlock($tokens, $index);
+        $index = $blockData['endIndex'];
+
+        // If we have a child block override, use it instead of parent block
         if (isset($this->blocks[$blockName])) {
             return $this->renderParsed($this->blocks[$blockName]);
         }
 
-        // Otherwise render the default block content
-        $blockData = $this->extractBlock($tokens, $index);
-        $index = $blockData['endIndex'];
-
+        // Otherwise use the parent block content
         return $this->renderParsed($blockData['content']);
     }
 
@@ -900,7 +901,7 @@ class TemplateEngine
     }
 
     /**
-     * Render with inheritance
+     * Render with inheritance - FIXED
      */
     private function renderWithInheritance(): string
     {
@@ -915,10 +916,18 @@ class TemplateEngine
         $parentContent = file_get_contents($parentPath);
         $parentTokens = $this->parseTemplate($parentContent);
 
-        // Render parent with child blocks
+        // Store current child blocks
+        $childBlocks = $this->blocks;
+
+        // Extract parent blocks (but don't override child blocks yet)
+        $this->extractExtendsAndBlocks($parentTokens);
+
+        // Child blocks override parent blocks
+        $this->blocks = array_merge($this->blocks, $childBlocks);
+
+        // Render parent with child blocks available
         return $this->renderParsed($parentTokens);
     }
-
     /**
      * Clear cache
      */
