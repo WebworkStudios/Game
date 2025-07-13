@@ -172,6 +172,21 @@ readonly class Request
         return parse_url($this->uri, PHP_URL_PATH) ?? '/';
     }
 
+    public function getUserAgent(): ?string
+    {
+        return $this->getHeader('user-agent');
+    }
+
+    public function getHeader(string $name): ?string
+    {
+        return $this->headers[strtolower($name)] ?? null;
+    }
+
+    public function getAcceptLanguage(): ?string
+    {
+        return $this->getHeader('accept-language');
+    }
+
     public function getQuery(): array
     {
         return $this->query;
@@ -242,11 +257,6 @@ readonly class Request
         return ($this->server['HTTPS'] ?? 'off') !== 'off'
             || ($this->server['SERVER_PORT'] ?? 80) == 443
             || $this->getHeader('x-forwarded-proto') === 'https';
-    }
-
-    public function getHeader(string $name): ?string
-    {
-        return $this->headers[strtolower($name)] ?? null;
     }
 
     public function getHost(): string

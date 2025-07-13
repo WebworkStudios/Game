@@ -73,12 +73,20 @@ class Session
     }
 
     /**
-     * Leert die komplette Session
+     * Prüft ob Session gestartet ist
      */
-    public function clear(): void
+    public function isStarted(): bool
+    {
+        return $this->started;
+    }
+
+    /**
+     * Regeneriert die Session-ID (Security)
+     */
+    public function regenerate(bool $deleteOld = true): bool
     {
         $this->ensureStarted();
-        $_SESSION = [];
+        return session_regenerate_id($deleteOld);
     }
 
     /**
@@ -163,21 +171,12 @@ class Session
     }
 
     /**
-     * Regeneriert die Session-ID (Security)
+     * Leert die komplette Session
      */
-    public function regenerate(bool $deleteOld = true): bool
+    public function clear(): void
     {
         $this->ensureStarted();
-        return session_regenerate_id($deleteOld);
-    }
-
-    /**
-     * Holt die aktuelle Session-ID
-     */
-    public function getId(): string
-    {
-        $this->ensureStarted();
-        return session_id();
+        $_SESSION = [];
     }
 
     /**
@@ -190,6 +189,298 @@ class Session
         }
 
         session_id($id);
+    }
+
+    /**
+     * Entfernt Framework-interne Werte
+     */
+    public function removeFramework(string $key): void
+    {
+        $this->remove(self::FRAMEWORK_NAMESPACE . '.' . $key);
+    }
+
+    /**
+     * Entfernt einen Wert aus der Session
+     */
+    public function remove(string $key): void
+    {
+        $this->ensureStarted();
+
+        if (str_contains($key, '.')) {
+            $this->removeNested($key);
+        } else {
+            unset($_SESSION[$key]);
+        }
+    }
+
+    /**
+     * Entfernt verschachtelten Wert mit Dot-Notation
+     */
+    private function removeNested(string $key): void
+    {
+        $keys = explode('.', $key);
+        $current = &$_SESSION;
+        $lastKey = array_pop($keys);
+
+        foreach ($keys as $k) {
+            if (!isset($current[$k]) || !is_array($current[$k])) {
+                return; // Pfad existiert nicht
+            }
+            $current = &$current[$k];
+        }
+
+        unset($current[$lastKey]);
+    }
+
+    /**
+     * Holt alle Flash-Messages und entfernt sie
+     */
+    public function getAllFlash(): array
+    {
+        $this->ensureStarted();
+        $flash = $_SESSION[self::FLASH_NAMESPACE] ?? [];
+        $_SESSION[self::FLASH_NAMESPACE] = [];
+        return $flash;
+    }
+
+    /**
+     * Prüft ob Flash-Message existiert
+     */
+    public function hasFlash(string $key): bool
+    {
+        $this->ensureStarted();
+        return isset($_SESSION[self::FLASH_NAMESPACE][$key]);
+    }
+
+    /**
+     * Setzt Flash-Success-Message
+     */
+    public function flashSuccess(string $message): void
+    {
+        $this->flash('success', $message);
+    }
+
+    /**
+     * Setzt eine Flash-Message
+     */
+    public function flash(string $key, mixed $value): void
+    {
+        $this->ensureStarted();
+        $_SESSION[self::FLASH_NAMESPACE][$key] = $value;
+    }
+
+    /**
+     * Setzt Flash-Error-Message
+     */
+    public function flashError(string $message): void
+    {
+        $this->flash('error', $message);
+    }
+
+    /**
+     * Setzt Flash-Info-Message
+     */
+    public function flashInfo(string $message): void
+    {
+        $this->flash('info', $message);
+    }
+
+    /**
+     * Setzt Flash-Warning-Message
+     */
+    public function flashWarning(string $message): void
+    {
+        $this->flash('warning', $message);
+    }
+
+    /**
+     * Holt Flash-Success-Message
+     */
+    public function getFlashSuccess(mixed $default = null): mixed
+    {
+        return $this->getFlash('success', $default);
+    }
+
+    /**
+     * Holt eine Flash-Message und entfernt sie
+     */
+    public function getFlash(string $key, mixed $default = null): mixed
+    {
+        $this->ensureStarted();
+        $value = $_SESSION[self::FLASH_NAMESPACE][$key] ?? $default;
+        unset($_SESSION[self::FLASH_NAMESPACE][$key]);
+        return $value;
+    }
+
+    /**
+     * Holt Flash-Error-Message
+     */
+    public function getFlashError(mixed $default = null): mixed
+    {
+        return $this->getFlash('error', $default);
+    }
+
+    /**
+     * Holt Flash-Info-Message
+     */
+    public function getFlashInfo(mixed $default = null): mixed
+    {
+        return $this->getFlash('info', $default);
+    }
+
+    /**
+     * Holt Flash-Warning-Message
+     */
+    public function getFlashWarning(mixed $default = null): mixed
+    {
+        return $this->getFlash('warning', $default);
+    }
+
+    /**
+     * Setzt mehrere Werte auf einmal
+     */
+    public function put(array $data): void
+    {
+        foreach ($data as $key => $value) {
+            $this->set($key, $value);
+        }
+    }
+
+    /**
+     * Holt mehrere Werte auf einmal
+     */
+    public function only(array $keys): array
+    {
+        $result = [];
+        foreach ($keys as $key) {
+            if ($this->has($key)) {
+                $result[$key] = $this->get($key);
+            }
+        }
+        return $result;
+    }
+
+    /**
+     * Prüft ob ein Key in der Session existiert
+     */
+    public function has(string $key): bool
+    {
+        $this->ensureStarted();
+
+        if (str_contains($key, '.')) {
+            return $this->getNested($key) !== null;
+        }
+
+        return isset($_SESSION[$key]);
+    }
+
+    /**
+     * Holt verschachtelten Wert mit Dot-Notation
+     */
+    private function getNested(string $key, mixed $default = null): mixed
+    {
+        $keys = explode('.', $key);
+        $current = $_SESSION;
+
+        foreach ($keys as $k) {
+            if (!is_array($current) || !isset($current[$k])) {
+                return $default;
+            }
+            $current = $current[$k];
+        }
+
+        return $current;
+    }
+
+    /**
+     * Holt einen Wert aus der Session
+     */
+    public function get(string $key, mixed $default = null): mixed
+    {
+        $this->ensureStarted();
+
+        if (str_contains($key, '.')) {
+            return $this->getNested($key, $default);
+        }
+
+        return $_SESSION[$key] ?? $default;
+    }
+
+    /**
+     * Holt alle Werte außer den angegebenen
+     */
+    public function except(array $keys): array
+    {
+        $all = $this->all();
+        return array_diff_key($all, array_flip($keys));
+    }
+
+    /**
+     * Holt alle Session-Daten
+     */
+    public function all(): array
+    {
+        $this->ensureStarted();
+        return $_SESSION;
+    }
+
+    /**
+     * Atomische Operation: Pull (get + remove)
+     */
+    public function pull(string $key, mixed $default = null): mixed
+    {
+        $value = $this->get($key, $default);
+        $this->remove($key);
+        return $value;
+    }
+
+    /**
+     * Dekrementiert einen numerischen Wert
+     */
+    public function decrement(string $key, int $value = 1): int
+    {
+        return $this->increment($key, -$value);
+    }
+
+    /**
+     * Inkrementiert einen numerischen Wert
+     */
+    public function increment(string $key, int $value = 1): int
+    {
+        $current = (int)$this->get($key, 0);
+        $new = $current + $value;
+        $this->set($key, $new);
+        return $new;
+    }
+
+    /**
+     * Session-Token für CSRF-Schutz
+     */
+    public function token(): string
+    {
+        if (!$this->hasFramework(self::CSRF_TOKEN_KEY)) {
+            $this->regenerateToken();
+        }
+
+        return $this->getFramework(self::CSRF_TOKEN_KEY);
+    }
+
+    /**
+     * Prüft ob Framework-Wert existiert
+     */
+    public function hasFramework(string $key): bool
+    {
+        return $this->has(self::FRAMEWORK_NAMESPACE . '.' . $key);
+    }
+
+    /**
+     * Regeneriert Session-Token
+     */
+    public function regenerateToken(): string
+    {
+        $token = bin2hex(random_bytes(32));
+        $this->setFramework(self::CSRF_TOKEN_KEY, $token);
+        return $token;
     }
 
     /**
@@ -241,189 +532,132 @@ class Session
     }
 
     /**
-     * Holt einen Wert aus der Session
+     * Validiert Session-Integrität
      */
-    public function get(string $key, mixed $default = null): mixed
+    public function validate(): bool
     {
-        $this->ensureStarted();
-
-        if (str_contains($key, '.')) {
-            return $this->getNested($key, $default);
+        if (!$this->started) {
+            return false;
         }
 
-        return $_SESSION[$key] ?? $default;
-    }
-
-    /**
-     * Holt verschachtelten Wert mit Dot-Notation
-     */
-    private function getNested(string $key, mixed $default = null): mixed
-    {
-        $keys = explode('.', $key);
-        $current = $_SESSION;
-
-        foreach ($keys as $k) {
-            if (!isset($current[$k])) {
-                return $default;
-            }
-            $current = $current[$k];
-        }
-
-        return $current;
-    }
-
-    /**
-     * Flash-Message holen und entfernen
-     */
-    public function getFlash(string $key, mixed $default = null): mixed
-    {
-        $value = $this->get(self::FLASH_NAMESPACE . '.' . $key, $default);
-        $this->remove(self::FLASH_NAMESPACE . '.' . $key);
-        return $value;
-    }
-
-    /**
-     * Entfernt einen Wert aus der Session
-     */
-    public function remove(string $key): void
-    {
-        $this->ensureStarted();
-
-        if (str_contains($key, '.')) {
-            $this->removeNested($key);
-        } else {
-            unset($_SESSION[$key]);
-        }
-    }
-
-    /**
-     * Entfernt verschachtelten Wert mit Dot-Notation
-     */
-    private function removeNested(string $key): void
-    {
-        $keys = explode('.', $key);
-        $lastKey = array_pop($keys);
-        $current = &$_SESSION;
-
-        foreach ($keys as $k) {
-            if (!isset($current[$k]) || !is_array($current[$k])) {
-                return; // Pfad existiert nicht
-            }
-            $current = &$current[$k];
-        }
-
-        unset($current[$lastKey]);
-    }
-
-    /**
-     * Alle Flash-Messages holen und entfernen
-     */
-    public function getAllFlash(): array
-    {
-        $flash = $this->get(self::FLASH_NAMESPACE, []);
-        $this->remove(self::FLASH_NAMESPACE);
-        return $flash;
-    }
-
-    /**
-     * Prüft ob Flash-Message existiert
-     */
-    public function hasFlash(string $key): bool
-    {
-        return $this->has(self::FLASH_NAMESPACE . '.' . $key);
-    }
-
-    /**
-     * Prüft ob ein Key existiert
-     */
-    public function has(string $key): bool
-    {
-        $this->ensureStarted();
-
-        if (str_contains($key, '.')) {
-            return $this->hasNested($key);
-        }
-
-        return isset($_SESSION[$key]);
-    }
-
-    /**
-     * Prüft verschachtelten Key mit Dot-Notation
-     */
-    private function hasNested(string $key): bool
-    {
-        $keys = explode('.', $key);
-        $current = $_SESSION;
-
-        foreach ($keys as $k) {
-            if (!isset($current[$k])) {
-                return false;
-            }
-            $current = $current[$k];
+        // Prüfe ob required Namespaces existieren
+        if (!isset($_SESSION[self::FRAMEWORK_NAMESPACE]) ||
+            !isset($_SESSION[self::FLASH_NAMESPACE])) {
+            $this->initializeSession();
         }
 
         return true;
     }
 
     /**
-     * Success Flash-Message (Convenience)
+     * Session-Cleanup für Development/Testing
      */
-    public function flashSuccess(string $message): void
+    public function cleanup(): void
     {
-        $this->flash('success', $message);
+        $this->ensureStarted();
+
+        // Entferne leere Arrays
+        $_SESSION = array_filter($_SESSION, function ($value) {
+            return !is_array($value) || !empty($value);
+        });
+
+        // Re-initialisiere Namespaces falls gelöscht
+        $this->initializeSession();
     }
 
     /**
-     * Flash-Message setzen (nur für nächsten Request verfügbar)
+     * Exportiert Session-Daten (ohne sensible Informationen)
      */
-    public function flash(string $key, mixed $value): void
+    public function export(bool $includeSensitive = false): array
     {
-        $this->set(self::FLASH_NAMESPACE . '.' . $key, $value);
+        $this->ensureStarted();
+        $data = $_SESSION;
+
+        if (!$includeSensitive) {
+            // Entferne Framework-interne Daten
+            unset($data[self::FRAMEWORK_NAMESPACE]);
+
+            // Entferne sensible Keys
+            $sensitiveKeys = ['password', 'token', 'secret', 'key'];
+            foreach ($sensitiveKeys as $sensitive) {
+                unset($data[$sensitive]);
+            }
+        }
+
+        return $data;
     }
 
     /**
-     * Error Flash-Message (Convenience)
+     * Magic method für String-Konvertierung
      */
-    public function flashError(string $message): void
+    public function __toString(): string
     {
-        $this->flash('error', $message);
+        return $this->debug();
     }
 
     /**
-     * Warning Flash-Message (Convenience)
+     * Debug-Information als String
      */
-    public function flashWarning(string $message): void
+    public function debug(): string
     {
-        $this->flash('warning', $message);
+        $stats = $this->getStats();
+        $size = $this->getSize();
+
+        return sprintf(
+            "Session[%s]: %d items, %d bytes, started=%s",
+            $stats['id'],
+            $stats['data_count'],
+            $size,
+            $stats['started'] ? 'yes' : 'no'
+        );
     }
 
     /**
-     * Info Flash-Message (Convenience)
+     * Session-Statistiken für Debugging
      */
-    public function flashInfo(string $message): void
+    public function getStats(): array
     {
-        $this->flash('info', $message);
-    }
+        $this->ensureStarted();
 
-    /**
-     * Holt Session-Status
-     */
-    public function getStatus(): array
-    {
         return [
+            'id' => $this->getId(),
             'started' => $this->started,
-            'id' => $this->started ? session_id() : null,
             'status' => session_status(),
             'name' => session_name(),
             'save_path' => session_save_path(),
+            'cookie_params' => session_get_cookie_params(),
+            'data_count' => count($_SESSION),
+            'framework_data_count' => count($_SESSION[self::FRAMEWORK_NAMESPACE] ?? []),
+            'flash_data_count' => count($_SESSION[self::FLASH_NAMESPACE] ?? []),
+            'memory_usage' => memory_get_usage(true),
+            'config' => $this->config,
         ];
     }
 
     /**
-     * Prüft ob Session gestartet ist
+     * Holt die aktuelle Session-ID
      */
-    public function isStarted(): bool
+    public function getId(): string
     {
-        return $this->started;
+        $this->ensureStarted();
+        return session_id();
+    }
+
+    /**
+     * Session-Größe in Bytes (approximiert)
+     */
+    public function getSize(): int
+    {
+        $this->ensureStarted();
+        return strlen(serialize($_SESSION));
+    }
+
+    /**
+     * Destruktor - Session wird automatisch gespeichert
+     */
+    public function __destruct()
+    {
+        // Session wird automatisch von PHP gespeichert
+        // Hier könnten zusätzliche Cleanup-Operationen stehen
     }
 }
