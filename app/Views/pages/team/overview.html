@@ -1,13 +1,13 @@
-<!-- app/Views/pages/team/overview.html -->
-{% extends "layouts/base.html" %}
+{% extends 'layouts/base' %}
 
-{% block title %}Kaderübersicht - {{ team.name }} - {{ app_name }}{% endblock %}
+{% block title %}Team Overview - {{ team.name }}{% endblock %}
 
 {% block content %}
 <div class="team-overview">
+    <!-- Team Header -->
     <header class="team-header">
         <h1>{{ team.name }}</h1>
-        <p class="team-subtitle">Kaderübersicht Saison 2024/25</p>
+        <p class="team-subtitle">Kaderübersicht - {{ team.stats.players_count }} Spieler</p>
     </header>
 
     <!-- Team Statistics -->
@@ -23,7 +23,11 @@
             </div>
             <div class="stat-card">
                 <div class="stat-number">{{ team.stats.average_rating }}</div>
-                <div class="stat-label">⌀ Bewertung</div>
+                <div class="stat-label">⌀ Rating</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number">{{ team.injured_count }}</div>
+                <div class="stat-label">Verletzte</div>
             </div>
             <div class="stat-card">
                 <div class="stat-number">{{ team.stats.total_goals }}</div>
@@ -31,56 +35,56 @@
             </div>
             <div class="stat-card">
                 <div class="stat-number">{{ team.stats.total_assists }}</div>
-                <div class="stat-label">Vorlagen</div>
+                <div class="stat-label">Assists</div>
             </div>
             <div class="stat-card">
-                <div class="stat-number">€{{ (team.total_market_value / 1000000)|number_format:0 }}M</div>
+                <div class="stat-number">€{{ team.total_market_value_millions }}M</div>
                 <div class="stat-label">Marktwert</div>
             </div>
         </div>
 
         <!-- Season Record -->
         <div class="season-record">
-            <span class="record-item wins">{{ team.stats.wins }}S</span>
-            <span class="record-item draws">{{ team.stats.draws }}U</span>
-            <span class="record-item losses">{{ team.stats.losses }}N</span>
+            <span class="record-item">🏆 {{ team.stats.wins }} Siege</span>
+            <span class="record-item">🤝 {{ team.stats.draws }} Unentschieden</span>
+            <span class="record-item">❌ {{ team.stats.losses }} Niederlagen</span>
         </div>
     </section>
 
-    <!-- Injured Players Alert -->
-    {% if team.injured_count > 0 %}
-    <div class="alert alert-warning">
-        <strong>⚠️ {{ team.injured_count }} {{ team.injured_count|plural:'Spieler ist':'Spieler sind' }} verletzt!</strong>
-        <p>Einige Spieler stehen derzeit nicht zur Verfügung.</p>
+    <!-- Filter Controls -->
+    <div class="filter-controls">
+        <button class="filter-btn active" onclick="filterPlayers('all')">Alle</button>
+        <button class="filter-btn" onclick="filterPlayers('Torwart')">Torwart</button>
+        <button class="filter-btn" onclick="filterPlayers('Abwehr')">Abwehr</button>
+        <button class="filter-btn" onclick="filterPlayers('Mittelfeld')">Mittelfeld</button>
+        <button class="filter-btn" onclick="filterPlayers('Sturm')">Sturm</button>
+        <button class="filter-btn" onclick="filterPlayers('injured')">Verletzte</button>
     </div>
-    {% endif %}
 
-    <!-- Players by Position -->
-    <section class="positions">
-        {% for team.positions as position %}
-        <div class="position-section">
-            <div class="position-header">
-                <h2 class="position-title">{{ position.name }}</h2>
-                <span class="position-count">({{ position.players|length }})</span>
-            </div>
+    <!-- Squad by Position -->
+    <section class="squad-sections">
+        {% for position in team.positions %}
+        <div class="position-group" data-position="{{ position.name }}">
+            <h2 class="position-title">{{ position.name }}</h2>
 
             {% if position.players %}
             <div class="players-grid">
-                {% for position.players as player %}
-                <div class="player-card {% if player.injured %}injured{% endif %}">
+                {% for player in position.players %}
+                <div class="player-card" data-position="{{ player.position }}" data-injured="{{ player.injured ? 'true' : 'false' }}">
                     <!-- Player Header -->
                     <div class="player-header">
-                        <div class="player-number">{{ player.shirt_number }}</div>
                         <div class="player-info">
                             <h3 class="player-name">{{ player.name }}</h3>
                             <div class="player-meta">
+                                <span class="shirt-number">#{{ player.shirt_number }}</span>
                                 <span class="age">{{ player.age }} Jahre</span>
-                                <span class="rating">{{ player.rating }}</span>
+                                <span class="rating">{{ player.rating }}★</span>
                             </div>
                         </div>
+
                         {% if player.injured %}
                         <div class="injury-badge">
-                            <span class="injury-icon">🤕</span>
+                            <span class="injury-icon">🏥</span>
                             <span class="injury-text">Verletzt bis {{ player.injury_until }}</span>
                         </div>
                         {% endif %}
@@ -95,7 +99,7 @@
                             </div>
                             <div class="stat">
                                 <span class="stat-value">{{ player.assists }}</span>
-                                <span class="stat-name">Vorlagen</span>
+                                <span class="stat-name">Assists</span>
                             </div>
                             <div class="stat">
                                 <span class="stat-value">{{ player.games_played }}</span>
@@ -114,7 +118,7 @@
                     <div class="player-details">
                         <div class="market-value">
                             <span class="label">Marktwert:</span>
-                            <span class="value">€{{ (player.market_value / 1000000)|number_format:1 }}M</span>
+                            <span class="value">€{{ player.market_value_millions|number_format:1 }}M</span>
                         </div>
                         <div class="contract">
                             <span class="label">Vertrag bis:</span>
@@ -192,77 +196,32 @@
 
     .record-item {
         display: inline-block;
-        padding: 8px 16px;
-        margin: 0 5px;
-        border-radius: 20px;
-        font-weight: bold;
+        margin: 0 15px;
+        padding: 5px 10px;
+        background: #f7fafc;
+        border-radius: 6px;
         font-size: 0.9rem;
     }
 
-    .wins {
-        background: #48bb78;
-        color: white;
-    }
-
-    .draws {
-        background: #ed8936;
-        color: white;
-    }
-
-    .losses {
-        background: #f56565;
-        color: white;
-    }
-
-    /* Alert */
-    .alert {
-        padding: 15px;
-        margin: 20px 0;
-        border-radius: 8px;
-        border-left: 4px solid #ed8936;
-        background: #fefcbf;
-    }
-
-    .alert-warning {
-        border-color: #ed8936;
-        background: #fefcbf;
-    }
-
-    /* Position Sections */
-    .positions {
-        margin-top: 40px;
-    }
-
-    .position-section {
+    /* Position Groups */
+    .position-group {
         margin-bottom: 40px;
     }
 
-    .position-header {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        margin-bottom: 20px;
-        padding-bottom: 10px;
-        border-bottom: 2px solid #e2e8f0;
-    }
-
     .position-title {
-        font-size: 1.5rem;
         color: #2d3748;
-        margin: 0;
-    }
-
-    .position-count {
-        color: #718096;
-        font-size: 1rem;
+        margin-bottom: 20px;
+        padding-bottom: 8px;
+        border-bottom: 2px solid #e2e8f0;
     }
 
     .players-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
         gap: 20px;
     }
 
+    /* Player Cards */
     .player-card {
         background: white;
         border: 1px solid #e2e8f0;
@@ -274,33 +233,20 @@
 
     .player-card:hover {
         transform: translateY(-2px);
-        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
     }
 
-    .player-card.injured {
-        border-color: #f56565;
-        background: #fed7d7;
+    .player-card[data-injured="true"] {
+        border-left: 4px solid #f56565;
+        background: #fef5e7;
     }
 
+    /* Player Header */
     .player-header {
         display: flex;
+        justify-content: space-between;
         align-items: flex-start;
-        gap: 15px;
         margin-bottom: 15px;
-    }
-
-    .player-number {
-        background: #667eea;
-        color: white;
-        width: 40px;
-        height: 40px;
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-weight: bold;
-        font-size: 1.1rem;
-        flex-shrink: 0;
     }
 
     .player-info {
@@ -308,9 +254,9 @@
     }
 
     .player-name {
-        margin: 0 0 8px 0;
-        font-size: 1.1rem;
         color: #2d3748;
+        margin-bottom: 8px;
+        font-size: 1.2rem;
     }
 
     .player-meta {
@@ -443,72 +389,94 @@
     /* Responsive Design */
     @media (max-width: 768px) {
         .team-overview {
-            padding: 10px;
+            padding: 15px;
         }
 
         .stats-grid {
-            grid-template-columns: repeat(2, 1fr);
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 10px;
         }
 
         .players-grid {
             grid-template-columns: 1fr;
         }
 
+        .player-header {
+            flex-direction: column;
+            gap: 10px;
+        }
+
         .player-details {
             flex-direction: column;
             gap: 10px;
         }
+
+        .filter-controls {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 5px;
+        }
+
+        .filter-btn {
+            margin: 2px;
+            padding: 6px 12px;
+            font-size: 0.8rem;
+        }
+    }
+
+    /* Hidden class for filtering */
+    .hidden {
+        display: none !important;
     }
 </style>
 
-<!-- JavaScript for Player Filtering -->
 <script>
-    document.addEventListener('DOMContentLoaded', function() {
-        // Add filter buttons
-        const positionSections = document.querySelectorAll('.position-section');
+    function filterPlayers(filter) {
+        const players = document.querySelectorAll('.player-card');
+        const positions = document.querySelectorAll('.position-group');
+        const buttons = document.querySelectorAll('.filter-btn');
 
-        positionSections.forEach(section => {
-            const header = section.querySelector('.position-header');
-            const playersGrid = section.querySelector('.players-grid');
+        // Update active button
+        buttons.forEach(btn => btn.classList.remove('active'));
+        event.target.classList.add('active');
 
-            if (playersGrid) {
-                // Create filter controls
-                const filterControls = document.createElement('div');
-                filterControls.className = 'filter-controls';
-                filterControls.innerHTML = `
-                    <button class="filter-btn active" data-filter="all">Alle</button>
-                    <button class="filter-btn" data-filter="injured">Verletzte</button>
-                    <button class="filter-btn" data-filter="available">Verfügbare</button>
-                `;
+        // Show/hide players
+        players.forEach(player => {
+            const position = player.dataset.position;
+            const injured = player.dataset.injured === 'true';
 
-                header.appendChild(filterControls);
+            let show = false;
 
-                // Add filter functionality
-                const filterBtns = filterControls.querySelectorAll('.filter-btn');
-                const playerCards = playersGrid.querySelectorAll('.player-card');
+            switch(filter) {
+                case 'all':
+                    show = true;
+                    break;
+                case 'injured':
+                    show = injured;
+                    break;
+                default:
+                    show = position === filter;
+            }
 
-                filterBtns.forEach(btn => {
-                    btn.addEventListener('click', () => {
-                        // Update active button
-                        filterBtns.forEach(b => b.classList.remove('active'));
-                        btn.classList.add('active');
-
-                        const filter = btn.dataset.filter;
-
-                        // Filter player cards
-                        playerCards.forEach(card => {
-                            if (filter === 'all') {
-                                card.style.display = 'block';
-                            } else if (filter === 'injured') {
-                                card.style.display = card.classList.contains('injured') ? 'block' : 'none';
-                            } else if (filter === 'available') {
-                                card.style.display = card.classList.contains('injured') ? 'none' : 'block';
-                            }
-                        });
-                    });
-                });
+            if (show) {
+                player.classList.remove('hidden');
+            } else {
+                player.classList.add('hidden');
             }
         });
-    });
+
+        // Show/hide position groups
+        positions.forEach(positionGroup => {
+            const positionName = positionGroup.dataset.position;
+            const visiblePlayers = positionGroup.querySelectorAll('.player-card:not(.hidden)');
+
+            if (filter === 'all' || filter === positionName || (filter === 'injured' && visiblePlayers.length > 0)) {
+                positionGroup.classList.remove('hidden');
+            } else {
+                positionGroup.classList.add('hidden');
+            }
+        });
+    }
 </script>
 {% endblock %}

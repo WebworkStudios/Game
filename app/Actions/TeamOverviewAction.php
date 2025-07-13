@@ -259,6 +259,12 @@ class TeamOverviewAction
             ],
         ];
 
+        // Berechne market_value_millions für alle Spieler (Division in Action statt Template)
+        $players = array_map(function ($player) {
+            $player['market_value_millions'] = round($player['market_value'] / 1000000, 1);
+            return $player;
+        }, $players);
+
         // Gruppiere Spieler nach Position (deutsche Reihenfolge)
         $positions = $this->groupPlayersByPosition($players);
 
@@ -268,6 +274,8 @@ class TeamOverviewAction
         // Berechne Team-Statistiken
         $stats = $this->calculateTeamStats($players);
 
+        $totalMarketValue = $this->calculateTotalMarketValue($players);
+
         return [
             'team' => [
                 'name' => 'FC Barcelona',
@@ -275,7 +283,8 @@ class TeamOverviewAction
                 'positions' => $positions,
                 'injured_count' => $injuredCount,
                 'stats' => $stats,
-                'total_market_value' => $this->calculateTotalMarketValue($players),
+                'total_market_value' => $totalMarketValue,
+                'total_market_value_millions' => round($totalMarketValue / 1000000, 0),
             ]
         ];
     }
