@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Framework\Security;
 
+use Framework\Http\HttpStatus;
 use Framework\Http\Request;
 use Framework\Http\Response;
 use Framework\Routing\MiddlewareInterface;
@@ -68,12 +69,12 @@ class SessionMiddleware implements MiddlewareInterface
             if ($this->config['security_validation']) {
                 $validationResult = $this->validateSessionSecurity($request);
 
-                if (!$validationResult->isValid()) {
+                if (!($validationResult['valid'] ?? true)) {
                     return $this->handleSecurityViolation($request, $validationResult);
                 }
 
                 // Handle regeneration if required
-                if ($validationResult->isRegenerationRequired() && $this->config['auto_regenerate']) {
+                if (($validationResult['regeneration_required'] ?? false) && $this->config['auto_regenerate']) {
                     $this->handleSessionRegeneration($request);
                 }
             }
@@ -125,9 +126,9 @@ class SessionMiddleware implements MiddlewareInterface
         // - Forms
         // - When session cookie exists
 
-        return $request->isPost()
-            || $request->hasCookie(session_name())
-            || str_contains($request->header('Content-Type', ''), 'form-data')
+        return $request->getMethod()->value === 'POST'
+            || isset($request->getCookies()[session_name()])
+            || str_contains($request->getHeader('Content-Type') ?? '', 'form-data')
             || str_contains($request->getPath(), '/auth')
             || str_contains($request->getPath(), '/admin');
     }
@@ -157,7 +158,7 @@ class SessionMiddleware implements MiddlewareInterface
     /**
      * Validate session security
      */
-    private function validateSessionSecurity(Request $request): SecurityValidationResult
+    private function validateSessionSecurity(Request $request): array
     {
         return $this->sessionSecurity->validateSession($request);
     }
@@ -165,9 +166,9 @@ class SessionMiddleware implements MiddlewareInterface
     /**
      * Handle security violations
      */
-    private function handleSecurityViolation(Request $request, SecurityValidationResult $result): Response
+    private function handleSecurityViolation(Request $request, array $result): Response
     {
-        $violations = $result->getViolations();
+        $violations = $result['violations'] ?? [];
 
         // Log security violation
         $this->logSecurityViolation($request, $violations);
@@ -176,6 +177,7 @@ class SessionMiddleware implements MiddlewareInterface
         foreach ($violations as $violation) {
             switch ($violation['type']) {
                 case 'session_locked':
+                case 'locked_out':
                     return $this->handleSessionLocked($request);
 
                 case 'session_expired':
@@ -202,10 +204,10 @@ class SessionMiddleware implements MiddlewareInterface
             'type' => 'security_violation',
             'violations' => $violations,
             'request' => [
-                'method' => $request->method(),
+                'method' => $request->getMethod()->value,
                 'path' => $request->getPath(),
                 'ip' => $request->ip(),
-                'user_agent' => $request->header('User-Agent'),
+                'user_agent' => $request->getHeader('User-Agent'),
             ],
             'session' => [
                 'id' => $this->session->getId(),
@@ -218,19 +220,6 @@ class SessionMiddleware implements MiddlewareInterface
     }
 
     /**
-     * Get middleware status for debugging
-     */
-    public function getStatus(): array
-    {
-        return [
-            'config' => $this->config,
-            'session_started' => $this->session->isStarted(),
-            'session_status' => $this->session->getStatus(),
-            'security_status' => $this->sessionSecurity->getSecurityStatus(),
-        ];
-    }
-
-    /**
      * Handle session locked
      */
     private function handleSessionLocked(Request $request): Response
@@ -240,7 +229,7 @@ class SessionMiddleware implements MiddlewareInterface
                 'error' => 'Session locked',
                 'message' => 'Session is temporarily locked due to security violations',
                 'code' => 'SESSION_LOCKED'
-            ], 423); // HTTP 423 Locked
+            ], HttpStatus::from(423)); // HTTP 423 Locked
         }
 
         // Destroy current session
@@ -260,7 +249,7 @@ class SessionMiddleware implements MiddlewareInterface
                 'error' => 'Session expired',
                 'message' => 'Your session has expired. Please log in again.',
                 'code' => 'SESSION_EXPIRED'
-            ], 401);
+            ], HttpStatus::UNAUTHORIZED);
         }
 
         // Clear expired session
@@ -280,7 +269,7 @@ class SessionMiddleware implements MiddlewareInterface
                 'error' => 'Security violation',
                 'message' => 'Session security validation failed',
                 'code' => 'SECURITY_VIOLATION'
-            ], 403);
+            ], HttpStatus::FORBIDDEN);
         }
 
         // Destroy session for security
@@ -300,7 +289,7 @@ class SessionMiddleware implements MiddlewareInterface
                 'error' => 'Security violation',
                 'message' => $violation['message'] ?? 'Security validation failed',
                 'code' => 'SECURITY_VIOLATION'
-            ], 403);
+            ], HttpStatus::FORBIDDEN);
         }
 
         return Response::redirect('/auth/login?reason=security');
@@ -312,7 +301,8 @@ class SessionMiddleware implements MiddlewareInterface
     private function handleSessionRegeneration(Request $request): void
     {
         try {
-            $this->sessionSecurity->regenerateSession($request);
+            // Use Session's built-in regenerate method instead of SessionSecurity
+            $this->session->regenerate();
             $this->logSecurityEvent('session_regenerated', $request);
         } catch (\Throwable $e) {
             $this->logError('Session regeneration failed', $e);
@@ -328,7 +318,7 @@ class SessionMiddleware implements MiddlewareInterface
             'type' => 'security_event',
             'event' => $event,
             'request' => [
-                'method' => $request->method(),
+                'method' => $request->getMethod()->value,
                 'path' => $request->getPath(),
                 'ip' => $request->ip(),
             ],
@@ -401,7 +391,7 @@ class SessionMiddleware implements MiddlewareInterface
         $this->initializeSession($request);
     }
 
-    public function forceSecurityValidation(Request $request): SecurityValidationResult
+    public function forceSecurityValidation(Request $request): array
     {
         return $this->validateSessionSecurity($request);
     }
@@ -414,5 +404,17 @@ class SessionMiddleware implements MiddlewareInterface
         } catch (\Throwable) {
             return false;
         }
+    }
+
+    /**
+     * Get middleware status for debugging
+     */
+    public function getStatus(): array
+    {
+        return [
+            'config' => $this->config,
+            'session_started' => $this->session->isStarted(),
+            'session_status' => $this->session->getStatus(),
+        ];
     }
 }

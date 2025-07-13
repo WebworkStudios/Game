@@ -68,6 +68,7 @@ enum HttpStatus: int
     case LOOP_DETECTED = 508;
     case NOT_EXTENDED = 510;
     case NETWORK_AUTHENTICATION_REQUIRED = 511;
+    case FROM = 423;
 
     /**
      * Gibt den Reason-Phrase Text zurück
