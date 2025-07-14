@@ -17,7 +17,8 @@ class FilterManager
 
     public function __construct(
         private ?Translator $translator = null
-    ) {
+    )
+    {
         // Register lazy filter definitions (no instantiation yet)
         $this->registerLazyFilters();
     }
@@ -147,14 +148,17 @@ class FilterManager
         return $value;
     }
 
-    private function numberFormatFilter(float $value, int $decimals = 2, string $decimalPoint = ',', string $thousandsSeparator = '.'): string
-    {
-        return number_format($value, $decimals, $decimalPoint, $thousandsSeparator);
-    }
-
     private function currencyFilter(float $value, string $currency = 'EUR', string $locale = 'de_DE'): string
     {
         return $this->numberFormatFilter($value, 2) . ' ' . $currency;
+    }
+
+    private function numberFormatFilter(float $value, int|string $decimals = 2, string $decimalPoint = ',', string $thousandsSeparator = '.'): string
+    {
+        // Convert string to int for decimals parameter
+        $decimals = is_string($decimals) ? (int)$decimals : $decimals;
+
+        return number_format($value, $decimals, $decimalPoint, $thousandsSeparator);
     }
 
     private function dateFilter(mixed $value, string $format = 'Y-m-d H:i:s'): string
@@ -171,7 +175,7 @@ class FilterManager
             return date($format, $value);
         }
 
-        return (string) $value;
+        return (string)$value;
     }
 
     private function lengthFilter(mixed $value): int

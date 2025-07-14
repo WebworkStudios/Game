@@ -66,6 +66,14 @@ class Response
     /**
      * @deprecated Use ResponseFactory service instead
      */
+    public static function temporaryRedirect(string $url): self
+    {
+        return self::redirect($url, HttpStatus::TEMPORARY_REDIRECT);
+    }
+
+    /**
+     * @deprecated Use ResponseFactory service instead
+     */
     public static function redirect(string $url, HttpStatus $status = HttpStatus::FOUND): self
     {
         if (!$status->isRedirect()) {
@@ -81,14 +89,6 @@ class Response
     public function isRedirect(): bool
     {
         return $this->status->isRedirection();
-    }
-
-    /**
-     * @deprecated Use ResponseFactory service instead
-     */
-    public static function temporaryRedirect(string $url): self
-    {
-        return self::redirect($url, HttpStatus::TEMPORARY_REDIRECT);
     }
 
     /**

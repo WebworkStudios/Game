@@ -1,5 +1,4 @@
 <?php
-// app/Actions/HomeAction.php - Aktiviere das Template-Rendering
 
 declare(strict_types=1);
 
@@ -7,11 +6,18 @@ namespace App\Actions;
 
 use Framework\Http\Request;
 use Framework\Http\Response;
+use Framework\Http\ResponseFactory;
 use Framework\Routing\Route;
 
 #[Route(path: '/', methods: ['GET'], name: 'home')]
 class HomeAction
 {
+    public function __construct(
+        private readonly ResponseFactory $responseFactory
+    )
+    {
+    }
+
     public function __invoke(Request $request): Response
     {
         $data = [
@@ -22,7 +28,7 @@ class HomeAction
                 'name' => 'John Doe',
                 'email' => 'john@example.com',
                 'isAdmin' => true,
-                'team' => [  // ← Jetzt vollständig
+                'team' => [
                     'name' => 'FC Barcelona',
                     'league' => 'La Liga'
                 ]
@@ -49,6 +55,6 @@ class HomeAction
             ]
         ];
 
-        return Response::view('pages/home', $data);
+        return $this->responseFactory->view('pages/home', $data);
     }
 }

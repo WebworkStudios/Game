@@ -6,6 +6,7 @@ namespace App\Actions;
 
 use Framework\Http\Request;
 use Framework\Http\Response;
+use Framework\Http\ResponseFactory;
 use Framework\Routing\Route;
 
 /**
@@ -15,11 +16,17 @@ use Framework\Routing\Route;
 #[Route(path: '/team/overview', methods: ['GET'], name: 'team.overview.full')]
 class TeamOverviewAction
 {
+    public function __construct(
+        private readonly ResponseFactory $responseFactory
+    )
+    {
+    }
+
     public function __invoke(Request $request): Response
     {
         $teamData = $this->getTeamData();
 
-        return Response::view('pages/team/overview', $teamData);
+        return $this->responseFactory->view('pages/team/overview', $teamData);
     }
 
     private function getTeamData(): array
@@ -75,7 +82,8 @@ class TeamOverviewAction
                 'injury_until' => null,
                 'contract_until' => '2026-06-30',
                 'games_played' => 25,
-                'clean_sheets' => 12,
+                'yellow_cards' => 8,
+                'red_cards' => 1,
             ],
             [
                 'id' => 4,
@@ -83,47 +91,50 @@ class TeamOverviewAction
                 'position' => 'Abwehr',
                 'age' => 25,
                 'shirt_number' => 23,
-                'goals' => 2,
-                'assists' => 4,
-                'rating' => 7.9,
-                'market_value' => 60000000,
+                'goals' => 1,
+                'assists' => 3,
+                'rating' => 7.8,
+                'market_value' => 55000000,
                 'injured' => false,
                 'injury_until' => null,
                 'contract_until' => '2027-06-30',
-                'games_played' => 26,
-                'clean_sheets' => 11,
+                'games_played' => 30,
+                'yellow_cards' => 5,
+                'red_cards' => 0,
             ],
             [
                 'id' => 5,
-                'name' => 'Alejandro Balde',
-                'position' => 'Abwehr',
-                'age' => 20,
-                'shirt_number' => 3,
-                'goals' => 1,
-                'assists' => 8,
-                'rating' => 7.7,
-                'market_value' => 45000000,
-                'injured' => true,
-                'injury_until' => '2024-01-30',
-                'contract_until' => '2028-06-30',
-                'games_played' => 22,
-                'clean_sheets' => 9,
-            ],
-            [
-                'id' => 6,
                 'name' => 'Andreas Christensen',
                 'position' => 'Abwehr',
-                'age' => 27,
+                'age' => 28,
                 'shirt_number' => 15,
-                'goals' => 1,
+                'goals' => 2,
                 'assists' => 1,
                 'rating' => 7.6,
                 'market_value' => 35000000,
                 'injured' => false,
                 'injury_until' => null,
                 'contract_until' => '2026-06-30',
-                'games_played' => 20,
-                'clean_sheets' => 8,
+                'games_played' => 22,
+                'yellow_cards' => 3,
+                'red_cards' => 0,
+            ],
+            [
+                'id' => 6,
+                'name' => 'Alejandro Balde',
+                'position' => 'Abwehr',
+                'age' => 20,
+                'shirt_number' => 3,
+                'goals' => 1,
+                'assists' => 4,
+                'rating' => 7.4,
+                'market_value' => 50000000,
+                'injured' => false,
+                'injury_until' => null,
+                'contract_until' => '2028-06-30',
+                'games_played' => 27,
+                'yellow_cards' => 6,
+                'red_cards' => 0,
             ],
 
             // Mittelfeld
@@ -133,15 +144,16 @@ class TeamOverviewAction
                 'position' => 'Mittelfeld',
                 'age' => 21,
                 'shirt_number' => 8,
-                'goals' => 8,
-                'assists' => 12,
-                'rating' => 8.9,
+                'goals' => 4,
+                'assists' => 8,
+                'rating' => 8.3,
                 'market_value' => 100000000,
                 'injured' => false,
                 'injury_until' => null,
                 'contract_until' => '2026-06-30',
-                'games_played' => 27,
-                'clean_sheets' => 0,
+                'games_played' => 29,
+                'yellow_cards' => 4,
+                'red_cards' => 0,
             ],
             [
                 'id' => 8,
@@ -149,15 +161,16 @@ class TeamOverviewAction
                 'position' => 'Mittelfeld',
                 'age' => 19,
                 'shirt_number' => 6,
-                'goals' => 5,
-                'assists' => 7,
-                'rating' => 8.3,
+                'goals' => 2,
+                'assists' => 5,
+                'rating' => 7.9,
                 'market_value' => 90000000,
-                'injured' => false,
-                'injury_until' => null,
+                'injured' => true,
+                'injury_until' => '2024-09-15',
                 'contract_until' => '2026-06-30',
-                'games_played' => 24,
-                'clean_sheets' => 0,
+                'games_played' => 15,
+                'yellow_cards' => 7,
+                'red_cards' => 0,
             ],
             [
                 'id' => 9,
@@ -165,15 +178,16 @@ class TeamOverviewAction
                 'position' => 'Mittelfeld',
                 'age' => 26,
                 'shirt_number' => 21,
-                'goals' => 4,
-                'assists' => 9,
-                'rating' => 8.0,
-                'market_value' => 80000000,
-                'injured' => true,
-                'injury_until' => '2024-02-05',
+                'goals' => 3,
+                'assists' => 6,
+                'rating' => 7.7,
+                'market_value' => 70000000,
+                'injured' => false,
+                'injury_until' => null,
                 'contract_until' => '2026-06-30',
-                'games_played' => 19,
-                'clean_sheets' => 0,
+                'games_played' => 24,
+                'yellow_cards' => 5,
+                'red_cards' => 0,
             ],
             [
                 'id' => 10,
@@ -181,18 +195,19 @@ class TeamOverviewAction
                 'position' => 'Mittelfeld',
                 'age' => 33,
                 'shirt_number' => 22,
-                'goals' => 6,
-                'assists' => 11,
-                'rating' => 7.8,
+                'goals' => 5,
+                'assists' => 14,
+                'rating' => 8.0,
                 'market_value' => 25000000,
                 'injured' => false,
                 'injury_until' => null,
                 'contract_until' => '2025-06-30',
-                'games_played' => 26,
-                'clean_sheets' => 0,
+                'games_played' => 31,
+                'yellow_cards' => 3,
+                'red_cards' => 0,
             ],
 
-            // Sturm
+            // Angriff
             [
                 'id' => 11,
                 'name' => 'Robert Lewandowski',
@@ -200,14 +215,15 @@ class TeamOverviewAction
                 'age' => 35,
                 'shirt_number' => 9,
                 'goals' => 22,
-                'assists' => 6,
-                'rating' => 9.1,
+                'assists' => 8,
+                'rating' => 8.6,
                 'market_value' => 15000000,
                 'injured' => false,
                 'injury_until' => null,
                 'contract_until' => '2026-06-30',
-                'games_played' => 28,
-                'clean_sheets' => 0,
+                'games_played' => 30,
+                'yellow_cards' => 2,
+                'red_cards' => 0,
             ],
             [
                 'id' => 12,
@@ -215,15 +231,16 @@ class TeamOverviewAction
                 'position' => 'Sturm',
                 'age' => 27,
                 'shirt_number' => 11,
-                'goals' => 12,
-                'assists' => 14,
-                'rating' => 8.2,
-                'market_value' => 65000000,
+                'goals' => 8,
+                'assists' => 12,
+                'rating' => 7.8,
+                'market_value' => 60000000,
                 'injured' => false,
                 'injury_until' => null,
                 'contract_until' => '2027-06-30',
-                'games_played' => 27,
-                'clean_sheets' => 0,
+                'games_played' => 32,
+                'yellow_cards' => 4,
+                'red_cards' => 0,
             ],
             [
                 'id' => 13,
@@ -231,109 +248,125 @@ class TeamOverviewAction
                 'position' => 'Sturm',
                 'age' => 24,
                 'shirt_number' => 7,
-                'goals' => 7,
-                'assists' => 5,
-                'rating' => 7.4,
-                'market_value' => 55000000,
+                'goals' => 6,
+                'assists' => 4,
+                'rating' => 7.3,
+                'market_value' => 40000000,
                 'injured' => false,
                 'injury_until' => null,
                 'contract_until' => '2027-06-30',
-                'games_played' => 23,
-                'clean_sheets' => 0,
+                'games_played' => 26,
+                'yellow_cards' => 2,
+                'red_cards' => 0,
             ],
             [
                 'id' => 14,
                 'name' => 'Lamine Yamal',
                 'position' => 'Sturm',
-                'age' => 17,
+                'age' => 16,
                 'shirt_number' => 27,
-                'goals' => 9,
-                'assists' => 8,
-                'rating' => 8.0,
-                'market_value' => 80000000,
+                'goals' => 5,
+                'assists' => 7,
+                'rating' => 7.5,
+                'market_value' => 15000000,
                 'injured' => false,
                 'injury_until' => null,
                 'contract_until' => '2026-06-30',
-                'games_played' => 25,
-                'clean_sheets' => 0,
+                'games_played' => 20,
+                'yellow_cards' => 1,
+                'red_cards' => 0,
             ],
         ];
 
-        // Berechne market_value_millions für alle Spieler (Division in Action statt Template)
-        $players = array_map(function ($player) {
-            $player['market_value_millions'] = round($player['market_value'] / 1000000, 1);
-            return $player;
-        }, $players);
+        // Gruppiere Spieler nach Position
+        $positions = [
+            'Torwart' => [],
+            'Abwehr' => [],
+            'Mittelfeld' => [],
+            'Sturm' => []
+        ];
 
-        // Gruppiere Spieler nach Position (deutsche Reihenfolge)
-        $positions = $this->groupPlayersByPosition($players);
+        foreach ($players as $player) {
+            $positions[$player['position']][] = $player;
+        }
 
-        // Zähle verletzte Spieler
-        $injuredCount = count(array_filter($players, fn($p) => $p['injured']));
-
-        // Berechne Team-Statistiken
-        $stats = $this->calculateTeamStats($players);
-
-        $totalMarketValue = $this->calculateTotalMarketValue($players);
+        // Team-Statistiken
+        $teamStats = [
+            'total_players' => count($players),
+            'injured_players' => count(array_filter($players, fn($p) => $p['injured'])),
+            'total_goals' => array_sum(array_column($players, 'goals')),
+            'total_assists' => array_sum(array_column($players, 'assists')),
+            'total_market_value' => array_sum(array_column($players, 'market_value')),
+            'average_age' => round(array_sum(array_column($players, 'age')) / count($players), 1),
+            'total_games' => array_sum(array_column($players, 'games_played')),
+            'top_scorer' => $this->getTopScorer($players),
+            'most_assists' => $this->getMostAssists($players),
+        ];
 
         return [
+            'app_name' => 'KickersCup Manager',
             'team' => [
                 'name' => 'FC Barcelona',
-                'players' => $players,
-                'positions' => $positions,
-                'injured_count' => $injuredCount,
-                'stats' => $stats,
-                'total_market_value' => $totalMarketValue,
-                'total_market_value_millions' => round($totalMarketValue / 1000000, 0),
+                'season' => '2023/24',
+                'formation' => '4-3-3',
+                'positions' => array_map(function ($position, $name) {
+                    return [
+                        'name' => $name,
+                        'players' => array_map(function ($player) {
+                            $player['market_value_millions'] = $player['market_value'] / 1000000;
+                            return $player;
+                        }, $position)
+                    ];
+                }, $positions, array_keys($positions)),
+                'stats' => [
+                    'players_count' => $teamStats['total_players'],
+                    'average_age' => $teamStats['average_age'],
+                    'total_goals' => $teamStats['total_goals'],
+                    'total_assists' => $teamStats['total_assists'],
+                    'wins' => 12, // Mock data
+                    'draws' => 8,
+                    'losses' => 3,
+                    'average_rating' => 7.8,
+                ],
+                'injured_count' => $teamStats['injured_players'],
+                'total_market_value_millions' => $teamStats['total_market_value'] / 1000000,
+            ],
+            'next_match' => [
+                'opponent' => 'Real Madrid',
+                'date' => '2024-02-20',
+                'time' => '21:00',
+                'venue' => 'Camp Nou'
             ]
         ];
     }
 
-    private function groupPlayersByPosition(array $players): array
+    private function getTopScorer(array $players): array
     {
-        // Deutsche Positionen in logischer Reihenfolge: Torwart -> Abwehr -> Mittelfeld -> Sturm
-        $positions = [
-            'Torwart' => ['name' => 'Torwart', 'players' => []],
-            'Abwehr' => ['name' => 'Abwehr', 'players' => []],
-            'Mittelfeld' => ['name' => 'Mittelfeld', 'players' => []],
-            'Sturm' => ['name' => 'Sturm', 'players' => []],
-        ];
+        $topScorer = null;
+        $maxGoals = 0;
 
         foreach ($players as $player) {
-            if (isset($positions[$player['position']])) {
-                $positions[$player['position']]['players'][] = $player;
+            if ($player['goals'] > $maxGoals) {
+                $maxGoals = $player['goals'];
+                $topScorer = $player;
             }
         }
 
-        // Sortiere Spieler innerhalb jeder Position nach Trikotnummer
-        foreach ($positions as &$position) {
-            usort($position['players'], fn($a, $b) => $a['shirt_number'] <=> $b['shirt_number']);
+        return $topScorer ?? [];
+    }
+
+    private function getMostAssists(array $players): array
+    {
+        $topAssist = null;
+        $maxAssists = 0;
+
+        foreach ($players as $player) {
+            if ($player['assists'] > $maxAssists) {
+                $maxAssists = $player['assists'];
+                $topAssist = $player;
+            }
         }
 
-        return array_values($positions);
-    }
-
-    private function calculateTeamStats(array $players): array
-    {
-        $totalGoals = array_sum(array_column($players, 'goals'));
-        $totalAssists = array_sum(array_column($players, 'assists'));
-        $averageAge = round(array_sum(array_column($players, 'age')) / count($players), 1);
-        $averageRating = round(array_sum(array_column($players, 'rating')) / count($players), 1);
-
-        return [
-            'players_count' => count($players),
-            'average_age' => $averageAge,
-            'average_rating' => $averageRating,
-            'total_goals' => $totalGoals,
-            'total_assists' => $totalAssists,
-            'wins' => 18, // Simuliert
-            'draws' => 6, // Simuliert
-            'losses' => 2, // Simuliert
-        ];
-    }
-
-    private function calculateTotalMarketValue(array $players): int
-    {
-        return array_sum(array_column($players, 'market_value'));
+        return $topAssist ?? [];
     }
 }

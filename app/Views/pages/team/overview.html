@@ -70,7 +70,8 @@
             {% if position.players %}
             <div class="players-grid">
                 {% for player in position.players %}
-                <div class="player-card" data-position="{{ player.position }}" data-injured="{{ player.injured ? 'true' : 'false' }}">
+                <div class="player-card" data-injured="{{ player.injured ? 'true' : 'false' }}"
+                     data-position="{{ player.position }}">
                     <!-- Player Header -->
                     <div class="player-header">
                         <div class="player-info">
@@ -448,7 +449,7 @@
 
             let show = false;
 
-            switch(filter) {
+            switch (filter) {
                 case 'all':
                     show = true;
                     break;

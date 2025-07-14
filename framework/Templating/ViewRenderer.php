@@ -16,9 +16,11 @@ readonly class ViewRenderer
 {
     public function __construct(
         private TemplateEngine $engine,
-        private Translator $translator,
-        private Csrf $csrf
-    ) {}
+        private Translator     $translator,
+        private Csrf           $csrf
+    )
+    {
+    }
 
     /**
      * Rendert Template zu Response

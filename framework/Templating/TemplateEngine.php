@@ -125,6 +125,81 @@ class TemplateEngine
     }
 
     /**
+     * Find template file
+     */
+    private function findTemplate(string $template): string
+    {
+        // Add .html extension if not present
+        if (!str_contains($template, '.')) {
+            $template .= '.html';
+        }
+
+        foreach ($this->paths as $path) {
+            // Normalize path separators
+            $normalizedPath = str_replace(['/', '\\'], DIRECTORY_SEPARATOR, $path);
+            $normalizedTemplate = str_replace(['/', '\\'], DIRECTORY_SEPARATOR, $template);
+
+            $fullPath = rtrim($normalizedPath, DIRECTORY_SEPARATOR) .
+                DIRECTORY_SEPARATOR .
+                ltrim($normalizedTemplate, DIRECTORY_SEPARATOR);
+
+            if (file_exists($fullPath)) {
+                return $fullPath;
+            }
+        }
+
+        throw new RuntimeException("Template not found: {$template} in paths: " . implode(', ', $this->paths));
+    }
+
+    /**
+     * Render from compiled structure
+     */
+    private function renderCompiled(array $compiled): string
+    {
+        // Restore state from compiled structure
+        $this->blocks = $compiled['blocks'] ?? [];
+        $this->parentTemplate = $compiled['parent_template'] ?? null;
+
+        $tokens = $compiled['tokens'] ?? [];
+
+        // Handle inheritance
+        if ($this->parentTemplate) {
+            return $this->renderWithInheritance();
+        } else {
+            return $this->renderParsed($tokens);
+        }
+    }
+
+    /**
+     * Render with inheritance - FIXED
+     */
+    private function renderWithInheritance(): string
+    {
+        // Load parent template
+        $parentPath = $this->findTemplate($this->parentTemplate);
+
+        // Track dependency
+        if (!in_array($parentPath, $this->loadedTemplates)) {
+            $this->loadedTemplates[] = $parentPath;
+        }
+
+        $parentContent = file_get_contents($parentPath);
+        $parentTokens = $this->parseTemplate($parentContent);
+
+        // Store current child blocks
+        $childBlocks = $this->blocks;
+
+        // Extract parent blocks (but don't override child blocks yet)
+        $this->extractExtendsAndBlocks($parentTokens);
+
+        // Child blocks override parent blocks
+        $this->blocks = array_merge($this->blocks, $childBlocks);
+
+        // Render parent with child blocks available
+        return $this->renderParsed($parentTokens);
+    }
+
+    /**
      * Parse template content into token structure - OPTIMIZED
      */
     private function parseTemplate(string $content): array
@@ -225,45 +300,6 @@ class TemplateEngine
 
         // Use existing parseVariableWithFilters method
         return $this->parseVariableWithFilters($expression);
-    }
-
-    /**
-     * Parse control tag {% if/for/block/etc %} - NEW
-     */
-    private function parseControlTag(string $content, array &$tagInfo): ?array
-    {
-        $controlEnd = strpos($content, '%}', $tagInfo['position']);
-        if ($controlEnd === false) {
-            return null;
-        }
-
-        $tagInfo['end'] = $controlEnd + 2;
-        $expression = trim(substr($content, $tagInfo['position'] + 2, $controlEnd - $tagInfo['position'] - 2));
-
-        return $this->parseControlExpression($expression);
-    }
-
-    /**
-     * Parse control expression and return appropriate token - NEW
-     */
-    private function parseControlExpression(string $expression): ?array
-    {
-        $parts = explode(' ', $expression, 2);
-        $command = $parts[0];
-        $args = $parts[1] ?? '';
-
-        return match ($command) {
-            'if' => ['type' => 'if', 'condition' => $args],
-            'endif' => ['type' => 'endif'],
-            'else' => ['type' => 'else'],
-            'for' => ['type' => 'for', 'expression' => $args],
-            'endfor' => ['type' => 'endfor'],
-            'block' => ['type' => 'block', 'name' => trim($args)],
-            'endblock' => ['type' => 'endblock'],
-            'extends' => ['type' => 'extends', 'template' => trim($args, '\'"')],
-            'include' => ['type' => 'include', 'template' => trim($args, '\'"')],
-            default => null
-        };
     }
 
     /**
@@ -460,6 +496,89 @@ class TemplateEngine
     }
 
     /**
+     * Parse control tag {% if/for/block/etc %} - NEW
+     */
+    private function parseControlTag(string $content, array &$tagInfo): ?array
+    {
+        $controlEnd = strpos($content, '%}', $tagInfo['position']);
+        if ($controlEnd === false) {
+            return null;
+        }
+
+        $tagInfo['end'] = $controlEnd + 2;
+        $expression = trim(substr($content, $tagInfo['position'] + 2, $controlEnd - $tagInfo['position'] - 2));
+
+        return $this->parseControlExpression($expression);
+    }
+
+    /**
+     * Parse control expression and return appropriate token - NEW
+     */
+    private function parseControlExpression(string $expression): ?array
+    {
+        $parts = explode(' ', $expression, 2);
+        $command = $parts[0];
+        $args = $parts[1] ?? '';
+
+        return match ($command) {
+            'if' => ['type' => 'if', 'condition' => $args],
+            'endif' => ['type' => 'endif'],
+            'else' => ['type' => 'else'],
+            'for' => ['type' => 'for', 'expression' => $args],
+            'endfor' => ['type' => 'endfor'],
+            'block' => ['type' => 'block', 'name' => trim($args)],
+            'endblock' => ['type' => 'endblock'],
+            'extends' => ['type' => 'extends', 'template' => trim($args, '\'"')],
+            'include' => ['type' => 'include', 'template' => trim($args, '\'"')],
+            default => null
+        };
+    }
+
+    /**
+     * Extract extends and blocks from tokens
+     */
+    private function extractExtendsAndBlocks(array $tokens): void
+    {
+        $i = 0;
+        while ($i < count($tokens)) {
+            $token = $tokens[$i];
+
+            if ($token['type'] === 'extends') {
+                $this->parentTemplate = $token['template'];
+            } elseif ($token['type'] === 'block') {
+                $blockName = $token['name'];
+                $blockData = $this->extractBlock($tokens, $i);
+                $this->blocks[$blockName] = $blockData['content'];
+                $i = $blockData['endIndex'];
+            }
+
+            $i++;
+        }
+    }
+
+    /**
+     * Extract block content
+     */
+    private function extractBlock(array $tokens, int $startIndex): array
+    {
+        $content = [];
+        $i = $startIndex + 1;
+
+        while ($i < count($tokens)) {
+            $token = $tokens[$i];
+
+            if ($token['type'] === 'endblock') {
+                break;
+            }
+
+            $content[] = $token;
+            $i++;
+        }
+
+        return ['content' => $content, 'endIndex' => $i];
+    }
+
+    /**
      * Render parsed tokens - OPTIMIZED
      */
     private function renderParsed(array $tokens): string
@@ -540,55 +659,59 @@ class TemplateEngine
     }
 
     /**
-     * Render FOR block with unified token handling - OPTIMIZED
+     * Evaluate condition for if statements
      */
-    private function renderForBlock(array $tokens, int $startIndex): array
+    private function evaluateCondition(string $condition): bool
     {
-        $expression = $tokens[$startIndex]['expression'];
-        $output = '';
+        $condition = trim($condition);
 
-        // Parse loop syntax
-        $loopData = $this->parseLoopExpression($expression);
-        if ($loopData === null) {
-            return ['output' => '', 'endIndex' => $this->findEndToken($tokens, $startIndex, 'endfor')];
+        // Simple variable check (user.isAdmin)
+        if (!str_contains($condition, ' ')) {
+            $value = $this->getValue($condition);
+            return !empty($value);
         }
 
-        $items = $this->getValue($loopData['collection']);
-        if (!is_array($items)) {
-            return ['output' => '', 'endIndex' => $this->findEndToken($tokens, $startIndex, 'endfor')];
+        // Handle basic comparisons
+        if (preg_match('/(.+?)\s*(==|!=|>|<|>=|<=)\s*(.+)/', $condition, $matches)) {
+            $left = trim($matches[1]);
+            $operator = $matches[2];
+            $right = trim($matches[3], '\'"');
+
+            $leftValue = $this->getValue($left);
+
+            return match ($operator) {
+                '==' => $leftValue == $right,
+                '!=' => $leftValue != $right,
+                '>' => $leftValue > $right,
+                '<' => $leftValue < $right,
+                '>=' => $leftValue >= $right,
+                '<=' => $leftValue <= $right,
+                default => false
+            };
         }
 
-        // Store original data
-        $originalData = $this->data;
+        return false;
+    }
 
-        foreach ($items as $key => $item) {
-            $this->data[$loopData['variable']] = $item;
-            $this->data['loop'] = ['index' => $key, 'first' => $key === 0];
+    /**
+     * Get value from data using dot notation
+     */
+    private function getValue(string $key): mixed
+    {
+        $keys = explode('.', $key);
+        $value = $this->data;
 
-            $i = $startIndex + 1;
-            while ($i < count($tokens)) {
-                $token = $tokens[$i];
-
-                if ($token['type'] === 'endfor') {
-                    break;
-                }
-
-                if (in_array($token['type'], ['if', 'for'])) {
-                    $nestedResult = $this->renderControlFlow($tokens, $i);
-                    $output .= $nestedResult['output'];
-                    $i = $nestedResult['endIndex'];
-                } else {
-                    $output .= $this->renderSingleToken($tokens, $i, $token);
-                }
-
-                $i++;
+        foreach ($keys as $keyPart) {
+            if (is_array($value) && array_key_exists($keyPart, $value)) {
+                $value = $value[$keyPart];
+            } elseif (is_object($value) && property_exists($value, $keyPart)) {
+                $value = $value->$keyPart;
+            } else {
+                return null;
             }
         }
 
-        // Restore original data
-        $this->data = $originalData;
-
-        return ['output' => $output, 'endIndex' => $this->findEndToken($tokens, $startIndex, 'endfor')];
+        return $value;
     }
 
     /**
@@ -603,50 +726,6 @@ class TemplateEngine
             'block' => $this->renderBlock($token['name'], $tokens, $index),
             default => ''
         };
-    }
-
-    /**
-     * Parse loop expression (both "item in items" and "items as item") - NEW
-     */
-    private function parseLoopExpression(string $expression): ?array
-    {
-        if (preg_match('/(\w+)\s+in\s+([\w.]+)/', $expression, $matches)) {
-            return ['variable' => $matches[1], 'collection' => $matches[2]];
-        }
-
-        if (preg_match('/([\w.]+)\s+as\s+(\w+)/', $expression, $matches)) {
-            return ['variable' => $matches[2], 'collection' => $matches[1]];
-        }
-
-        return null;
-    }
-
-    /**
-     * Find end token for control structures - NEW
-     */
-    private function findEndToken(array $tokens, int $startIndex, string $endType): int
-    {
-        $i = $startIndex + 1;
-        $nested = 0;
-
-        while ($i < count($tokens)) {
-            $token = $tokens[$i];
-
-            if ($token['type'] === $endType && $nested === 0) {
-                return $i;
-            }
-
-            // Track nesting
-            if (in_array($token['type'], ['if', 'for'])) {
-                $nested++;
-            } elseif (in_array($token['type'], ['endif', 'endfor'])) {
-                $nested--;
-            }
-
-            $i++;
-        }
-
-        return $i;
     }
 
     /**
@@ -709,27 +788,6 @@ class TemplateEngine
     }
 
     /**
-     * Get value from data using dot notation
-     */
-    private function getValue(string $key): mixed
-    {
-        $keys = explode('.', $key);
-        $value = $this->data;
-
-        foreach ($keys as $keyPart) {
-            if (is_array($value) && array_key_exists($keyPart, $value)) {
-                $value = $value[$keyPart];
-            } elseif (is_object($value) && property_exists($value, $keyPart)) {
-                $value = $value->$keyPart;
-            } else {
-                return null;
-            }
-        }
-
-        return $value;
-    }
-
-    /**
      * Check if filters contain 'raw' filter
      */
     private function hasRawFilter(array $filters): bool
@@ -745,82 +803,16 @@ class TemplateEngine
     }
 
     /**
-     * Evaluate condition for if statements
+     * Render include
      */
-    private function evaluateCondition(string $condition): bool
+    private function renderInclude(string $template): string
     {
-        $condition = trim($condition);
-
-        // Simple variable check (user.isAdmin)
-        if (!str_contains($condition, ' ')) {
-            $value = $this->getValue($condition);
-            return !empty($value);
+        try {
+            $engine = new self($this->paths, $this->cache, $this->autoEscape);
+            return $engine->render($template, $this->data);
+        } catch (\Throwable $e) {
+            return "<!-- Include error: {$template} - {$e->getMessage()} -->";
         }
-
-        // Handle basic comparisons
-        if (preg_match('/(.+?)\s*(==|!=|>|<|>=|<=)\s*(.+)/', $condition, $matches)) {
-            $left = trim($matches[1]);
-            $operator = $matches[2];
-            $right = trim($matches[3], '\'"');
-
-            $leftValue = $this->getValue($left);
-
-            return match ($operator) {
-                '==' => $leftValue == $right,
-                '!=' => $leftValue != $right,
-                '>' => $leftValue > $right,
-                '<' => $leftValue < $right,
-                '>=' => $leftValue >= $right,
-                '<=' => $leftValue <= $right,
-                default => false
-            };
-        }
-
-        return false;
-    }
-
-    /**
-     * Extract extends and blocks from tokens
-     */
-    private function extractExtendsAndBlocks(array $tokens): void
-    {
-        $i = 0;
-        while ($i < count($tokens)) {
-            $token = $tokens[$i];
-
-            if ($token['type'] === 'extends') {
-                $this->parentTemplate = $token['template'];
-            } elseif ($token['type'] === 'block') {
-                $blockName = $token['name'];
-                $blockData = $this->extractBlock($tokens, $i);
-                $this->blocks[$blockName] = $blockData['content'];
-                $i = $blockData['endIndex'];
-            }
-
-            $i++;
-        }
-    }
-
-    /**
-     * Extract block content
-     */
-    private function extractBlock(array $tokens, int $startIndex): array
-    {
-        $content = [];
-        $i = $startIndex + 1;
-
-        while ($i < count($tokens)) {
-            $token = $tokens[$i];
-
-            if ($token['type'] === 'endblock') {
-                break;
-            }
-
-            $content[] = $token;
-            $i++;
-        }
-
-        return ['content' => $content, 'endIndex' => $i];
     }
 
     /**
@@ -842,92 +834,101 @@ class TemplateEngine
     }
 
     /**
-     * Render include
+     * Render FOR block with unified token handling - OPTIMIZED
      */
-    private function renderInclude(string $template): string
+    private function renderForBlock(array $tokens, int $startIndex): array
     {
-        try {
-            $engine = new self($this->paths, $this->cache, $this->autoEscape);
-            return $engine->render($template, $this->data);
-        } catch (\Throwable $e) {
-            return "<!-- Include error: {$template} - {$e->getMessage()} -->";
-        }
-    }
+        $expression = $tokens[$startIndex]['expression'];
+        $output = '';
 
-    /**
-     * Find template file
-     */
-    private function findTemplate(string $template): string
-    {
-        // Add .html extension if not present
-        if (!str_contains($template, '.')) {
-            $template .= '.html';
+        // Parse loop syntax
+        $loopData = $this->parseLoopExpression($expression);
+        if ($loopData === null) {
+            return ['output' => '', 'endIndex' => $this->findEndToken($tokens, $startIndex, 'endfor')];
         }
 
-        foreach ($this->paths as $path) {
-            // Normalize path separators
-            $normalizedPath = str_replace(['/', '\\'], DIRECTORY_SEPARATOR, $path);
-            $normalizedTemplate = str_replace(['/', '\\'], DIRECTORY_SEPARATOR, $template);
+        $items = $this->getValue($loopData['collection']);
+        if (!is_array($items)) {
+            return ['output' => '', 'endIndex' => $this->findEndToken($tokens, $startIndex, 'endfor')];
+        }
 
-            $fullPath = rtrim($normalizedPath, DIRECTORY_SEPARATOR) .
-                DIRECTORY_SEPARATOR .
-                ltrim($normalizedTemplate, DIRECTORY_SEPARATOR);
+        // Store original data
+        $originalData = $this->data;
 
-            if (file_exists($fullPath)) {
-                return $fullPath;
+        foreach ($items as $key => $item) {
+            $this->data[$loopData['variable']] = $item;
+            $this->data['loop'] = ['index' => $key, 'first' => $key === 0];
+
+            $i = $startIndex + 1;
+            while ($i < count($tokens)) {
+                $token = $tokens[$i];
+
+                if ($token['type'] === 'endfor') {
+                    break;
+                }
+
+                if (in_array($token['type'], ['if', 'for'])) {
+                    $nestedResult = $this->renderControlFlow($tokens, $i);
+                    $output .= $nestedResult['output'];
+                    $i = $nestedResult['endIndex'];
+                } else {
+                    $output .= $this->renderSingleToken($tokens, $i, $token);
+                }
+
+                $i++;
             }
         }
 
-        throw new RuntimeException("Template not found: {$template} in paths: " . implode(', ', $this->paths));
+        // Restore original data
+        $this->data = $originalData;
+
+        return ['output' => $output, 'endIndex' => $this->findEndToken($tokens, $startIndex, 'endfor')];
     }
 
     /**
-     * Render from compiled structure
+     * Parse loop expression (both "item in items" and "items as item") - NEW
      */
-    private function renderCompiled(array $compiled): string
+    private function parseLoopExpression(string $expression): ?array
     {
-        // Restore state from compiled structure
-        $this->blocks = $compiled['blocks'] ?? [];
-        $this->parentTemplate = $compiled['parent_template'] ?? null;
-
-        $tokens = $compiled['tokens'] ?? [];
-
-        // Handle inheritance
-        if ($this->parentTemplate) {
-            return $this->renderWithInheritance();
-        } else {
-            return $this->renderParsed($tokens);
+        if (preg_match('/(\w+)\s+in\s+([\w.]+)/', $expression, $matches)) {
+            return ['variable' => $matches[1], 'collection' => $matches[2]];
         }
+
+        if (preg_match('/([\w.]+)\s+as\s+(\w+)/', $expression, $matches)) {
+            return ['variable' => $matches[2], 'collection' => $matches[1]];
+        }
+
+        return null;
     }
 
     /**
-     * Render with inheritance - FIXED
+     * Find end token for control structures - NEW
      */
-    private function renderWithInheritance(): string
+    private function findEndToken(array $tokens, int $startIndex, string $endType): int
     {
-        // Load parent template
-        $parentPath = $this->findTemplate($this->parentTemplate);
+        $i = $startIndex + 1;
+        $nested = 0;
 
-        // Track dependency
-        if (!in_array($parentPath, $this->loadedTemplates)) {
-            $this->loadedTemplates[] = $parentPath;
+        while ($i < count($tokens)) {
+            $token = $tokens[$i];
+
+            if ($token['type'] === $endType && $nested === 0) {
+                return $i;
+            }
+
+            // Track nesting
+            if (in_array($token['type'], ['if', 'for'])) {
+                $nested++;
+            } elseif (in_array($token['type'], ['endif', 'endfor'])) {
+                $nested--;
+            }
+
+            $i++;
         }
 
-        $parentContent = file_get_contents($parentPath);
-        $parentTokens = $this->parseTemplate($parentContent);
-
-        // Store current child blocks
-        $childBlocks = $this->blocks;
-
-        // Extract parent blocks (but don't override child blocks yet)
-        $this->extractExtendsAndBlocks($parentTokens);
-
-        // Child blocks override parent blocks
-        $this->blocks = array_merge($this->blocks, $childBlocks);
-
-        // Render parent with child blocks available
-        return $this->renderParsed($parentTokens);
+        return $i;
     }
+
     /**
      * Clear cache
      */

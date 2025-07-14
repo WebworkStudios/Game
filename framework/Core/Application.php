@@ -61,20 +61,6 @@ class Application
     }
 
     /**
-     * Get Application instance for static access
-     *
-     * @deprecated Use dependency injection instead
-     */
-    public static function getInstance(): self
-    {
-        if (self::$instance === null) {
-            throw new RuntimeException('Application not initialized');
-        }
-
-        return self::$instance;
-    }
-
-    /**
      * Bootstrap Framework Components
      */
     private function bootstrap(): void
@@ -180,22 +166,6 @@ class Application
     }
 
     /**
-     * Get ResponseFactory service
-     */
-    public function getResponseFactory(): ResponseFactory
-    {
-        return $this->container->get(ResponseFactory::class);
-    }
-
-    /**
-     * Get Container for DI
-     */
-    public function getContainer(): ServiceContainer
-    {
-        return $this->container;
-    }
-
-    /**
      * Register Instance
      */
     public function instance(string $abstract, mixed $instance): self
@@ -211,6 +181,14 @@ class Application
     {
         $this->container->singleton($abstract, $concrete);
         return $this;
+    }
+
+    /**
+     * Generic Service Access
+     */
+    public function get(string $abstract): mixed
+    {
+        return $this->container->get($abstract);
     }
 
     /**
@@ -234,14 +212,6 @@ class Application
         $this->container->singleton('session', fn() => $this->container->get(Session::class));
         $this->container->singleton('session_security', fn() => $this->container->get(SessionSecurity::class));
         $this->container->singleton('csrf', fn() => $this->container->get(Csrf::class));
-    }
-
-    /**
-     * Generic Service Access
-     */
-    public function get(string $abstract): mixed
-    {
-        return $this->container->get($abstract);
     }
 
     /**
@@ -280,6 +250,44 @@ class Application
 
         // Globale Middleware registrieren (falls konfiguriert)
         // $this->router->addGlobalMiddleware(SomeMiddleware::class);
+    }
+
+    /**
+     * Get Application instance for static access
+     *
+     * @deprecated Use dependency injection instead
+     */
+    public static function getInstance(): self
+    {
+        if (self::$instance === null) {
+            throw new RuntimeException('Application not initialized');
+        }
+
+        return self::$instance;
+    }
+
+    /**
+     * Get application base path
+     */
+    public function getBasePath(): string
+    {
+        return $this->basePath;
+    }
+
+    /**
+     * Get ResponseFactory service
+     */
+    public function getResponseFactory(): ResponseFactory
+    {
+        return $this->container->get(ResponseFactory::class);
+    }
+
+    /**
+     * Get Container for DI
+     */
+    public function getContainer(): ServiceContainer
+    {
+        return $this->container;
     }
 
     /**
@@ -390,6 +398,18 @@ class Application
     }
 
     /**
+     * Format bytes to human readable format
+     */
+    private function formatBytes(int $bytes, int $precision = 2): string
+    {
+        $units = ['B', 'KB', 'MB', 'GB', 'TB'];
+        for ($i = 0; $bytes > 1024 && $i < count($units) - 1; $i++) {
+            $bytes /= 1024;
+        }
+        return round($bytes, $precision) . ' ' . $units[$i];
+    }
+
+    /**
      * Render Production Error - Shows generic error in production
      */
     private function renderProductionError(Throwable $e, Request $request): Response
@@ -426,31 +446,11 @@ class Application
     }
 
     /**
-     * Format bytes to human readable format
-     */
-    private function formatBytes(int $bytes, int $precision = 2): string
-    {
-        $units = ['B', 'KB', 'MB', 'GB', 'TB'];
-        for ($i = 0; $bytes > 1024 && $i < count($units) - 1; $i++) {
-            $bytes /= 1024;
-        }
-        return round($bytes, $precision) . ' ' . $units[$i];
-    }
-
-    /**
      * Set error handler
      */
     public function setErrorHandler(callable $handler): void
     {
         $this->errorHandler = $handler;
-    }
-
-    /**
-     * Set 404 Not Found handler
-     */
-    public function setNotFoundHandler(callable $handler): void
-    {
-        $this->notFoundHandler = $handler;
     }
 
     /**
@@ -462,11 +462,11 @@ class Application
     }
 
     /**
-     * Set debug mode
+     * Set 404 Not Found handler
      */
-    public function setDebug(bool $debug): void
+    public function setNotFoundHandler(callable $handler): void
     {
-        $this->debug = $debug;
+        $this->notFoundHandler = $handler;
     }
 
     /**
@@ -475,6 +475,14 @@ class Application
     public function isDebug(): bool
     {
         return $this->debug;
+    }
+
+    /**
+     * Set debug mode
+     */
+    public function setDebug(bool $debug): void
+    {
+        $this->debug = $debug;
     }
 
     /**

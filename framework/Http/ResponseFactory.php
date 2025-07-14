@@ -23,24 +23,20 @@ readonly class ResponseFactory
     }
 
     /**
-     * Template Response Factory
+     * Template Response with JSON fallback
      */
-    public function view(
+    public function viewOrJson(
         string     $template,
         array      $data = [],
-        HttpStatus $status = HttpStatus::OK,
-        array      $headers = []
+        bool       $wantsJson = false,
+        HttpStatus $status = HttpStatus::OK
     ): Response
     {
-        try {
-            return $this->viewRenderer->render($template, $data, $status, $headers);
-        } catch (\Throwable $e) {
-            // Fallback: Use TemplateEngine directly
-            $content = $this->engine->render($template, $data);
-
-            $headers['Content-Type'] = 'text/html; charset=UTF-8';
-            return new Response($status, $headers, $content);
+        if ($wantsJson) {
+            return $this->json($data, $status);
         }
+
+        return $this->view($template, $data, $status);
     }
 
     /**
@@ -65,32 +61,24 @@ readonly class ResponseFactory
     }
 
     /**
-     * Redirect Response Factory
+     * Template Response Factory
      */
-    public function redirect(string $url, HttpStatus $status = HttpStatus::FOUND): Response
-    {
-        if (!$status->isRedirect()) {
-            throw new InvalidArgumentException('Status code must be a redirect status');
-        }
-
-        return new Response($status, ['Location' => $url]);
-    }
-
-    /**
-     * Template Response with JSON fallback
-     */
-    public function viewOrJson(
+    public function view(
         string     $template,
         array      $data = [],
-        bool       $wantsJson = false,
-        HttpStatus $status = HttpStatus::OK
+        HttpStatus $status = HttpStatus::OK,
+        array      $headers = []
     ): Response
     {
-        if ($wantsJson) {
-            return $this->json($data, $status);
-        }
+        try {
+            return $this->viewRenderer->render($template, $data, $status, $headers);
+        } catch (\Throwable $e) {
+            // Fallback: Use TemplateEngine directly
+            $content = $this->engine->render($template, $data);
 
-        return $this->view($template, $data, $status);
+            $headers['Content-Type'] = 'text/html; charset=UTF-8';
+            return new Response($status, $headers, $content);
+        }
     }
 
     /**
@@ -114,6 +102,18 @@ readonly class ResponseFactory
     public function temporaryRedirect(string $url): Response
     {
         return $this->redirect($url, HttpStatus::TEMPORARY_REDIRECT);
+    }
+
+    /**
+     * Redirect Response Factory
+     */
+    public function redirect(string $url, HttpStatus $status = HttpStatus::FOUND): Response
+    {
+        if (!$status->isRedirect()) {
+            throw new InvalidArgumentException('Status code must be a redirect status');
+        }
+
+        return new Response($status, ['Location' => $url]);
     }
 
     public function badRequest(string $body = 'Bad Request', array $headers = []): Response

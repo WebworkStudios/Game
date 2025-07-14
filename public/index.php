@@ -6,9 +6,9 @@ declare(strict_types=1);
 require_once __DIR__ . '/../vendor/autoload.php';
 
 use Framework\Core\Application;
+use Framework\Http\HttpStatus;
 use Framework\Http\Request;
 use Framework\Http\Response;
-use Framework\Http\HttpStatus;
 
 // Error Reporting für Development
 error_reporting(E_ALL);
