@@ -9,6 +9,7 @@ use Framework\Core\Application;
 use Framework\Http\HttpStatus;
 use Framework\Http\Request;
 use Framework\Http\Response;
+use Framework\Routing\Router;
 
 // Error Reporting für Development
 error_reporting(E_ALL);
@@ -30,8 +31,9 @@ try {
         return null;
     });
 
-    // Custom 404 Handler
-    $app->setNotFoundHandler(function (Request $request) {
+    // Custom 404 Handler - Direkt über Router setzen
+    $router = $app->getContainer()->get(Router::class);
+    $router->setNotFoundHandler(function (Request $request) {
         if ($request->expectsJson() || str_starts_with($request->getPath(), '/api/')) {
             return Response::json([
                 'error' => 'Route not found',

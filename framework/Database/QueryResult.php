@@ -136,14 +136,6 @@ class QueryResult implements Iterator, Countable
     }
 
     /**
-     * Prüft ob Ergebnisse vorhanden sind
-     */
-    public function isNotEmpty(): bool
-    {
-        return !$this->isEmpty();
-    }
-
-    /**
      * Prüft ob Ergebnisse leer sind
      */
     public function isEmpty(): bool

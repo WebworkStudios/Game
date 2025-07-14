@@ -36,7 +36,6 @@ class Application
     private const string DEFAULT_TIMEZONE = 'UTC';
     private const string DEFAULT_CHARSET = 'UTF-8';
 
-    private static ?Application $instance = null;
 
     private ServiceContainer $container;
     private Router $router;
@@ -46,16 +45,10 @@ class Application
     /** @var callable|null */
     private $errorHandler = null;
 
-    /** @var callable|null */
-    private $notFoundHandler = null;
-
     public function __construct(string $basePath)
     {
         $this->basePath = rtrim($basePath, '/');
         $this->container = new ServiceContainer();
-
-        // Set static instance for transition period
-        self::$instance = $this;
 
         $this->bootstrap();
     }
@@ -260,19 +253,7 @@ class Application
         // $this->router->addGlobalMiddleware(SomeMiddleware::class);
     }
 
-    /**
-     * Get Application instance for static access
-     *
-     * @deprecated Use dependency injection instead
-     */
-    public static function getInstance(): self
-    {
-        if (self::$instance === null) {
-            throw new RuntimeException('Application not initialized');
-        }
 
-        return self::$instance;
-    }
 
     /**
      * Get application base path
@@ -369,23 +350,6 @@ class Application
     {
         $this->errorHandler = $handler;
         return $this;
-    }
-
-    /**
-     * Set custom not found handler
-     */
-    public function setNotFoundHandler(callable $handler): self
-    {
-        $this->notFoundHandler = $handler;
-        return $this;
-    }
-
-    /**
-     * Get custom not found handler
-     */
-    public function getNotFoundHandler(): ?callable
-    {
-        return $this->notFoundHandler;
     }
 
     /**
