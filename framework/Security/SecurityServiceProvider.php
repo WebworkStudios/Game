@@ -301,53 +301,6 @@ PHP;
     }
 
     /**
-     * Gets all security-related services for external access
-     */
-    public function getSecurityServices(): array
-    {
-        return [
-            'session' => $this->getSessionService(),
-            'session_security' => $this->getSessionSecurityService(),
-            'csrf' => $this->getCsrfService(),
-        ];
-    }
-
-    /**
-     * Hilfsmethoden für Application-Klasse
-     */
-    public function getSessionService(): Session
-    {
-        return $this->container->get(Session::class);
-    }
-
-    public function getSessionSecurityService(): SessionSecurity
-    {
-        return $this->container->get(SessionSecurity::class);
-    }
-
-    public function getCsrfService(): Csrf
-    {
-        return $this->container->get(Csrf::class);
-    }
-
-    /**
-     * Validates and prepares production configuration
-     */
-    public function prepareProductionConfig(): array
-    {
-        $config = $this->loadSecurityConfig();
-
-        // Force secure settings in production
-        $config['session']['secure'] = true;
-        $config['session']['httponly'] = true;
-        $config['session']['samesite'] = 'Strict';
-        $config['csrf']['require_https'] = true;
-        $config['csrf']['strict_mode'] = true;
-
-        return $config;
-    }
-
-    /**
      * Validiert Security-Konfiguration
      */
     private function validateConfig(array $config): bool
