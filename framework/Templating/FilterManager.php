@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Framework\Templating;
 
+use Framework\Localization\Translator;
 use RuntimeException;
 
 /**
@@ -14,8 +15,9 @@ class FilterManager
     private array $filters = [];
     private array $lazyFilters = [];
 
-    public function __construct()
-    {
+    public function __construct(
+        private ?Translator $translator = null
+    ) {
         // Register lazy filter definitions (no instantiation yet)
         $this->registerLazyFilters();
     }
@@ -55,87 +57,37 @@ class FilterManager
         $this->lazyFilters['first'] = fn() => [$this, 'firstFilter'];
         $this->lazyFilters['last'] = fn() => [$this, 'lastFilter'];
 
-        // Translation filters (heavy - definitely lazy load)
-        $this->lazyFilters['t'] = fn() => [$this, 'translateFilter'];
-        $this->lazyFilters['t_plural'] = fn() => [$this, 'translatePluralFilter'];
-
-        // *** XSS-SCHUTZ FILTER ***
-        $this->lazyFilters['escape'] = fn() => [$this, 'escapeFilter'];
-        $this->lazyFilters['e'] = fn() => [$this, 'escapeFilter']; // Alias
+        // Translation filters (only if translator is available)
+        if ($this->translator !== null) {
+            $this->lazyFilters['t'] = fn() => [$this, 'translateFilter'];
+            $this->lazyFilters['translate'] = fn() => [$this, 'translateFilter'];
+            $this->lazyFilters['tp'] = fn() => [$this, 'translatePluralFilter'];
+            $this->lazyFilters['translate_plural'] = fn() => [$this, 'translatePluralFilter'];
+        }
     }
 
     /**
-     * Wendet Filter auf Wert an (mit Lazy Loading und verbesserter Fehlerbehandlung)
+     * Apply filter to value
      */
     public function apply(string $filterName, mixed $value, array $parameters = []): mixed
     {
-        // Load filter on-demand
+        // Load filter if not already loaded
         if (!isset($this->filters[$filterName])) {
             $this->loadFilter($filterName);
         }
 
         if (!isset($this->filters[$filterName])) {
-            // Check if it looks like function syntax (contains parentheses)
-            if (str_contains($filterName, '(') && str_contains($filterName, ')')) {
-                // Extract actual filter name from function-like syntax
-                $actualFilterName = preg_replace('/\([^)]*\)/', '', $filterName);
-
-                throw new RuntimeException(
-                    "Unknown filter: '{$filterName}'. " .
-                    "Template syntax uses colon separators, not parentheses. " .
-                    "Try: |{$actualFilterName}:param instead of |{$filterName}"
-                );
-            }
-
-            // Check for common typos or similar filter names
-            $suggestion = $this->suggestSimilarFilter($filterName);
-            $errorMessage = "Unknown filter: '{$filterName}'";
-
-            if ($suggestion) {
-                $errorMessage .= ". Did you mean '{$suggestion}'?";
-            }
-
-            throw new RuntimeException($errorMessage);
+            throw new RuntimeException("Filter '{$filterName}' not found");
         }
 
         $filter = $this->filters[$filterName];
-        return call_user_func($filter, $value, ...$parameters);
+
+        // Apply filter
+        return $filter($value, ...$parameters);
     }
 
     /**
-     * Schlägt ähnliche Filter-Namen vor bei Tippfehlern
-     */
-    private function suggestSimilarFilter(string $filterName): ?string
-    {
-        $availableFilters = array_keys($this->lazyFilters);
-        $lowerFilterName = strtolower($filterName);
-
-        // Exact match case-insensitive
-        foreach ($availableFilters as $available) {
-            if (strtolower($available) === $lowerFilterName) {
-                return $available;
-            }
-        }
-
-        // Levenshtein distance for typos
-        $closest = null;
-        $shortestDistance = PHP_INT_MAX;
-
-        foreach ($availableFilters as $available) {
-            $distance = levenshtein($lowerFilterName, strtolower($available));
-
-            // Only suggest if distance is small (max 2 character difference)
-            if ($distance < $shortestDistance && $distance <= 2) {
-                $shortestDistance = $distance;
-                $closest = $available;
-            }
-        }
-
-        return $closest;
-    }
-
-    /**
-     * Lädt einen Filter bei Bedarf
+     * Load filter lazily
      */
     private function loadFilter(string $filterName): void
     {
@@ -143,16 +95,12 @@ class FilterManager
             return;
         }
 
-        // Execute lazy loader
-        $loader = $this->lazyFilters[$filterName];
-        $this->filters[$filterName] = $loader();
-
-        // Performance: Remove lazy definition after loading
-        unset($this->lazyFilters[$filterName]);
+        $factory = $this->lazyFilters[$filterName];
+        $this->filters[$filterName] = $factory();
     }
 
     /**
-     * Prüft ob Filter existiert (inklusive Lazy)
+     * Check if filter exists
      */
     public function has(string $filterName): bool
     {
@@ -160,112 +108,26 @@ class FilterManager
     }
 
     /**
-     * Holt alle verfügbaren Filter (ohne sie zu laden)
+     * Register custom filter
      */
-    public function getAvailableFilters(): array
+    public function register(string $name, callable $filter): void
     {
-        return array_merge(
+        $this->filters[$name] = $filter;
+    }
+
+    /**
+     * Get all available filter names
+     */
+    public function getFilterNames(): array
+    {
+        return array_unique(array_merge(
             array_keys($this->filters),
             array_keys($this->lazyFilters)
-        );
+        ));
     }
 
-    /**
-     * Holt geladene Filter (für Performance-Monitoring)
-     */
-    public function getLoadedFilters(): array
-    {
-        return array_keys($this->filters);
-    }
+    // Filter Implementations
 
-    /**
-     * Registriert einen neuen Filter (sofort geladen)
-     */
-    public function register(string $name, callable $callback): void
-    {
-        $this->filters[$name] = $callback;
-    }
-
-    /**
-     * Registriert einen Lazy Filter
-     */
-    public function registerLazy(string $name, callable $loader): void
-    {
-        $this->lazyFilters[$name] = $loader;
-    }
-
-    // ===================================================================
-    // FILTER IMPLEMENTATIONS
-    // ===================================================================
-
-    /**
-     * Raw Filter - Gibt Inhalt ohne HTML-Escaping aus
-     */
-    private function rawFilter(mixed $value): mixed
-    {
-        // Raw Filter macht nichts - verhindert nur das automatische Escaping
-        return $value;
-    }
-
-    /**
-     * Escape Filter - Explizites HTML-Escaping mit verschiedenen Strategien
-     */
-    private function escapeFilter(mixed $value, string $strategy = 'html'): mixed
-    {
-        if (!is_string($value)) {
-            return $value;
-        }
-
-        return match ($strategy) {
-            'html' => htmlspecialchars(
-                $value,
-                ENT_QUOTES | ENT_HTML5 | ENT_SUBSTITUTE,
-                'UTF-8',
-                true
-            ),
-            'attr' => htmlspecialchars(
-                $value,
-                ENT_QUOTES | ENT_HTML5 | ENT_SUBSTITUTE,
-                'UTF-8',
-                true
-            ),
-            'js', 'json' => $this->jsonFilter($value), // Nutze existierenden jsonFilter
-            'css' => $this->escapeCss($value),
-            'url' => rawurlencode($value),
-            default => htmlspecialchars(
-                $value,
-                ENT_QUOTES | ENT_HTML5 | ENT_SUBSTITUTE,
-                'UTF-8',
-                true
-            ),
-        };
-    }
-
-    /**
-     * JSON Filter - Konvertiert Array zu JSON-String
-     */
-    private function jsonFilter(mixed $value, int $flags = JSON_UNESCAPED_UNICODE): string
-    {
-        try {
-            return json_encode($value, JSON_THROW_ON_ERROR | $flags);
-        } catch (\JsonException $e) {
-            error_log("JSON filter error: " . $e->getMessage());
-            return '{}'; // Fallback
-        }
-    }
-
-    /**
-     * CSS-String escaping
-     */
-    private function escapeCss(string $value): string
-    {
-        // Entferne gefährliche CSS-Zeichen
-        return preg_replace('/[^a-zA-Z0-9\-_\s]/', '', $value);
-    }
-
-    /**
-     * Truncate Filter - Kürzt Text mit Ellipsis
-     */
     private function truncateFilter(string $value, int $length = 100, string $suffix = '...'): string
     {
         if (mb_strlen($value) <= $length) {
@@ -275,94 +137,43 @@ class FilterManager
         return mb_substr($value, 0, $length) . $suffix;
     }
 
-    /**
-     * Default Filter - Fallback-Wert bei leerem/null Wert
-     */
-    private function defaultFilter(mixed $value, string $default = ''): mixed
+    private function defaultFilter(mixed $value, mixed $default = ''): mixed
     {
-        if ($value === null || $value === '' || (is_array($value) && empty($value))) {
-            return $default;
-        }
+        return $value ?? $default;
+    }
 
+    private function rawFilter(mixed $value): mixed
+    {
         return $value;
     }
 
-    /**
-     * Number Format Filter - Formatiert Zahlen
-     */
-    private function numberFormatFilter(
-        mixed  $value,
-        int    $decimals = 0,
-        string $decimalSeparator = '.',
-        string $thousandsSeparator = ','
-    ): string
+    private function numberFormatFilter(float $value, int $decimals = 2, string $decimalPoint = ',', string $thousandsSeparator = '.'): string
     {
-        if (!is_numeric($value)) {
-            return (string)$value;
-        }
-
-        return number_format((float)$value, $decimals, $decimalSeparator, $thousandsSeparator);
+        return number_format($value, $decimals, $decimalPoint, $thousandsSeparator);
     }
 
-    /**
-     * Currency Filter - Formatiert Währungen
-     */
-    private function currencyFilter(
-        mixed  $value,
-        string $currency = '€',
-        string $position = 'right',
-        int    $decimals = 2
-    ): string
+    private function currencyFilter(float $value, string $currency = 'EUR', string $locale = 'de_DE'): string
     {
-        if (!is_numeric($value)) {
-            return (string)$value;
-        }
-
-        $formatted = number_format((float)$value, $decimals, '.', ',');
-
-        return match ($position) {
-            'left' => $currency . $formatted,
-            'right' => $formatted . ' ' . $currency,
-            default => $formatted . ' ' . $currency,
-        };
+        return $this->numberFormatFilter($value, 2) . ' ' . $currency;
     }
 
-    /**
-     * Date Filter - Formatiert Datum
-     */
     private function dateFilter(mixed $value, string $format = 'Y-m-d H:i:s'): string
     {
-        if (empty($value)) {
-            return '';
+        if ($value instanceof \DateTimeInterface) {
+            return $value->format($format);
         }
 
         if (is_string($value)) {
-            $timestamp = strtotime($value);
-            if ($timestamp === false) {
-                return $value; // Return original if parsing fails
-            }
-        } elseif (is_int($value)) {
-            $timestamp = $value;
-        } else {
-            return (string)$value;
+            return date($format, strtotime($value));
         }
 
-        return date($format, $timestamp);
+        if (is_int($value)) {
+            return date($format, $value);
+        }
+
+        return (string) $value;
     }
 
-    /**
-     * Plural Filter - Singular/Plural basierend auf Anzahl
-     */
-    private function pluralFilter(mixed $value, string $singular, string $plural): string
-    {
-        $count = is_numeric($value) ? (int)$value : $this->lengthFilter($value);
-
-        return $count === 1 ? $singular : $plural;
-    }
-
-    /**
-     * Length/Count Filter - Gibt Länge von String/Array zurück
-     */
     private function lengthFilter(mixed $value): int
     {
         if (is_string($value)) {
@@ -376,100 +187,66 @@ class FilterManager
         return 0;
     }
 
-    /**
-     * Slug Filter - URL-freundliche Strings für SEO
-     */
+    private function pluralFilter(int $count, string $singular, string $plural): string
+    {
+        return $count === 1 ? $singular : $plural;
+    }
+
     private function slugFilter(string $value): string
     {
-        // Convert to lowercase
-        $slug = strtolower($value);
-
-        // Replace umlauts and special characters
-        $replacements = [
-            'ä' => 'ae', 'ö' => 'oe', 'ü' => 'ue', 'ß' => 'ss',
-            'à' => 'a', 'á' => 'a', 'â' => 'a', 'ã' => 'a', 'å' => 'a',
-            'è' => 'e', 'é' => 'e', 'ê' => 'e', 'ë' => 'e',
-            'ì' => 'i', 'í' => 'i', 'î' => 'i', 'ï' => 'i',
-            'ò' => 'o', 'ó' => 'o', 'ô' => 'o', 'õ' => 'o',
-            'ù' => 'u', 'ú' => 'u', 'û' => 'u',
-            'ý' => 'y', 'ÿ' => 'y',
-            'ñ' => 'n', 'ç' => 'c',
-        ];
-
-        $slug = strtr($slug, $replacements);
-
-        // Remove non-alphanumeric characters (except hyphens)
-        $slug = preg_replace('/[^a-z0-9\-]/', '-', $slug);
-
-        // Remove multiple consecutive hyphens
-        $slug = preg_replace('/-+/', '-', $slug);
-
-        // Trim hyphens from start and end
-        $slug = trim($slug, '-');
-
-        return $slug;
+        $value = strtolower($value);
+        $value = preg_replace('/[^a-z0-9]+/', '-', $value);
+        return trim($value, '-');
     }
 
-    /**
-     * Newline to BR Filter - Konvertiert \n zu <br> Tags
-     */
     private function nl2brFilter(string $value): string
     {
-        return nl2br($value, true); // XHTML compliant <br />
+        return nl2br($value);
     }
 
-    /**
-     * Strip Tags Filter - Entfernt HTML-Tags
-     */
     private function stripTagsFilter(string $value, string $allowedTags = ''): string
     {
         return strip_tags($value, $allowedTags);
     }
 
-    /**
-     * First Filter - Erstes Element eines Arrays
-     */
+    private function jsonFilter(mixed $value): string
+    {
+        return json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    }
+
     private function firstFilter(mixed $value): mixed
     {
-        if (is_array($value) && !empty($value)) {
-            return reset($value); // Erstes Element
+        if (is_array($value)) {
+            return reset($value);
         }
 
-        if (is_string($value) && strlen($value) > 0) {
-            return $value[0]; // Erster Buchstabe
+        if (is_string($value)) {
+            return $value[0] ?? null;
         }
 
         return null;
     }
 
-    /**
-     * Last Filter - Letztes Element eines Arrays
-     */
     private function lastFilter(mixed $value): mixed
     {
-        if (is_array($value) && !empty($value)) {
-            return end($value); // Letztes Element
+        if (is_array($value)) {
+            return end($value);
         }
 
-        if (is_string($value) && strlen($value) > 0) {
-            return $value[strlen($value) - 1]; // Letzter Buchstabe
+        if (is_string($value)) {
+            return $value[strlen($value) - 1] ?? null;
         }
 
         return null;
     }
 
     /**
-     * Translation Filter - Lazy loaded mit ServiceRegistry
+     * Translation Filter - Uses injected translator
      */
     private function translateFilter(string $key, mixed ...$args): string
     {
-        static $translator = null;
-        if ($translator === null) {
-            try {
-                $translator = \Framework\Core\ServiceRegistry::get(\Framework\Localization\Translator::class);
-            } catch (\Throwable) {
-                return $key;
-            }
+        if ($this->translator === null) {
+            return $key;
         }
 
         $parameters = [];
@@ -477,23 +254,18 @@ class FilterManager
             $parameters = $args[0];
         }
 
-        return $translator->translate($key, $parameters);
+        return $this->translator->translate($key, $parameters);
     }
 
     /**
-     * Translation Plural Filter - Lazy loaded
+     * Translation Plural Filter - Uses injected translator
      */
     private function translatePluralFilter(string $key, int $count, array $parameters = []): string
     {
-        static $translator = null;
-        if ($translator === null) {
-            try {
-                $translator = \Framework\Core\ServiceRegistry::get(\Framework\Localization\Translator::class);
-            } catch (\Throwable) {
-                return $key;
-            }
+        if ($this->translator === null) {
+            return $key;
         }
 
-        return $translator->translatePlural($key, $count, $parameters);
+        return $this->translator->translatePlural($key, $count, $parameters);
     }
 }

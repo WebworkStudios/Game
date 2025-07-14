@@ -937,14 +937,6 @@ class TemplateEngine
     }
 
     /**
-     * Get cache statistics
-     */
-    public function getCacheStats(): array
-    {
-        return $this->cache->getStats();
-    }
-
-    /**
      * Invalidate cache by tag
      */
     public function invalidateByTag(string $tag): int

@@ -9,6 +9,7 @@ use Framework\Database\DatabaseServiceProvider;
 use Framework\Http\HttpStatus;
 use Framework\Http\Request;
 use Framework\Http\Response;
+use Framework\Http\ResponseFactory;
 use Framework\Localization\LocalizationServiceProvider;
 use Framework\Localization\Translator;
 use Framework\Routing\Router;
@@ -35,6 +36,8 @@ class Application
     private const string DEFAULT_TIMEZONE = 'UTC';
     private const string DEFAULT_CHARSET = 'UTF-8';
 
+    private static ?Application $instance = null;
+
     private ServiceContainer $container;
     private Router $router;
     private bool $debug = false;
@@ -51,7 +54,24 @@ class Application
         $this->basePath = rtrim($basePath, '/');
         $this->container = new ServiceContainer();
 
+        // Set static instance for transition period
+        self::$instance = $this;
+
         $this->bootstrap();
+    }
+
+    /**
+     * Get Application instance for static access
+     *
+     * @deprecated Use dependency injection instead
+     */
+    public static function getInstance(): self
+    {
+        if (self::$instance === null) {
+            throw new RuntimeException('Application not initialized');
+        }
+
+        return self::$instance;
     }
 
     /**
@@ -142,7 +162,13 @@ class Application
         $this->container->instance(Application::class, $this);
         $this->container->instance(static::class, $this);
 
-        ServiceRegistry::setContainer($this->container);
+        // ResponseFactory registrieren
+        $this->container->singleton(ResponseFactory::class, function (ServiceContainer $container) {
+            return new ResponseFactory(
+                viewRenderer: $container->get(ViewRenderer::class),
+                engine: $container->get(TemplateEngine::class)
+            );
+        });
 
         // RouterCache registrieren
         $this->container->singleton(RouterCache::class, function () {
@@ -151,6 +177,22 @@ class Application
                 actionsPath: $this->basePath . '/app/Actions'
             );
         });
+    }
+
+    /**
+     * Get ResponseFactory service
+     */
+    public function getResponseFactory(): ResponseFactory
+    {
+        return $this->container->get(ResponseFactory::class);
+    }
+
+    /**
+     * Get Container for DI
+     */
+    public function getContainer(): ServiceContainer
+    {
+        return $this->container;
     }
 
     /**
@@ -236,72 +278,29 @@ class Application
     {
         $this->router = $this->container->get(Router::class);
 
-        // Globale Middleware registrieren (falls die Methoden existieren)
-        if (method_exists($this->router, 'addGlobalMiddleware')) {
-            $this->router->addGlobalMiddleware(\Framework\Security\SessionMiddleware::class);
-            $this->router->addGlobalMiddleware(\Framework\Security\CsrfMiddleware::class);
-        }
-
-        // 404 Handler setzen (falls die Methode existiert)
-        if (method_exists($this->router, 'setNotFoundHandler')) {
-            $this->router->setNotFoundHandler(function (Request $request) {
-                return $this->handleNotFound($request);
-            });
-        }
-    }
-
-    /**
-     * Handle 404 Not Found
-     */
-    private function handleNotFound(Request $request): Response
-    {
-        if ($this->notFoundHandler) {
-            $response = ($this->notFoundHandler)($request);
-            if ($response instanceof Response) {
-                return $response;
-            }
-        }
-
-        if ($request->expectsJson()) {
-            return Response::json([
-                'error' => 'Route not found',
-                'path' => $request->getPath(),
-                'method' => $request->getMethod()->value,
-            ], HttpStatus::NOT_FOUND);
-        }
-
-        return Response::notFound('Page Not Found');
+        // Globale Middleware registrieren (falls konfiguriert)
+        // $this->router->addGlobalMiddleware(SomeMiddleware::class);
     }
 
     /**
      * Run Application
      */
-    public function run(): void
-    {
-        $request = Request::fromGlobals();
-        $response = $this->handle($request);
-        $response->send();
-    }
-
-    /**
-     * Handle HTTP Request
-     */
-    public function handle(Request $request): Response
+    public function run(Request $request): Response
     {
         try {
-            return $this->router->handle($request);
+            return $this->router->handle($request);  // ← handle statt dispatch
         } catch (Throwable $e) {
             return $this->handleException($e, $request);
         }
     }
 
     /**
-     * Handle Exceptions
+     * Handle exceptions
      */
     private function handleException(Throwable $e, Request $request): Response
     {
         // Custom Error Handler
-        if ($this->errorHandler) {
+        if ($this->errorHandler !== null) {
             $customResponse = ($this->errorHandler)($e, $request);
             if ($customResponse instanceof Response) {
                 return $customResponse;
@@ -327,13 +326,13 @@ class Application
     }
 
     /**
-     * Render Debug Error
+     * Render Debug Error - Shows detailed error information in development
      */
     private function renderDebugError(Throwable $e, Request $request): Response
     {
         $html = sprintf('
             <!DOCTYPE html>
-            <html lang=de>
+            <html lang="de">
             <head>
                 <title>Error - %s</title>
                 <style>
@@ -341,6 +340,8 @@ class Application
                     .error { background: #fff; padding: 20px; border-left: 5px solid #ff0000; }
                     .trace { background: #f0f0f0; padding: 10px; margin-top: 20px; }
                     pre { white-space: pre-wrap; }
+                    .request-info { background: #e8f4fd; padding: 15px; margin-top: 20px; }
+                    .context { background: #fff3cd; padding: 15px; margin-top: 20px; }
                 </style>
             </head>
             <body>
@@ -350,6 +351,21 @@ class Application
                     <p><strong>Line:</strong> %d</p>
                     <p><strong>Message:</strong> %s</p>
                 </div>
+                
+                <div class="request-info">
+                    <h3>Request Information:</h3>
+                    <p><strong>Method:</strong> %s</p>
+                    <p><strong>URI:</strong> %s</p>
+                    <p><strong>User Agent:</strong> %s</p>
+                </div>
+                
+                <div class="context">
+                    <h3>Context:</h3>
+                    <p><strong>Debug Mode:</strong> %s</p>
+                    <p><strong>PHP Version:</strong> %s</p>
+                    <p><strong>Memory Usage:</strong> %s</p>
+                </div>
+                
                 <div class="trace">
                     <h3>Stack Trace:</h3>
                     <pre>%s</pre>
@@ -361,59 +377,84 @@ class Application
             htmlspecialchars($e->getFile()),
             $e->getLine(),
             htmlspecialchars($e->getMessage()),
+            htmlspecialchars($request->getMethod()->value),
+            htmlspecialchars($request->getUri()),
+            htmlspecialchars($request->getHeader('User-Agent') ?? 'Unknown'),
+            $this->debug ? 'Enabled' : 'Disabled',
+            PHP_VERSION,
+            $this->formatBytes(memory_get_usage(true)),
             htmlspecialchars($e->getTraceAsString())
         );
 
-        return Response::serverError($html);
+        return new Response(HttpStatus::INTERNAL_SERVER_ERROR, [], $html);
     }
 
     /**
-     * Render Production Error
+     * Render Production Error - Shows generic error in production
      */
     private function renderProductionError(Throwable $e, Request $request): Response
     {
         if ($request->expectsJson()) {
-            return Response::json([
+            return new Response(HttpStatus::INTERNAL_SERVER_ERROR, ['Content-Type' => 'application/json'], json_encode([
                 'error' => 'Internal Server Error',
                 'message' => 'An unexpected error occurred'
-            ], HttpStatus::INTERNAL_SERVER_ERROR);
+            ]));
         }
 
-        return Response::serverError('Internal Server Error');
+        $html = '
+            <!DOCTYPE html>
+            <html lang="de">
+            <head>
+                <title>Server Error</title>
+                <style>
+                    body { font-family: Arial, sans-serif; text-align: center; padding: 50px; }
+                    .error-container { max-width: 500px; margin: 0 auto; }
+                    h1 { color: #e74c3c; }
+                    p { color: #7f8c8d; }
+                </style>
+            </head>
+            <body>
+                <div class="error-container">
+                    <h1>Oops! Something went wrong.</h1>
+                    <p>We\'re sorry, but something went wrong on our end. Please try again later.</p>
+                    <p>If the problem persists, please contact support.</p>
+                </div>
+            </body>
+            </html>';
+
+        return new Response(HttpStatus::INTERNAL_SERVER_ERROR, [], $html);
     }
 
     /**
-     * Check if Debug Mode is enabled
+     * Format bytes to human readable format
      */
-    public function isDebug(): bool
+    private function formatBytes(int $bytes, int $precision = 2): string
     {
-        return $this->debug;
+        $units = ['B', 'KB', 'MB', 'GB', 'TB'];
+        for ($i = 0; $bytes > 1024 && $i < count($units) - 1; $i++) {
+            $bytes /= 1024;
+        }
+        return round($bytes, $precision) . ' ' . $units[$i];
     }
 
     /**
-     * Set Debug Mode
+     * Set error handler
      */
-    public function setDebug(bool $debug): self
-    {
-        $this->debug = $debug;
-
-        // Update error display based on debug mode
-        ini_set('display_errors', $debug ? '1' : '0');
-
-        return $this;
-    }
-
-    /**
-     * Set Custom Error Handler
-     */
-    public function setErrorHandler(?callable $handler): self
+    public function setErrorHandler(callable $handler): void
     {
         $this->errorHandler = $handler;
-        return $this;
     }
 
     /**
-     * Get Custom 404 Handler
+     * Set 404 Not Found handler
+     */
+    public function setNotFoundHandler(callable $handler): void
+    {
+        $this->notFoundHandler = $handler;
+    }
+
+    /**
+     * Get 404 Not Found handler
      */
     public function getNotFoundHandler(): ?callable
     {
@@ -421,44 +462,27 @@ class Application
     }
 
     /**
-     * Set Custom 404 Handler
+     * Set debug mode
      */
-    public function setNotFoundHandler(?callable $handler): self
+    public function setDebug(bool $debug): void
     {
-        $this->notFoundHandler = $handler;
-        return $this;
+        $this->debug = $debug;
     }
 
     /**
-     * Get Base Path
+     * Check if debug mode is enabled
      */
-    public function getBasePath(): string
+    public function isDebug(): bool
     {
-        return $this->basePath;
+        return $this->debug;
     }
 
     /**
-     * Get Service Container
+     * Get base path
      */
-    public function getContainer(): ServiceContainer
+    public function basePath(string $path = ''): string
     {
-        return $this->container;
-    }
-
-    /**
-     * Get Router
-     */
-    public function getRouter(): Router
-    {
-        return $this->router;
-    }
-
-    /**
-     * Database Transaction Helper
-     */
-    public function transaction(callable $callback, ?string $connectionName = null): mixed
-    {
-        return $this->getDatabase()->transaction($callback, $connectionName);
+        return $this->basePath . ($path ? '/' . ltrim($path, '/') : '');
     }
 
     /**
@@ -498,107 +522,11 @@ class Application
     }
 
     /**
-     * Get session status for debugging
-     */
-    public function getSessionStatus(): array
-    {
-        try {
-            $session = $this->getSession();
-            $sessionSecurity = $this->getSessionSecurity();
-
-            return [
-                'session' => $session->getStatus(),
-                'security' => $sessionSecurity->getSecurityStatus(),
-            ];
-        } catch (\Throwable $e) {
-            return [
-                'error' => $e->getMessage(),
-                'session' => ['started' => false],
-                'security' => ['enabled' => false],
-            ];
-        }
-    }
-
-    /**
      * Get SessionSecurity service
      */
     public function getSessionSecurity(): SessionSecurity
     {
         return $this->get('session_security');
-    }
-
-    /**
-     * Get framework status for health checks
-     */
-    public function getStatus(): array
-    {
-        return [
-            'name' => $this->name(),
-            'version' => $this->version(),
-            'debug' => $this->debug,
-            'installed' => $this->isInstalled(),
-            'php_version' => PHP_VERSION,
-            'memory_usage' => memory_get_usage(true),
-            'peak_memory' => memory_get_peak_usage(true),
-            'session_status' => $this->hasValidSession(),
-            'services' => [
-                'database' => $this->container->has(ConnectionManager::class),
-                'session' => $this->container->has(Session::class),
-                'csrf' => $this->container->has(Csrf::class),
-                'templates' => $this->container->has(TemplateEngine::class),
-                'validation' => $this->container->has(ValidatorFactory::class),
-                'localization' => $this->container->has(Translator::class),
-            ],
-        ];
-    }
-
-    /**
-     * Get Application Name
-     */
-    public function name(): string
-    {
-        try {
-            $config = $this->loadConfig('app/Config/app.php');
-            return $config['name'] ?? 'PHP Framework';
-        } catch (\Exception) {
-            return 'PHP Framework';
-        }
-    }
-
-    /**
-     * Get Application Version
-     */
-    public function version(): string
-    {
-        try {
-            $config = $this->loadConfig('app/Config/app.php');
-            return $config['version'] ?? '1.0.0';
-        } catch (\Exception) {
-            return '1.0.0';
-        }
-    }
-
-    /**
-     * Check if application is installed
-     */
-    public function isInstalled(): bool
-    {
-        return file_exists($this->basePath . '/app/Config/app.php') &&
-            file_exists($this->basePath . '/app/Config/database.php') &&
-            file_exists($this->basePath . '/app/Config/security.php');
-    }
-
-    /**
-     * Check if session is active and valid
-     */
-    public function hasValidSession(): bool
-    {
-        try {
-            $session = $this->getSession();
-            return $session->isStarted() && !$session->isExpired();
-        } catch (\Throwable) {
-            return false;
-        }
     }
 
     /**
@@ -667,6 +595,16 @@ class Application
     {
         $this->container->bind($interface, $implementation);
         return $this;
+    }
+
+    /**
+     * Check if application is installed
+     */
+    public function isInstalled(): bool
+    {
+        return file_exists($this->basePath . '/app/Config/app.php') &&
+            file_exists($this->basePath . '/app/Config/database.php') &&
+            file_exists($this->basePath . '/app/Config/security.php');
     }
 
     /**
@@ -791,5 +729,31 @@ return [
 PHP;
 
         return file_put_contents($configPath, $content) !== false;
+    }
+
+    /**
+     * Get Application Name
+     */
+    public function name(): string
+    {
+        try {
+            $config = $this->loadConfig('app/Config/app.php');
+            return $config['name'] ?? 'PHP Framework';
+        } catch (\Exception) {
+            return 'PHP Framework';
+        }
+    }
+
+    /**
+     * Get Application Version
+     */
+    public function version(): string
+    {
+        try {
+            $config = $this->loadConfig('app/Config/app.php');
+            return $config['version'] ?? '1.0.0';
+        } catch (\Exception) {
+            return '1.0.0';
+        }
     }
 }

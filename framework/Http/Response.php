@@ -4,11 +4,14 @@ declare(strict_types=1);
 
 namespace Framework\Http;
 
+use Framework\Core\Application;
 use InvalidArgumentException;
 use JsonException;
 
 /**
  * HTTP Response - Mutable Response Object
+ *
+ * Note: Static factory methods are deprecated. Use ResponseFactory service instead.
  */
 class Response
 {
@@ -36,32 +39,33 @@ class Response
 
     /**
      * Factory Methods für häufige Response-Typen
+     *
+     * @deprecated Use ResponseFactory service instead
      */
     public static function ok(string $body = '', array $headers = []): self
     {
         return new self(HttpStatus::OK, $headers, $body);
     }
 
+    /**
+     * @deprecated Use ResponseFactory service instead
+     */
     public static function created(string $body = '', array $headers = []): self
     {
         return new self(HttpStatus::CREATED, $headers, $body);
     }
 
-    public static function accepted(string $body = '', array $headers = []): self
-    {
-        return new self(HttpStatus::ACCEPTED, $headers, $body);
-    }
-
+    /**
+     * @deprecated Use ResponseFactory service instead
+     */
     public static function noContent(array $headers = []): self
     {
         return new self(HttpStatus::NO_CONTENT, $headers);
     }
 
-    public static function permanentRedirect(string $url): self
-    {
-        return self::redirect($url, HttpStatus::MOVED_PERMANENTLY);
-    }
-
+    /**
+     * @deprecated Use ResponseFactory service instead
+     */
     public static function redirect(string $url, HttpStatus $status = HttpStatus::FOUND): self
     {
         if (!$status->isRedirect()) {
@@ -71,68 +75,82 @@ class Response
         return new self($status, ['Location' => $url]);
     }
 
+    /**
+     * @deprecated Use ResponseFactory service instead
+     */
     public function isRedirect(): bool
     {
         return $this->status->isRedirection();
     }
 
+    /**
+     * @deprecated Use ResponseFactory service instead
+     */
     public static function temporaryRedirect(string $url): self
     {
         return self::redirect($url, HttpStatus::TEMPORARY_REDIRECT);
     }
 
+    /**
+     * @deprecated Use ResponseFactory service instead
+     */
     public static function badRequest(string $body = 'Bad Request', array $headers = []): self
     {
         return new self(HttpStatus::BAD_REQUEST, $headers, $body);
     }
 
+    /**
+     * @deprecated Use ResponseFactory service instead
+     */
     public static function unauthorized(string $body = 'Unauthorized', array $headers = []): self
     {
         return new self(HttpStatus::UNAUTHORIZED, $headers, $body);
     }
 
+    /**
+     * @deprecated Use ResponseFactory service instead
+     */
     public static function forbidden(string $body = 'Forbidden', array $headers = []): self
     {
         return new self(HttpStatus::FORBIDDEN, $headers, $body);
     }
 
+    /**
+     * @deprecated Use ResponseFactory service instead
+     */
     public static function notFound(string $body = 'Not Found', array $headers = []): self
     {
         return new self(HttpStatus::NOT_FOUND, $headers, $body);
     }
 
+    /**
+     * @deprecated Use ResponseFactory service instead
+     */
     public static function methodNotAllowed(string $body = 'Method Not Allowed', array $headers = []): self
     {
         return new self(HttpStatus::METHOD_NOT_ALLOWED, $headers, $body);
     }
 
+    /**
+     * @deprecated Use ResponseFactory service instead
+     */
     public static function unprocessableEntity(string $body = 'Unprocessable Entity', array $headers = []): self
     {
         return new self(HttpStatus::UNPROCESSABLE_ENTITY, $headers, $body);
     }
 
-    public static function tooManyRequests(string $body = 'Too Many Requests', array $headers = []): self
-    {
-        return new self(HttpStatus::TOO_MANY_REQUESTS, $headers, $body);
-    }
-
+    /**
+     * @deprecated Use ResponseFactory service instead
+     */
     public static function serverError(string $body = 'Internal Server Error', array $headers = []): self
     {
         return new self(HttpStatus::INTERNAL_SERVER_ERROR, $headers, $body);
     }
 
-    public static function notImplemented(string $body = 'Not Implemented', array $headers = []): self
-    {
-        return new self(HttpStatus::NOT_IMPLEMENTED, $headers, $body);
-    }
-
-    public static function serviceUnavailable(string $body = 'Service Unavailable', array $headers = []): self
-    {
-        return new self(HttpStatus::SERVICE_UNAVAILABLE, $headers, $body);
-    }
-
     /**
      * Template Response mit JSON-Fallback
+     *
+     * @deprecated Use ResponseFactory service instead
      */
     public static function viewOrJson(
         string     $template,
@@ -150,6 +168,8 @@ class Response
 
     /**
      * JSON Response Factory
+     *
+     * @deprecated Use ResponseFactory service instead
      */
     public static function json(
         array      $data,
@@ -170,7 +190,9 @@ class Response
     }
 
     /**
-     * Template Response Factory
+     * Template Response Factory - TRANSITION METHOD
+     *
+     * @deprecated Use ResponseFactory service instead
      */
     public static function view(
         string     $template,
@@ -179,74 +201,18 @@ class Response
         array      $headers = []
     ): self
     {
+        // Transition method - use Application instance temporarily
         try {
-            $viewRenderer = \Framework\Core\ServiceRegistry::get(\Framework\Templating\ViewRenderer::class);
-            return $viewRenderer->render($template, $data, $status, $headers);
+            $app = Application::getInstance();
+            $responseFactory = $app->getResponseFactory();
+            return $responseFactory->view($template, $data, $status, $headers);
         } catch (\Throwable $e) {
-            // Fallback: Use TemplateEngine directly
-            $engine = \Framework\Core\ServiceRegistry::get(\Framework\Templating\TemplateEngine::class);
-            $content = $engine->render($template, $data);
-
-            $headers['Content-Type'] = 'text/html; charset=UTF-8';
-            return new self($status, $headers, $content);
+            // Fallback for cases where Application is not available
+            throw new \RuntimeException(
+                'Response::view() is deprecated. Use ResponseFactory service instead. ' .
+                'Original error: ' . $e->getMessage()
+            );
         }
-    }
-
-    /**
-     * XML Response Factory
-     */
-    public static function xml(string $xml, HttpStatus $status = HttpStatus::OK, array $headers = []): self
-    {
-        $headers['Content-Type'] = 'application/xml; charset=UTF-8';
-        return new self($status, $headers, $xml);
-    }
-
-    /**
-     * Plain Text Response Factory
-     */
-    public static function text(string $text, HttpStatus $status = HttpStatus::OK, array $headers = []): self
-    {
-        $headers['Content-Type'] = 'text/plain; charset=UTF-8';
-        return new self($status, $headers, $text);
-    }
-
-    /**
-     * File Download Response Factory
-     */
-    public static function download(
-        string  $filePath,
-        ?string $fileName = null,
-        array   $headers = []
-    ): self
-    {
-        if (!file_exists($filePath)) {
-            throw new InvalidArgumentException("File not found: {$filePath}");
-        }
-
-        if (!is_readable($filePath)) {
-            throw new InvalidArgumentException("File not readable: {$filePath}");
-        }
-
-        $fileName ??= basename($filePath);
-        $mimeType = mime_content_type($filePath) ?: 'application/octet-stream';
-        $fileSize = filesize($filePath);
-
-        if ($fileSize === false) {
-            throw new InvalidArgumentException("Unable to determine file size: {$filePath}");
-        }
-
-        $content = file_get_contents($filePath);
-        if ($content === false) {
-            throw new InvalidArgumentException("Unable to read file: {$filePath}");
-        }
-
-        $headers = array_merge([
-            'Content-Type' => $mimeType,
-            'Content-Disposition' => "attachment; filename=\"{$fileName}\"",
-            'Content-Length' => (string)$fileSize,
-        ], $headers);
-
-        return new self(HttpStatus::OK, (array)$headers, $content);
     }
 
     // Fluent Interface
@@ -367,15 +333,6 @@ class Response
         return $this->status->isError();
     }
 
-    public function isEmpty(): bool
-    {
-        return in_array($this->status, [
-            HttpStatus::NO_CONTENT,
-            HttpStatus::RESET_CONTENT,
-            HttpStatus::NOT_MODIFIED
-        ]);
-    }
-
     public function isJson(): bool
     {
         return str_contains($this->getContentType(), 'application/json');
@@ -389,17 +346,6 @@ class Response
     public function getHeader(string $name): ?string
     {
         return $this->headers[$name] ?? null;
-    }
-
-    public function isHtml(): bool
-    {
-        return str_contains($this->getContentType(), 'text/html');
-    }
-
-    public function isXml(): bool
-    {
-        return str_contains($this->getContentType(), 'application/xml')
-            || str_contains($this->getContentType(), 'text/xml');
     }
 
     /**

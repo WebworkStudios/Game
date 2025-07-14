@@ -6,9 +6,11 @@ namespace Framework\Templating;
 
 use Framework\Core\Application;
 use Framework\Core\ServiceContainer;
+use Framework\Localization\Translator;
+use Framework\Security\Csrf;
 
 /**
- * Templating Service Provider - Registriert alle Template-Services mit XSS-Schutz
+ * Templating Service Provider - Registriert Template Services im Framework
  */
 class TemplatingServiceProvider
 {
@@ -17,9 +19,7 @@ class TemplatingServiceProvider
     public function __construct(
         private readonly ServiceContainer $container,
         private readonly Application      $app,
-    )
-    {
-    }
+    ) {}
 
     /**
      * Registriert alle Templating Services
@@ -27,57 +27,151 @@ class TemplatingServiceProvider
     public function register(): void
     {
         $this->registerTemplateEngine();
+        $this->registerFilterManager();
         $this->registerViewRenderer();
+        $this->registerTemplateCache();
+        $this->bindInterfaces();
     }
 
     /**
-     * Registriert TemplateEngine als Singleton mit XSS-Schutz
+     * Registriert Template Engine als Singleton
      */
     private function registerTemplateEngine(): void
     {
-        $this->container->singleton(TemplateEngine::class, function () {
-            $config = $this->loadTemplatingConfig();
+        $this->container->singleton(TemplateEngine::class, function (ServiceContainer $container) {
+            $config = $this->getConfig();
 
-            // Create template cache
-            $cacheConfig = $config['cache'] ?? [];
-            $cacheDir = $this->app->getBasePath() . '/' . ($cacheConfig['path'] ?? 'storage/cache/views');
-            $cacheEnabled = $cacheConfig['enabled'] ?? !$this->app->isDebug();
-
-            $cache = new TemplateCache($cacheDir, $cacheEnabled);
-
-            // *** XSS-SCHUTZ: Auto-Escape Configuration ***
-            $autoEscape = $config['auto_escape'] ?? true; // Default: XSS-Schutz aktiviert
-
-            $engine = new TemplateEngine([], $cache, $autoEscape);
-
-            // Add configured template paths
-            foreach ($config['paths'] as $path) {
-                $fullPath = $this->app->getBasePath() . '/' . ltrim($path, '/');
-                $engine->addPath($fullPath);
+            // Template Cache
+            $cache = null;
+            if ($config['cache']['enabled'] ?? false) {
+                $cache = $container->get(TemplateCache::class);
             }
 
-            return $engine;
+            return new TemplateEngine(
+                templatePaths: $config['paths'] ?? ['app/Views'],
+                cache: $cache,
+                autoEscape: $config['auto_escape'] ?? true
+            );
         });
     }
 
     /**
-     * Lädt Templating-Konfiguration
+     * Registriert Filter Manager als Singleton
      */
-    private function loadTemplatingConfig(): array
+    private function registerFilterManager(): void
     {
-        $configPath = $this->app->getBasePath() . '/' . self::DEFAULT_CONFIG_PATH;
+        $this->container->singleton(FilterManager::class, function (ServiceContainer $container) {
+            // Try to get Translator, but don't fail if not available
+            $translator = null;
+            try {
+                $translator = $container->get(Translator::class);
+            } catch (\Throwable) {
+                // Translator not available - FilterManager will work without it
+            }
 
-        if (!file_exists($configPath)) {
-            // Create default config with XSS protection
-            self::publishConfig($this->app->getBasePath());
-        }
-
-        $config = require $configPath;
-        return is_array($config) ? $config : $this->getDefaultConfig();
+            return new FilterManager($translator);
+        });
     }
 
     /**
-     * Erstellt Standard-Konfigurationsdatei mit XSS-Schutz
+     * Registriert ViewRenderer als Singleton mit proper DI
+     */
+    private function registerViewRenderer(): void
+    {
+        $this->container->singleton(ViewRenderer::class, function (ServiceContainer $container) {
+            return new ViewRenderer(
+                engine: $container->get(TemplateEngine::class),
+                translator: $container->get(Translator::class),
+                csrf: $container->get(Csrf::class)
+            );
+        });
+    }
+
+    /**
+     * Registriert Template Cache als Singleton
+     */
+    private function registerTemplateCache(): void
+    {
+        $this->container->singleton(TemplateCache::class, function () {
+            $config = $this->getConfig();
+
+            $cachePath = $this->app->basePath($config['cache']['path'] ?? 'storage/cache/views');
+            $enabled = $config['cache']['enabled'] ?? !$this->app->isDebug();
+
+            return new TemplateCache($cachePath, $enabled);
+        });
+    }
+
+    /**
+     * Bindet Interfaces (für zukünftige Erweiterungen)
+     */
+    private function bindInterfaces(): void
+    {
+        // Hier können später Interfaces gebunden werden
+        // z.B. $this->container->bind(TemplateEngineInterface::class, TemplateEngine::class);
+    }
+
+    /**
+     * Holt Konfiguration mit Fallback
+     */
+    private function getConfig(): array
+    {
+        try {
+            return $this->app->loadConfig(self::DEFAULT_CONFIG_PATH);
+        } catch (\Exception) {
+            return $this->getDefaultConfig();
+        }
+    }
+
+    /**
+     * Standard-Konfiguration mit XSS-Schutz
+     */
+    private function getDefaultConfig(): array
+    {
+        return [
+            'paths' => ['app/Views'],
+            'auto_escape' => true, // XSS-Schutz standardmäßig aktiviert
+            'cache' => [
+                'enabled' => !$this->app->isDebug(),
+                'path' => 'storage/cache/views',
+                'auto_reload' => true,
+            ],
+            'debug' => $this->app->isDebug(),
+            'extension' => '.html',
+            'security_headers' => [
+                'X-Content-Type-Options' => 'nosniff',
+                'X-Frame-Options' => 'SAMEORIGIN',
+                'X-XSS-Protection' => '1; mode=block',
+            ],
+        ];
+    }
+
+    /**
+     * Holt View Renderer aus Container (Helper)
+     */
+    public function getViewRenderer(): ViewRenderer
+    {
+        return $this->container->get(ViewRenderer::class);
+    }
+
+    /**
+     * Holt Template Engine aus Container (Helper)
+     */
+    public function getTemplateEngine(): TemplateEngine
+    {
+        return $this->container->get(TemplateEngine::class);
+    }
+
+    /**
+     * Clear template cache (for development)
+     */
+    public function clearCache(): int
+    {
+        return $this->getTemplateEngine()->clearCache();
+    }
+
+    /**
+     * Erstellt Standard-Konfigurationsdatei
      */
     public static function publishConfig(string $basePath): bool
     {
@@ -174,72 +268,5 @@ return [
 PHP;
 
         return file_put_contents($configPath, $content) !== false;
-    }
-
-    /**
-     * Standard-Konfiguration mit XSS-Schutz
-     */
-    private function getDefaultConfig(): array
-    {
-        return [
-            'paths' => ['app/Views'],
-            'auto_escape' => true, // XSS-Schutz standardmäßig aktiviert
-            'cache' => [
-                'enabled' => !$this->app->isDebug(),
-                'path' => 'storage/cache/views',
-                'auto_reload' => true,
-            ],
-            'debug' => $this->app->isDebug(),
-            'extension' => '.html',
-            'security_headers' => [
-                'X-Content-Type-Options' => 'nosniff',
-                'X-Frame-Options' => 'SAMEORIGIN',
-                'X-XSS-Protection' => '1; mode=block',
-            ],
-        ];
-    }
-
-    /**
-     * Registriert ViewRenderer als Singleton
-     */
-    private function registerViewRenderer(): void
-    {
-        $this->container->singleton(ViewRenderer::class, function (ServiceContainer $container) {
-            return new ViewRenderer(
-                engine: $container->get(TemplateEngine::class)
-            );
-        });
-    }
-
-    /**
-     * Holt View Renderer aus Container (Helper)
-     */
-    public function getViewRenderer(): ViewRenderer
-    {
-        return $this->container->get(ViewRenderer::class);
-    }
-
-    /**
-     * Clear template cache (for development)
-     */
-    public function clearCache(): int
-    {
-        return $this->getTemplateEngine()->clearCache();
-    }
-
-    /**
-     * Holt Template Engine aus Container (Helper)
-     */
-    public function getTemplateEngine(): TemplateEngine
-    {
-        return $this->container->get(TemplateEngine::class);
-    }
-
-    /**
-     * Get cache statistics
-     */
-    public function getCacheStats(): array
-    {
-        return $this->getTemplateEngine()->getCacheStats();
     }
 }

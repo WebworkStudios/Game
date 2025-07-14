@@ -1,5 +1,4 @@
 <?php
-// framework/Templating/ViewRenderer.php
 
 declare(strict_types=1);
 
@@ -7,6 +6,8 @@ namespace Framework\Templating;
 
 use Framework\Http\HttpStatus;
 use Framework\Http\Response;
+use Framework\Localization\Translator;
+use Framework\Security\Csrf;
 
 /**
  * View Renderer - Integriert Template Engine in Response System
@@ -14,10 +15,10 @@ use Framework\Http\Response;
 readonly class ViewRenderer
 {
     public function __construct(
-        private TemplateEngine $engine
-    )
-    {
-    }
+        private TemplateEngine $engine,
+        private Translator $translator,
+        private Csrf $csrf
+    ) {}
 
     /**
      * Rendert Template zu Response
@@ -32,8 +33,7 @@ readonly class ViewRenderer
         // Auto-inject current locale if not already provided
         if (!isset($data['current_locale'])) {
             try {
-                $translator = \Framework\Core\ServiceRegistry::get(\Framework\Localization\Translator::class);
-                $data['current_locale'] = $translator->getLocale();
+                $data['current_locale'] = $this->translator->getLocale();
             } catch (\Throwable) {
                 $data['current_locale'] = 'de'; // Fallback
             }
@@ -42,8 +42,7 @@ readonly class ViewRenderer
         // Auto-inject CSRF token field for forms
         if (!isset($data['csrf_token_field'])) {
             try {
-                $csrf = \Framework\Core\ServiceRegistry::get(\Framework\Security\Csrf::class);
-                $data['csrf_token_field'] = $csrf->getTokenField();
+                $data['csrf_token_field'] = $this->csrf->getTokenField();
             } catch (\Throwable) {
                 $data['csrf_token_field'] = '<!-- CSRF not available -->';
             }
@@ -52,8 +51,7 @@ readonly class ViewRenderer
         // Auto-inject CSRF meta tag for JavaScript
         if (!isset($data['csrf_meta_tag'])) {
             try {
-                $csrf = \Framework\Core\ServiceRegistry::get(\Framework\Security\Csrf::class);
-                $data['csrf_meta_tag'] = $csrf->getTokenMeta();
+                $data['csrf_meta_tag'] = $this->csrf->getTokenMeta();
             } catch (\Throwable) {
                 $data['csrf_meta_tag'] = '<!-- CSRF meta not available -->';
             }
