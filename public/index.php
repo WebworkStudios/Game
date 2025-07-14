@@ -21,18 +21,6 @@ try {
     // Debug-Modus (in Production: false)
     $app->setDebug(true);
 
-    // Framework installieren (beim ersten Aufruf)
-    if (!$app->isInstalled()) {
-        echo "Installing framework...\n";
-        if ($app->install()) {
-            echo "Framework installed successfully!\n";
-            echo "Please configure your database in app/Config/database.php\n";
-        } else {
-            echo "Installation failed!\n";
-            exit(1);
-        }
-    }
-
     // Custom Error Handler (optional)
     $app->setErrorHandler(function (Throwable $e, Request $request) {
         // Hier könnte Logging, Monitoring, etc. stattfinden
