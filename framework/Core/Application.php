@@ -163,6 +163,14 @@ class Application
                 actionsPath: $this->basePath . '/app/Actions'
             );
         });
+
+        // Router registrieren
+        $this->container->singleton(Router::class, function (ServiceContainer $container) {
+            return new Router(
+                container: $container,
+                cache: $container->get(RouterCache::class)
+            );
+        });
     }
 
     /**
@@ -275,6 +283,22 @@ class Application
     }
 
     /**
+     * Build application path
+     */
+    public function path(string $path = ''): string
+    {
+        return $this->basePath . ($path ? '/' . ltrim($path, '/') : '');
+    }
+
+    /**
+     * Get base path (alias for getBasePath)
+     */
+    public function basePath(string $path = ''): string
+    {
+        return $this->basePath . ($path ? '/' . ltrim($path, '/') : '');
+    }
+
+    /**
      * Get ResponseFactory service
      */
     public function getResponseFactory(): ResponseFactory
@@ -283,308 +307,24 @@ class Application
     }
 
     /**
-     * Get Container for DI
-     */
-    public function getContainer(): ServiceContainer
-    {
-        return $this->container;
-    }
-
-    /**
-     * Run Application
-     */
-    public function run(Request $request): Response
-    {
-        try {
-            return $this->router->handle($request);  // ← handle statt dispatch
-        } catch (Throwable $e) {
-            return $this->handleException($e, $request);
-        }
-    }
-
-    /**
-     * Handle exceptions
-     */
-    private function handleException(Throwable $e, Request $request): Response
-    {
-        // Custom Error Handler
-        if ($this->errorHandler !== null) {
-            $customResponse = ($this->errorHandler)($e, $request);
-            if ($customResponse instanceof Response) {
-                return $customResponse;
-            }
-        }
-
-        // Log Error
-        error_log(sprintf(
-            "Application Error: %s in %s:%d\nStack trace:\n%s",
-            $e->getMessage(),
-            $e->getFile(),
-            $e->getLine(),
-            $e->getTraceAsString()
-        ));
-
-        // Debug Mode: Show detailed error
-        if ($this->debug) {
-            return $this->renderDebugError($e, $request);
-        }
-
-        // Production Mode: Show generic error
-        return $this->renderProductionError($e, $request);
-    }
-
-    /**
-     * Render Debug Error - Shows detailed error information in development
-     */
-    private function renderDebugError(Throwable $e, Request $request): Response
-    {
-        $html = sprintf('
-            <!DOCTYPE html>
-            <html lang="de">
-            <head>
-                <title>Error - %s</title>
-                <style>
-                    body { font-family: monospace; padding: 20px; background: #f8f8f8; }
-                    .error { background: #fff; padding: 20px; border-left: 5px solid #ff0000; }
-                    .trace { background: #f0f0f0; padding: 10px; margin-top: 20px; }
-                    pre { white-space: pre-wrap; }
-                    .request-info { background: #e8f4fd; padding: 15px; margin-top: 20px; }
-                    .context { background: #fff3cd; padding: 15px; margin-top: 20px; }
-                </style>
-            </head>
-            <body>
-                <div class="error">
-                    <h1>%s</h1>
-                    <p><strong>File:</strong> %s</p>
-                    <p><strong>Line:</strong> %d</p>
-                    <p><strong>Message:</strong> %s</p>
-                </div>
-                
-                <div class="request-info">
-                    <h3>Request Information:</h3>
-                    <p><strong>Method:</strong> %s</p>
-                    <p><strong>URI:</strong> %s</p>
-                    <p><strong>User Agent:</strong> %s</p>
-                </div>
-                
-                <div class="context">
-                    <h3>Context:</h3>
-                    <p><strong>Debug Mode:</strong> %s</p>
-                    <p><strong>PHP Version:</strong> %s</p>
-                    <p><strong>Memory Usage:</strong> %s</p>
-                </div>
-                
-                <div class="trace">
-                    <h3>Stack Trace:</h3>
-                    <pre>%s</pre>
-                </div>
-            </body>
-            </html>',
-            get_class($e),
-            get_class($e),
-            htmlspecialchars($e->getFile()),
-            $e->getLine(),
-            htmlspecialchars($e->getMessage()),
-            htmlspecialchars($request->getMethod()->value),
-            htmlspecialchars($request->getUri()),
-            htmlspecialchars($request->getHeader('User-Agent') ?? 'Unknown'),
-            $this->debug ? 'Enabled' : 'Disabled',
-            PHP_VERSION,
-            $this->formatBytes(memory_get_usage(true)),
-            htmlspecialchars($e->getTraceAsString())
-        );
-
-        return new Response(HttpStatus::INTERNAL_SERVER_ERROR, [], $html);
-    }
-
-    /**
-     * Format bytes to human readable format
-     */
-    private function formatBytes(int $bytes, int $precision = 2): string
-    {
-        $units = ['B', 'KB', 'MB', 'GB', 'TB'];
-        for ($i = 0; $bytes > 1024 && $i < count($units) - 1; $i++) {
-            $bytes /= 1024;
-        }
-        return round($bytes, $precision) . ' ' . $units[$i];
-    }
-
-    /**
-     * Render Production Error - Shows generic error in production
-     */
-    private function renderProductionError(Throwable $e, Request $request): Response
-    {
-        if ($request->expectsJson()) {
-            return new Response(HttpStatus::INTERNAL_SERVER_ERROR, ['Content-Type' => 'application/json'], json_encode([
-                'error' => 'Internal Server Error',
-                'message' => 'An unexpected error occurred'
-            ]));
-        }
-
-        $html = '
-            <!DOCTYPE html>
-            <html lang="de">
-            <head>
-                <title>Server Error</title>
-                <style>
-                    body { font-family: Arial, sans-serif; text-align: center; padding: 50px; }
-                    .error-container { max-width: 500px; margin: 0 auto; }
-                    h1 { color: #e74c3c; }
-                    p { color: #7f8c8d; }
-                </style>
-            </head>
-            <body>
-                <div class="error-container">
-                    <h1>Oops! Something went wrong.</h1>
-                    <p>We\'re sorry, but something went wrong on our end. Please try again later.</p>
-                    <p>If the problem persists, please contact support.</p>
-                </div>
-            </body>
-            </html>';
-
-        return new Response(HttpStatus::INTERNAL_SERVER_ERROR, [], $html);
-    }
-
-    /**
-     * Set error handler
-     */
-    public function setErrorHandler(callable $handler): void
-    {
-        $this->errorHandler = $handler;
-    }
-
-    /**
-     * Get 404 Not Found handler
-     */
-    public function getNotFoundHandler(): ?callable
-    {
-        return $this->notFoundHandler;
-    }
-
-    /**
-     * Set 404 Not Found handler
-     */
-    public function setNotFoundHandler(callable $handler): void
-    {
-        $this->notFoundHandler = $handler;
-    }
-
-    /**
-     * Check if debug mode is enabled
-     */
-    public function isDebug(): bool
-    {
-        return $this->debug;
-    }
-
-    /**
-     * Set debug mode
-     */
-    public function setDebug(bool $debug): void
-    {
-        $this->debug = $debug;
-    }
-
-    /**
-     * Get base path
-     */
-    public function basePath(string $path = ''): string
-    {
-        return $this->basePath . ($path ? '/' . ltrim($path, '/') : '');
-    }
-
-    /**
-     * Get Database Connection Manager
-     */
-    public function getDatabase(): ConnectionManager
-    {
-        return $this->container->get(ConnectionManager::class);
-    }
-
-    /**
-     * Get CSRF service
-     */
-    public function getCsrf(): Csrf
-    {
-        return $this->get('csrf');
-    }
-
-    /**
      * Force session start (useful for testing)
      */
     public function startSession(): bool
     {
         try {
-            return $this->getSession()->start();
+            $session = $this->get('session');
+            return $session->start();
         } catch (\Throwable) {
             return false;
         }
     }
 
     /**
-     * Get Session service
+     * Get Container for DI
      */
-    public function getSession(): Session
+    public function getContainer(): ServiceContainer
     {
-        return $this->get('session');
-    }
-
-    /**
-     * Get SessionSecurity service
-     */
-    public function getSessionSecurity(): SessionSecurity
-    {
-        return $this->get('session_security');
-    }
-
-    /**
-     * Get Template Engine
-     */
-    public function getTemplateEngine(): TemplateEngine
-    {
-        return $this->container->get(TemplateEngine::class);
-    }
-
-    /**
-     * Get View Renderer
-     */
-    public function getViewRenderer(): ViewRenderer
-    {
-        return $this->container->get(ViewRenderer::class);
-    }
-
-    /**
-     * Get Translator
-     */
-    public function getTranslator(): Translator
-    {
-        return $this->container->get(Translator::class);
-    }
-
-    /**
-     * Validate data and return Validator
-     */
-    public function validate(array $data, array $rules, ?string $connectionName = null): Validator
-    {
-        return $this->validator($data, $rules, $connectionName)->validate();
-    }
-
-    /**
-     * Create Validator instance
-     */
-    public function validator(array $data, array $rules, ?string $connectionName = null): Validator
-    {
-        /** @var ValidatorFactory $factory */
-        $factory = $this->container->get(ValidatorFactory::class);
-        return $factory->make($data, $rules, $connectionName);
-    }
-
-    /**
-     * Validate data or throw exception on failure
-     */
-    public function validateOrFail(array $data, array $rules, ?string $connectionName = null): array
-    {
-        return $this->validator($data, $rules, $connectionName)->validateOrFail();
+        return $this->container;
     }
 
     /**
@@ -603,6 +343,49 @@ class Application
     {
         $this->container->bind($interface, $implementation);
         return $this;
+    }
+
+    /**
+     * Set debug mode
+     */
+    public function setDebug(bool $debug): self
+    {
+        $this->debug = $debug;
+        return $this;
+    }
+
+    /**
+     * Get debug mode
+     */
+    public function isDebug(): bool
+    {
+        return $this->debug;
+    }
+
+    /**
+     * Set custom error handler
+     */
+    public function setErrorHandler(callable $handler): self
+    {
+        $this->errorHandler = $handler;
+        return $this;
+    }
+
+    /**
+     * Set custom not found handler
+     */
+    public function setNotFoundHandler(callable $handler): self
+    {
+        $this->notFoundHandler = $handler;
+        return $this;
+    }
+
+    /**
+     * Get custom not found handler
+     */
+    public function getNotFoundHandler(): ?callable
+    {
+        return $this->notFoundHandler;
     }
 
     /**
@@ -762,6 +545,140 @@ PHP;
             return $config['version'] ?? '1.0.0';
         } catch (\Exception) {
             return '1.0.0';
+        }
+    }
+
+    /**
+     * Run Application
+     */
+    public function run(Request $request): Response
+    {
+        try {
+            return $this->router->handle($request);
+        } catch (Throwable $e) {
+            return $this->handleException($e, $request);
+        }
+    }
+
+    /**
+     * Handle exceptions
+     */
+    private function handleException(Throwable $e, Request $request): Response
+    {
+        // Custom Error Handler
+        if ($this->errorHandler !== null) {
+            $customResponse = ($this->errorHandler)($e, $request);
+            if ($customResponse instanceof Response) {
+                return $customResponse;
+            }
+        }
+
+        // Log Error
+        error_log(sprintf(
+            "Application Error: %s in %s:%d\nStack trace:\n%s",
+            $e->getMessage(),
+            $e->getFile(),
+            $e->getLine(),
+            $e->getTraceAsString()
+        ));
+
+        // Debug Mode: Show detailed error
+        if ($this->debug) {
+            return $this->renderDebugError($e, $request);
+        }
+
+        // Production Mode: Show generic error
+        return $this->renderProductionError($e, $request);
+    }
+
+    /**
+     * Render Debug Error - Shows detailed error information in development
+     */
+    private function renderDebugError(Throwable $e, Request $request): Response
+    {
+        $html = sprintf('
+            <!DOCTYPE html>
+            <html lang="de">
+            <head>
+                <title>Error - %s</title>
+                <style>
+                    body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; margin: 0; padding: 20px; background: #f8f9fa; }
+                    .error-container { max-width: 1200px; margin: 0 auto; background: white; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+                    .error-header { background: #dc3545; color: white; padding: 20px; border-radius: 8px 8px 0 0; }
+                    .error-content { padding: 20px; }
+                    .stack-trace { background: #f8f9fa; padding: 15px; border-radius: 4px; overflow-x: auto; font-family: monospace; font-size: 14px; }
+                    .request-info { margin-top: 20px; padding: 15px; background: #e9ecef; border-radius: 4px; }
+                </style>
+            </head>
+            <body>
+                <div class="error-container">
+                    <div class="error-header">
+                        <h1>🚨 Application Error</h1>
+                        <p><strong>%s</strong></p>
+                        <p>File: %s:%d</p>
+                    </div>
+                    <div class="error-content">
+                        <h3>Stack Trace</h3>
+                        <div class="stack-trace">%s</div>
+                        
+                        <div class="request-info">
+                            <h3>Request Information</h3>
+                            <p><strong>Method:</strong> %s</p>
+                            <p><strong>URI:</strong> %s</p>
+                            <p><strong>User Agent:</strong> %s</p>
+                        </div>
+                    </div>
+                </div>
+            </body>
+            </html>',
+            htmlspecialchars(get_class($e)),
+            htmlspecialchars($e->getMessage()),
+            htmlspecialchars($e->getFile()),
+            $e->getLine(),
+            htmlspecialchars($e->getTraceAsString()),
+            htmlspecialchars($request->getMethod()->value),
+            htmlspecialchars($request->getUri()),
+            htmlspecialchars($request->getHeader('User-Agent') ?? 'Unknown')
+        );
+
+        return new Response(HttpStatus::INTERNAL_SERVER_ERROR, [], $html);
+    }
+
+    /**
+     * Render Production Error - Shows generic error in production
+     */
+    private function renderProductionError(Throwable $e, Request $request): Response
+    {
+        // Try to use template engine if available
+        try {
+            $responseFactory = $this->get(ResponseFactory::class);
+            return $responseFactory->view('errors/500', [
+                'message' => 'Ein unerwarteter Fehler ist aufgetreten.',
+            ], HttpStatus::INTERNAL_SERVER_ERROR);
+        } catch (\Throwable) {
+            // Fallback to simple HTML
+            $html = '
+                <!DOCTYPE html>
+                <html lang="de">
+                <head>
+                    <title>Fehler</title>
+                    <style>
+                        body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; margin: 0; padding: 20px; background: #f8f9fa; text-align: center; }
+                        .error-container { max-width: 600px; margin: 100px auto; background: white; padding: 40px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+                        h1 { color: #dc3545; margin-bottom: 20px; }
+                        p { color: #6c757d; line-height: 1.6; }
+                    </style>
+                </head>
+                <body>
+                    <div class="error-container">
+                        <h1>🚨 Fehler</h1>
+                        <p>Ein unerwarteter Fehler ist aufgetreten. Bitte versuchen Sie es später erneut.</p>
+                        <p>Falls das Problem weiterhin besteht, kontaktieren Sie bitte den Administrator.</p>
+                    </div>
+                </body>
+                </html>';
+
+            return new Response(HttpStatus::INTERNAL_SERVER_ERROR, [], $html);
         }
     }
 }
