@@ -1,6 +1,5 @@
 <?php
 
-
 declare(strict_types=1);
 
 namespace Framework\Database;
@@ -10,7 +9,7 @@ use Iterator;
 use PDOStatement;
 
 /**
- * Query Result - Wrapper für Datenbankabfrage-Ergebnisse
+ * Query Result - Wrapper für MySQL-Datenbankabfrage-Ergebnisse
  */
 class QueryResult implements Iterator, Countable
 {
@@ -36,6 +35,14 @@ class QueryResult implements Iterator, Countable
     }
 
     /**
+     * Holt erste Zeile oder null
+     */
+    public function first(): ?array
+    {
+        return $this->data[0] ?? null;
+    }
+
+    /**
      * Holt erste Zeile oder wirft Exception
      */
     public function firstOrFail(): array
@@ -50,19 +57,19 @@ class QueryResult implements Iterator, Countable
     }
 
     /**
-     * Holt erste Zeile oder null
-     */
-    public function first(): ?array
-    {
-        return $this->data[0] ?? null;
-    }
-
-    /**
      * Holt letzte Zeile oder null
      */
     public function last(): ?array
     {
         return empty($this->data) ? null : end($this->data);
+    }
+
+    /**
+     * Holt Anzahl betroffener Zeilen (für INSERT/UPDATE/DELETE)
+     */
+    public function getAffectedRows(): int
+    {
+        return $this->statement->rowCount();
     }
 
     /**
@@ -90,6 +97,9 @@ class QueryResult implements Iterator, Countable
 
         foreach ($this->data as $row) {
             $key = $row[$column] ?? 'null';
+            if (!isset($grouped[$key])) {
+                $grouped[$key] = [];
+            }
             $grouped[$key][] = $row;
         }
 
@@ -97,7 +107,38 @@ class QueryResult implements Iterator, Countable
     }
 
     /**
-     * Holt eindeutige Werte einer Spalte
+     * Sortiert Ergebnisse nach Spalte
+     */
+    public function sortBy(string $column, bool $descending = false): self
+    {
+        usort($this->data, function ($a, $b) use ($column, $descending) {
+            $result = $a[$column] <=> $b[$column];
+            return $descending ? -$result : $result;
+        });
+
+        return $this;
+    }
+
+    /**
+     * Nimmt nur die ersten N Ergebnisse
+     */
+    public function take(int $limit): self
+    {
+        $this->data = array_slice($this->data, 0, $limit);
+        return $this;
+    }
+
+    /**
+     * Überspringt die ersten N Ergebnisse
+     */
+    public function skip(int $offset): self
+    {
+        $this->data = array_slice($this->data, $offset);
+        return $this;
+    }
+
+    /**
+     * Pluck - Extrahiert nur eine Spalte
      */
     public function pluck(string $column): array
     {
@@ -105,34 +146,23 @@ class QueryResult implements Iterator, Countable
     }
 
     /**
-     * Erstellt Key-Value Array aus zwei Spalten
+     * Unique - Entfernt Duplikate
      */
-    public function keyBy(string $keyColumn, string $valueColumn): array
+    public function unique(string $column): self
     {
-        $result = [];
+        $seen = [];
+        $unique = [];
 
         foreach ($this->data as $row) {
-            $result[$row[$keyColumn]] = $row[$valueColumn];
+            $value = $row[$column] ?? null;
+            if (!in_array($value, $seen, true)) {
+                $seen[] = $value;
+                $unique[] = $row;
+            }
         }
 
-        return $result;
-    }
-
-    /**
-     * Paginiert Ergebnisse
-     */
-    public function paginate(int $perPage, int $page = 1): array
-    {
-        $offset = ($page - 1) * $perPage;
-
-        return [
-            'data' => array_slice($this->data, $offset, $perPage),
-            'current_page' => $page,
-            'per_page' => $perPage,
-            'total' => count($this->data),
-            'last_page' => (int)ceil(count($this->data) / $perPage),
-            'has_more' => $offset + $perPage < count($this->data),
-        ];
+        $this->data = $unique;
+        return $this;
     }
 
     /**
@@ -144,54 +174,26 @@ class QueryResult implements Iterator, Countable
     }
 
     /**
-     * Holt Ausführungszeit in Millisekunden
+     * Prüft ob Ergebnisse nicht leer sind
      */
-    public function getExecutionTime(): float
+    public function isNotEmpty(): bool
     {
-        return $this->executionTime;
+        return !$this->isEmpty();
     }
 
     /**
-     * Holt SQL-Query
+     * Debug-Ausgabe für MySQL Query Result
      */
-    public function getSql(): string
+    public function dd(): self
     {
-        return $this->sql;
-    }
-
-    /**
-     * Holt Parameter-Bindings
-     */
-    public function getBindings(): array
-    {
-        return $this->bindings;
-    }
-
-    /**
-     * Holt Query-Informationen für Debugging
-     */
-    public function getQueryInfo(): array
-    {
-        return [
-            'sql' => $this->sql,
-            'bindings' => $this->bindings,
-            'execution_time_ms' => round($this->executionTime * 1000, 2),
-            'row_count' => count($this->data),
-            'memory_usage' => memory_get_usage(true),
-        ];
-    }
-
-    /**
-     * Debug-Output für Query
-     */
-    public function dump(): self
-    {
-        echo "Query Result Debug:\n";
-        echo "SQL: {$this->sql}\n";
+        echo "\n=== MYSQL QUERY RESULT DEBUG ===\n";
+        echo "SQL: " . $this->sql . "\n";
         echo "Bindings: " . json_encode($this->bindings) . "\n";
         echo "Execution Time: " . round($this->executionTime * 1000, 2) . "ms\n";
         echo "Row Count: " . count($this->data) . "\n";
-        echo "Data: " . $this->toJson() . "\n\n";
+        echo "Affected Rows: " . $this->getAffectedRows() . "\n";
+        echo "Data: " . $this->toJson() . "\n";
+        echo "==============================\n\n";
 
         return $this;
     }
@@ -202,6 +204,38 @@ class QueryResult implements Iterator, Countable
     public function toJson(): string
     {
         return json_encode($this->data, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE);
+    }
+
+    /**
+     * Holt SQL Query String
+     */
+    public function getSql(): string
+    {
+        return $this->sql;
+    }
+
+    /**
+     * Holt Query Bindings
+     */
+    public function getBindings(): array
+    {
+        return $this->bindings;
+    }
+
+    /**
+     * Holt Execution Time
+     */
+    public function getExecutionTime(): float
+    {
+        return $this->executionTime;
+    }
+
+    /**
+     * Holt das interne PDOStatement (für erweiterte Nutzung)
+     */
+    public function getStatement(): PDOStatement
+    {
+        return $this->statement;
     }
 
     // Iterator Interface

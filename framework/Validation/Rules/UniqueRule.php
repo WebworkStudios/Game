@@ -1,14 +1,15 @@
 <?php
-
 declare(strict_types=1);
 
 namespace Framework\Validation\Rules;
 
 use Framework\Database\ConnectionManager;
+use Framework\Database\MySQLGrammar;
+use Framework\Database\QueryBuilder;
 use InvalidArgumentException;
 
 /**
- * UniqueRule - Field value must be unique in database table
+ * UniqueRule - Field value must be unique in MySQL database table
  *
  * Usage: unique:table,column,ignore_id,id_column,connection
  * Examples:
@@ -48,21 +49,19 @@ class UniqueRule implements RuleInterface
     }
 
     /**
-     * Check if value is unique in database using QueryBuilder
+     * Check if value is unique in MySQL database using QueryBuilder
      */
     private function isUnique(string $table, string $column, mixed $value, ?string $ignoreId, string $idColumn, string $connection): bool
     {
         try {
-            // Create QueryBuilder factory for the specific connection
-            $queryFactory = function (string $connectionName) {
-                return new \Framework\Database\QueryBuilder(
-                    connectionManager: $this->connectionManager,
-                    grammar: new \Framework\Database\SqlGrammar(),
-                    connectionName: $connectionName
-                );
-            };
+            // Create QueryBuilder with MySQL Grammar
+            $query = new QueryBuilder(
+                connectionManager: $this->connectionManager,
+                grammar: new MySQLGrammar(),
+                connectionName: $connection
+            );
 
-            $query = $queryFactory($connection)
+            $query = $query
                 ->table($table)
                 ->where($column, $value);
 
@@ -77,8 +76,8 @@ class UniqueRule implements RuleInterface
 
         } catch (\Exception $e) {
             // Log error in production, throw in development
-            error_log("UniqueRule database error: " . $e->getMessage());
-            throw new \RuntimeException("Database validation failed: " . $e->getMessage());
+            error_log("UniqueRule MySQL validation error: " . $e->getMessage());
+            throw new \RuntimeException("MySQL validation failed: " . $e->getMessage());
         }
     }
 

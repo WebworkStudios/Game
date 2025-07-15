@@ -1,16 +1,13 @@
 <?php
-
-
 declare(strict_types=1);
 
 namespace Framework\Database;
 
 use Framework\Database\Enums\ConnectionType;
-use Framework\Database\Enums\DatabaseDriver;
 use InvalidArgumentException;
 
 /**
- * Database Connection Configuration
+ * MySQL Database Connection Configuration
  */
 readonly class DatabaseConfig
 {
@@ -20,24 +17,23 @@ readonly class DatabaseConfig
         \PDO::ATTR_EMULATE_PREPARES => false,
         \PDO::ATTR_STRINGIFY_FETCHES => false,
     ];
+
     public readonly int $port;
 
     /**
-     * @param DatabaseDriver $driver Database Driver
      * @param string $host Database Host
-     * @param int $port Database Port
+     * @param int $port Database Port (default: 3306)
      * @param string $database Database Name
      * @param string $username Username
      * @param string $password Password
-     * @param string $charset Character Set
+     * @param string $charset Character Set (default: utf8mb4)
      * @param array<int, mixed> $options PDO Options
      * @param ConnectionType $type Connection Type (read/write)
      * @param int $weight Load Balancing Weight
      */
     public function __construct(
-        public DatabaseDriver $driver,
         public string         $host = 'localhost',
-        int                   $port = 0, // Kein public hier!
+        int                   $port = 3306,
         public string         $database = '',
         public string         $username = '',
         public string         $password = '',
@@ -47,11 +43,10 @@ readonly class DatabaseConfig
         public int            $weight = 1,
     )
     {
-        // Port wird hier einmalig gesetzt
-        $this->port = $port === 0 ? $this->driver->getDefaultPort() : $port;
+        $this->port = $port;
 
-        if ($this->driver->requiresHost() && empty($this->host)) {
-            throw new InvalidArgumentException("Host is required for {$this->driver->value} driver");
+        if (empty($this->host)) {
+            throw new InvalidArgumentException("Host is required for MySQL connection");
         }
 
         if (empty($this->database)) {
@@ -69,9 +64,8 @@ readonly class DatabaseConfig
     public static function fromArray(array $config): self
     {
         return new self(
-            driver: DatabaseDriver::from($config['driver'] ?? 'mysql'),
             host: $config['host'] ?? 'localhost',
-            port: $config['port'] ?? 0,
+            port: $config['port'] ?? 3306,
             database: $config['database'] ?? '',
             username: $config['username'] ?? '',
             password: $config['password'] ?? '',
@@ -83,55 +77,35 @@ readonly class DatabaseConfig
     }
 
     /**
-     * Holt finale PDO Options
+     * Erstellt MySQL PDO DSN
      */
-    public function getOptions(): array
+    public function getDsn(): string
+    {
+        return "mysql:host={$this->host};port={$this->port};dbname={$this->database};charset={$this->charset}";
+    }
+
+    /**
+     * Holt PDO Options mit Defaults
+     */
+    public function getPdoOptions(): array
     {
         return array_merge(self::DEFAULT_OPTIONS, $this->options);
     }
 
     /**
-     * Konvertiert zu Array (für Debugging)
+     * Konvertiert zu Array für Debug/Export
      */
     public function toArray(): array
     {
         return [
-            'driver' => $this->driver->value,
             'host' => $this->host,
             'port' => $this->port,
             'database' => $this->database,
             'username' => $this->username,
-            'password' => '***',
+            'password' => '***', // Password verstecken
             'charset' => $this->charset,
             'type' => $this->type->value,
             'weight' => $this->weight,
-            'dsn' => $this->getDsn(),
         ];
-    }
-
-    /**
-     * Erstellt DSN String für PDO
-     */
-    public function getDsn(): string
-    {
-        return match ($this->driver) {
-            DatabaseDriver::MYSQL => sprintf(
-                'mysql:host=%s;port=%d;dbname=%s;charset=%s',
-                $this->host,
-                $this->port,
-                $this->database,
-                $this->charset
-            ),
-            DatabaseDriver::POSTGRESQL, DatabaseDriver::PGSQL => sprintf(
-                'pgsql:host=%s;port=%d;dbname=%s',
-                $this->host,
-                $this->port,
-                $this->database
-            ),
-            DatabaseDriver::SQLITE => sprintf(
-                'sqlite:%s',
-                $this->database
-            ),
-        };
     }
 }

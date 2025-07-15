@@ -1,14 +1,15 @@
 <?php
-
 declare(strict_types=1);
 
 namespace Framework\Validation\Rules;
 
 use Framework\Database\ConnectionManager;
+use Framework\Database\MySQLGrammar;
+use Framework\Database\QueryBuilder;
 use InvalidArgumentException;
 
 /**
- * ExistsRule - Field value must exist in database table
+ * ExistsRule - Field value must exist in MySQL database table
  *
  * Usage: exists:table,column,where_column,where_value,connection
  * Examples:
@@ -48,21 +49,19 @@ class ExistsRule implements RuleInterface
     }
 
     /**
-     * Check if value exists in database using QueryBuilder
+     * Check if value exists in MySQL database using QueryBuilder
      */
     private function exists(string $table, string $column, mixed $value, ?string $whereColumn, ?string $whereValue, string $connection): bool
     {
         try {
-            // Create QueryBuilder factory for the specific connection
-            $queryFactory = function (string $connectionName) {
-                return new \Framework\Database\QueryBuilder(
-                    connectionManager: $this->connectionManager,
-                    grammar: new \Framework\Database\SqlGrammar(),
-                    connectionName: $connectionName
-                );
-            };
+            // Create QueryBuilder with MySQL Grammar
+            $query = new QueryBuilder(
+                connectionManager: $this->connectionManager,
+                grammar: new MySQLGrammar(),
+                connectionName: $connection
+            );
 
-            $query = $queryFactory($connection)
+            $query = $query
                 ->table($table)
                 ->where($column, $value);
 
@@ -77,8 +76,8 @@ class ExistsRule implements RuleInterface
 
         } catch (\Exception $e) {
             // Log error in production, throw in development
-            error_log("ExistsRule database error: " . $e->getMessage());
-            throw new \RuntimeException("Database validation failed: " . $e->getMessage());
+            error_log("ExistsRule MySQL validation error: " . $e->getMessage());
+            throw new \RuntimeException("MySQL validation failed: " . $e->getMessage());
         }
     }
 

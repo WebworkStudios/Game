@@ -1,20 +1,18 @@
 <?php
-
 declare(strict_types=1);
 
 return [
     /*
     |--------------------------------------------------------------------------
-    | Default Database Connection
+    | Default MySQL Connection
     |--------------------------------------------------------------------------
     */
     'default' => [
-        'driver' => 'mysql',
         'host' => 'localhost',
         'port' => 3306,
-        'database' => 'kickerscup', // Change this to your database name
+        'database' => 'kickerscup',
         'username' => 'root',
-        'password' => '', // Add your database password
+        'password' => '',
         'charset' => 'utf8mb4',
         'type' => 'write',
         'weight' => 1,
@@ -22,17 +20,32 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Analytics Database (Example for second connection)
+    | Read Replicas (optional)
     |--------------------------------------------------------------------------
+    | Uncomment to enable read/write splitting:
     */
-    'analytics' => [
-        'driver' => 'postgresql',
-        'host' => 'localhost',
-        'port' => 5432,
-        'database' => 'analytics',
-        'username' => 'postgres',
-        'password' => '',
-        'type' => 'read',
-        'weight' => 1,
+    /*
+    'default' => [
+        [
+            'host' => 'localhost',
+            'port' => 3306,
+            'database' => 'kickerscup',
+            'username' => 'root',
+            'password' => '',
+            'charset' => 'utf8mb4',
+            'type' => 'write',
+            'weight' => 1,
+        ],
+        [
+            'host' => 'localhost-read',
+            'port' => 3306,
+            'database' => 'kickerscup',
+            'username' => 'read_user',
+            'password' => 'read_password',
+            'charset' => 'utf8mb4',
+            'type' => 'read',
+            'weight' => 1,
+        ],
     ],
+    */
 ];

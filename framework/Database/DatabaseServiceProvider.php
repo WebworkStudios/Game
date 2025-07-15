@@ -5,11 +5,10 @@ namespace Framework\Database;
 
 use Framework\Core\Application;
 use Framework\Core\ServiceContainer;
-use Framework\Database\Enums\DatabaseDriver;
 use InvalidArgumentException;
 
 /**
- * Database Service Provider - Registriert Database Services im Framework
+ * MySQL Database Service Provider
  */
 class DatabaseServiceProvider
 {
@@ -23,7 +22,7 @@ class DatabaseServiceProvider
     }
 
     /**
-     * Erstellt Standard-Konfigurationsdatei
+     * Erstellt Standard MySQL-Konfigurationsdatei
      */
     public static function publishConfig(string $basePath): bool
     {
@@ -42,34 +41,17 @@ declare(strict_types=1);
 return [
     /*
     |--------------------------------------------------------------------------
-    | Default Database Connection
+    | Default MySQL Connection
     |--------------------------------------------------------------------------
     */
     'default' => [
-        'driver' => 'mysql',
         'host' => 'localhost',
         'port' => 3306,
-        'database' => 'kickerscup', // Change this to your database name
+        'database' => 'kickerscup',
         'username' => 'root',
-        'password' => '', // Add your database password
+        'password' => '',
         'charset' => 'utf8mb4',
         'type' => 'write',
-        'weight' => 1,
-    ],
-    
-    /*
-    |--------------------------------------------------------------------------
-    | Analytics Database (Example for second connection)
-    |--------------------------------------------------------------------------
-    */
-    'analytics' => [
-        'driver' => 'postgresql',
-        'host' => 'localhost',
-        'port' => 5432,
-        'database' => 'analytics',
-        'username' => 'postgres',
-        'password' => '',
-        'type' => 'read',
         'weight' => 1,
     ],
 ];
@@ -79,7 +61,7 @@ PHP;
     }
 
     /**
-     * Registriert alle Database Services
+     * Registriert alle MySQL Database Services
      */
     public function register(): void
     {
@@ -97,7 +79,7 @@ PHP;
         $this->container->singleton(ConnectionManager::class, function (ServiceContainer $container) {
             $manager = new ConnectionManager();
 
-            // Konfiguration laden
+            // MySQL-Konfiguration laden
             $config = $this->loadDatabaseConfig();
             $manager->loadFromConfig($config);
 
@@ -111,20 +93,20 @@ PHP;
     }
 
     /**
-     * Lädt Database-Konfiguration
+     * Lädt MySQL Database-Konfiguration
      */
     private function loadDatabaseConfig(): array
     {
         $configPath = $this->app->getBasePath() . '/' . self::DEFAULT_CONFIG_PATH;
 
         if (!file_exists($configPath)) {
-            throw new InvalidArgumentException("Database config not found: {$configPath}");
+            throw new InvalidArgumentException("MySQL config not found: {$configPath}");
         }
 
         $config = require $configPath;
 
         if (!is_array($config)) {
-            throw new InvalidArgumentException('Database config must return array');
+            throw new InvalidArgumentException('MySQL config must return array');
         }
 
         return $config;
@@ -138,7 +120,7 @@ PHP;
         $this->container->transient(QueryBuilder::class, function (ServiceContainer $container) {
             return new QueryBuilder(
                 connectionManager: $container->get(ConnectionManager::class),
-                grammar: $container->get(SqlGrammar::class),
+                grammar: $container->get(MySQLGrammar::class),
                 connectionName: 'default'
             );
         });
@@ -148,7 +130,7 @@ PHP;
             return function (string $connectionName = 'default') use ($container) {
                 return new QueryBuilder(
                     connectionManager: $container->get(ConnectionManager::class),
-                    grammar: $container->get(SqlGrammar::class),
+                    grammar: $container->get(MySQLGrammar::class),
                     connectionName: $connectionName
                 );
             };
@@ -156,20 +138,17 @@ PHP;
     }
 
     /**
-     * Registriert SQL Grammar
+     * Registriert MySQL Grammar
      */
     private function registerGrammar(): void
     {
-        $this->container->singleton(SqlGrammar::class, function () {
-            $config = $this->loadDatabaseConfig();
-            $defaultDriver = DatabaseDriver::from($config['default']['driver'] ?? 'mysql');
-
-            return new SqlGrammar($defaultDriver);
+        $this->container->singleton(MySQLGrammar::class, function () {
+            return new MySQLGrammar();
         });
     }
 
     /**
-     * Bindet Interfaces (für zukünftige Repository Pattern)
+     * Bindet Interfaces für Repository Pattern
      */
     private function bindInterfaces(): void
     {
