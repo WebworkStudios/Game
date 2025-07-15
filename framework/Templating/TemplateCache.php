@@ -298,10 +298,31 @@ class TemplateCache
         }
     }
 
-    private function clearFragment(string $key): bool
+    /**
+     * Clear specific fragment cache
+     *
+     * Now public for consistent API
+     */
+    public function clearFragment(string $key): bool
     {
         $fragmentFile = $this->getFragmentFile($key);
-        return file_exists($fragmentFile) ? unlink($fragmentFile) : false;
+        return file_exists($fragmentFile) ? unlink($fragmentFile) : true;
+    }
+
+    /**
+     * Clear cache by multiple keys
+     *
+     * New method for batch operations
+     */
+    public function clearByKeys(array $keys): array
+    {
+        $results = [];
+
+        foreach ($keys as $key) {
+            $results[$key] = $this->clearByKey($key);
+        }
+
+        return $results;
     }
 
     /**
@@ -348,39 +369,42 @@ class TemplateCache
         return $cleared;
     }
 
-    private function clearByKey(string $key): bool
+    /**
+     * Clear cache by key (unified method for templates and fragments)
+     *
+     * This method now becomes the central clearing mechanism
+     */
+    public function clearByKey(string $key): bool
     {
+        $cleared = false;
+
         // Try template cache
         $templateFile = $this->getCacheFile($key);
         if (file_exists($templateFile)) {
-            return unlink($templateFile);
+            $cleared = unlink($templateFile);
         }
 
         // Try fragment cache
         $fragmentFile = $this->getFragmentFile($key);
         if (file_exists($fragmentFile)) {
-            return unlink($fragmentFile);
+            $cleared = unlink($fragmentFile) || $cleared;
         }
 
-        return false;
+        return $cleared;
     }
 
     /**
      * Clear cache for specific template
+     *
+     * Simplified - delegates to clearByKey
      */
     public function clear(string $template): bool
     {
-        $cacheFile = $this->getCacheFile($template);
-
-        if (file_exists($cacheFile)) {
-            return unlink($cacheFile);
-        }
-
-        return true;
+        return $this->clearByKey($template);
     }
 
     /**
-     * Clear all cached templates
+     * Clear all cached templates and fragments
      */
     public function clearAll(): int
     {
@@ -391,7 +415,10 @@ class TemplateCache
         }
 
         $iterator = new \RecursiveIteratorIterator(
-            new \RecursiveDirectoryIterator($this->cacheDir)
+            new \RecursiveDirectoryIterator(
+                $this->cacheDir,
+                \RecursiveDirectoryIterator::SKIP_DOTS
+            )
         );
 
         foreach ($iterator as $file) {
@@ -404,4 +431,51 @@ class TemplateCache
 
         return $cleared;
     }
+
+    /**
+     * Clear only template cache (not fragments)
+     */
+    public function clearTemplates(): int
+    {
+        return $this->clearByType('/templates/');
+    }
+
+    /**
+     * Clear only fragment cache (not templates)
+     */
+    public function clearFragments(): int
+    {
+        return $this->clearByType('/fragments/');
+    }
+
+    /**
+     * Helper method to clear by cache type
+     */
+    private function clearByType(string $subDir): int
+    {
+        $cleared = 0;
+        $targetDir = $this->cacheDir . $subDir;
+
+        if (!is_dir($targetDir)) {
+            return $cleared;
+        }
+
+        $iterator = new \RecursiveIteratorIterator(
+            new \RecursiveDirectoryIterator(
+                $targetDir,
+                \RecursiveDirectoryIterator::SKIP_DOTS
+            )
+        );
+
+        foreach ($iterator as $file) {
+            if ($file->isFile() && $file->getExtension() === 'php') {
+                if (unlink($file->getPathname())) {
+                    $cleared++;
+                }
+            }
+        }
+
+        return $cleared;
+    }
+
 }

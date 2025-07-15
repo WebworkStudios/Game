@@ -62,7 +62,6 @@ class Application
         $this->loadAppConfig();
         $this->registerCoreServices();
         $this->registerDatabaseServices();
-        $this->registerSecurityServices();
         $this->registerValidationServices();
         $this->registerLocalizationServices();
         $this->registerTemplatingServices();
@@ -199,20 +198,6 @@ class Application
     {
         $provider = new DatabaseServiceProvider($this->container, $this);
         $provider->register();
-    }
-
-    /**
-     * Registriert Security Services (Session, CSRF, etc.)
-     */
-    private function registerSecurityServices(): void
-    {
-        $provider = new SecurityServiceProvider($this->container, $this);
-        $provider->register();
-
-        // Services direkt im Application-Container verfügbar machen
-        $this->container->singleton('session', fn() => $this->container->get(Session::class));
-        $this->container->singleton('session_security', fn() => $this->container->get(SessionSecurity::class));
-        $this->container->singleton('csrf', fn() => $this->container->get(Csrf::class));
     }
 
     /**
