@@ -338,6 +338,27 @@ class Application
     }
 
     /**
+     * Validate data with custom messages support
+     */
+    public function validate(array $data, array $rules, array $customMessages = [], ?string $connectionName = null): Validator
+    {
+        $validatorFactory = $this->container->get(ValidatorFactory::class);
+        $validator = $validatorFactory->make($data, $rules, $customMessages, $connectionName);
+
+        return $validator;
+    }
+
+    /**
+     * Validate data and throw exception on failure with custom messages
+     */
+    public function validateOrFail(array $data, array $rules, array $customMessages = [], ?string $connectionName = null): array
+    {
+        $validator = $this->validate($data, $rules, $customMessages, $connectionName);
+
+        return $validator->validateOrFail();
+    }
+
+    /**
      * Get Application Version
      */
     public function version(): string

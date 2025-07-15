@@ -7,12 +7,13 @@ namespace Framework\Validation;
 use Framework\Database\ConnectionManager;
 
 /**
- * Validator - Array-based validation with rule parsing
+ * Validator - Array-based validation with rule parsing and custom messages support
  */
 class Validator
 {
     private array $data = [];
     private array $rules = [];
+    private array $customMessages = [];
     private MessageBag $errors;
     private array $validated = [];
 
@@ -24,15 +25,29 @@ class Validator
     }
 
     /**
-     * Factory method to create validator instance
+     * Factory method to create validator instance with custom messages
      */
-    public static function make(array $data, array $rules = [], ?ConnectionManager $connectionManager = null): self
-    {
+    public static function make(
+        array $data,
+        array $rules = [],
+        array $customMessages = [],
+        ?ConnectionManager $connectionManager = null
+    ): self {
         $validator = new self($connectionManager);
         $validator->data = $data;
         $validator->rules = $rules;
+        $validator->customMessages = $customMessages;
 
         return $validator;
+    }
+
+    /**
+     * Set custom messages after instantiation
+     */
+    public function setCustomMessages(array $customMessages): self
+    {
+        $this->customMessages = $customMessages;
+        return $this;
     }
 
     /**
@@ -120,7 +135,7 @@ class Validator
         $value = $this->data;
 
         foreach ($keys as $key) {
-            if (!is_array($value) || !isset($value[$key])) {
+            if (!is_array($value) || !array_key_exists($key, $value)) {
                 return null;
             }
             $value = $value[$key];
@@ -130,26 +145,26 @@ class Validator
     }
 
     /**
-     * Parse rule string into array of rules
+     * Parse rules string into array
      */
     private function parseRules(string $ruleString): array
     {
         $rules = [];
         $ruleParts = explode('|', $ruleString);
 
-        foreach ($ruleParts as $rule) {
-            $rule = trim($rule);
+        foreach ($ruleParts as $rulePart) {
+            $rulePart = trim($rulePart);
 
-            if (str_contains($rule, ':')) {
-                [$name, $paramString] = explode(':', $rule, 2);
-                $parameters = explode(',', $paramString);
+            if (str_contains($rulePart, ':')) {
+                [$name, $params] = explode(':', $rulePart, 2);
+                $parameters = explode(',', $params);
             } else {
-                $name = $rule;
+                $name = $rulePart;
                 $parameters = [];
             }
 
             $rules[] = [
-                'name' => $name,
+                'name' => trim($name),
                 'parameters' => array_map('trim', $parameters)
             ];
         }
@@ -158,7 +173,7 @@ class Validator
     }
 
     /**
-     * Validate single rule
+     * Validate single rule with custom message support
      */
     private function validateRule(string $field, mixed $value, string $ruleName, array $parameters): bool
     {
@@ -168,20 +183,51 @@ class Validator
             throw new ValidationException("Validation rule '{$ruleName}' not found");
         }
 
-        // Database rules need ConnectionManager, others don't
-        $needsConnection = in_array($ruleName, ['unique', 'exists'], true);
-        $rule = $needsConnection
+        $rule = class_exists($ruleClass) && method_exists($ruleClass, '__construct')
             ? new $ruleClass($this->connectionManager)
             : new $ruleClass();
 
         $passes = $rule->passes($field, $value, $parameters, $this->data);
 
         if (!$passes) {
-            $message = $rule->message($field, $value, $parameters);
+            // Check for custom message first
+            $customMessageKey = "{$field}.{$ruleName}";
+            if (isset($this->customMessages[$customMessageKey])) {
+                $message = $this->interpolateMessage($this->customMessages[$customMessageKey], $field, $value, $parameters);
+            } else {
+                // Fallback to rule's default message
+                $message = $rule->message($field, $value, $parameters);
+            }
+
             $this->errors->add($field, $message);
         }
 
         return $passes;
+    }
+
+    /**
+     * Interpolate placeholders in custom messages
+     */
+    private function interpolateMessage(string $message, string $field, mixed $value, array $parameters): string
+    {
+        // Replace :field placeholder
+        $message = str_replace(':field', $field, $message);
+
+        // Replace :value placeholder
+        $message = str_replace(':value', (string) $value, $message);
+
+        // Replace parameter placeholders like :min, :max, etc.
+        foreach ($parameters as $index => $parameter) {
+            $message = str_replace(":{$index}", $parameter, $message);
+
+            // Common parameter names
+            $paramNames = ['min', 'max', 'size', 'table', 'column', 'confirmed'];
+            if (isset($paramNames[$index])) {
+                $message = str_replace(":{$paramNames[$index]}", $parameter, $message);
+            }
+        }
+
+        return $message;
     }
 
     /**

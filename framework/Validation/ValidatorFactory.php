@@ -5,7 +5,7 @@ namespace Framework\Validation;
 use Framework\Database\ConnectionManager;
 
 /**
- * ValidatorFactory - Type-safe factory for creating validators
+ * ValidatorFactory - Type-safe factory for creating validators with custom messages support
  */
 readonly class ValidatorFactory
 {
@@ -16,10 +16,14 @@ readonly class ValidatorFactory
     }
 
     /**
-     * Create validator instance
+     * Create validator instance with custom messages support
      */
-    public function make(array $data, array $rules, ?string $connectionName = null): Validator
-    {
-        return Validator::make($data, $rules, $this->connectionManager);
+    public function make(
+        array $data,
+        array $rules,
+        array $customMessages = [],
+        ?string $connectionName = null
+    ): Validator {
+        return Validator::make($data, $rules, $customMessages, $this->connectionManager);
     }
 }
