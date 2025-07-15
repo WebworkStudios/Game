@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Framework\Validation;
 
 use Framework\Database\ConnectionManager;
+use InvalidArgumentException;
 
 /**
  * Validator - Array-based validation with rule parsing and custom messages support
@@ -180,7 +181,7 @@ class Validator
         $ruleClass = $this->getRuleClass($ruleName);
 
         if (!class_exists($ruleClass)) {
-            throw new ValidationException("Validation rule '{$ruleName}' not found");
+            throw new InvalidArgumentException("Validation rule '{$ruleName}' not found");
         }
 
         $rule = class_exists($ruleClass) && method_exists($ruleClass, '__construct')
