@@ -7,197 +7,282 @@ namespace Framework\Security;
 use Framework\Http\HttpStatus;
 use Framework\Http\Request;
 use Framework\Http\Response;
+use Framework\Http\ResponseFactory;
 use Framework\Routing\MiddlewareInterface;
 
 /**
- * SessionMiddleware - Integrates Session Management into Request Lifecycle
- * Handles session start, security validation, and cleanup
+ * SessionMiddleware - Request Orchestration Layer
+ *
+ * Verantwortlichkeiten:
+ * - Request-Flow Orchestrierung
+ * - Session Start/Stop Management im Request-Zyklus
+ * - Security Validation Triggering
+ * - Error-Handler für Security Violations
  */
 class SessionMiddleware implements MiddlewareInterface
 {
     private array $config;
 
     public function __construct(
-        private readonly Session         $session,
-        private readonly SessionSecurity $sessionSecurity
-    )
-    {
+        private readonly Session $session,
+        private readonly SessionSecurity $sessionSecurity,
+        private readonly ResponseFactory $responseFactory
+    ) {
         $this->config = $this->getDefaultConfig();
     }
 
-    /**
-     * Default middleware configuration
-     */
     private function getDefaultConfig(): array
     {
         return [
             'auto_start' => true,
-            'lazy_start' => true,
             'security_validation' => true,
-            'auto_regenerate' => true,
-            'cleanup_on_response' => true,
             'exempt_paths' => [
                 '/api/health',
                 '/ping',
+                '/favicon.ico',
+            ],
+            'require_session_paths' => [
+                '/admin',
+                '/dashboard',
+                '/team',
+                '/player',
             ],
         ];
     }
 
-    /**
-     * Set configuration
-     */
     public function setConfig(array $config): void
     {
         $this->config = array_merge($this->config, $config);
     }
 
-    /**
-     * Handle request through session middleware
-     */
+    public function getConfig(): array
+    {
+        return $this->config;
+    }
+
     public function handle(Request $request, callable $next): Response
     {
         try {
-            // Check if session handling is needed
+            // 1. Check if session needed
             if ($this->shouldSkipSession($request)) {
                 return $next($request);
             }
 
-            // Initialize session
-            $this->initializeSession($request);
+            // 2. Start session
+            $this->startSession($request);
 
-            // Validate session security
+            // 3. Validate security if enabled
             if ($this->config['security_validation']) {
-                $validationResult = $this->validateSessionSecurity($request);
+                $validation = $this->sessionSecurity->validateSession($request);
 
-                if (!($validationResult['valid'] ?? true)) {
-                    return $this->handleSecurityViolation($request, $validationResult);
+                if (!$validation['valid']) {
+                    return $this->handleSecurityViolation($request, $validation);
                 }
 
-                // Handle regeneration if required
-                if (($validationResult['regeneration_required'] ?? false) && $this->config['auto_regenerate']) {
-                    $this->handleSessionRegeneration($request);
-                }
+                // Handle required actions
+                $this->handleSecurityActions($validation['actions'] ?? []);
             }
 
-            // Process request
+            // 4. Process request
             $response = $next($request);
 
-            // Post-process session
-            $this->postProcessSession($request, $response);
+            // 5. Cleanup (if needed)
+            $this->cleanup();
 
             return $response;
 
         } catch (\Throwable $e) {
-            // Log error but don't break the application
             $this->logError('Session middleware error', $e);
+            // Continue without session on errors
             return $next($request);
         }
     }
 
-    /**
-     * Check if session handling should be skipped
-     */
+    // =============================================================================
+    // PUBLIC API - Manual Operations
+    // =============================================================================
+
+    public function forceSessionStart(Request $request): void
+    {
+        $this->startSession($request);
+    }
+
+    public function forceSecurityValidation(Request $request): array
+    {
+        return $this->sessionSecurity->validateSession($request);
+    }
+
+    public function forceRegeneration(Request $request, string $reason = 'manual'): bool
+    {
+        try {
+            return $this->sessionSecurity->regenerateSession($reason);
+        } catch (\Throwable $e) {
+            $this->logError('Force regeneration failed', $e);
+            return false;
+        }
+    }
+
+    // =============================================================================
+    // PRIVATE METHODS - Orchestration Logic
+    // =============================================================================
+
     private function shouldSkipSession(Request $request): bool
     {
         $path = $request->getPath();
 
+        // Check exempt paths
         foreach ($this->config['exempt_paths'] as $exemptPath) {
             if (str_starts_with($path, $exemptPath)) {
                 return true;
             }
         }
 
-        // Skip for certain request types if configured
+        // Skip if auto_start disabled and session not required
         if (!$this->config['auto_start'] && !$this->requiresSession($request)) {
-            return true;
+            return false;
         }
 
         return false;
     }
 
-    /**
-     * Check if request requires session
-     */
     private function requiresSession(Request $request): bool
     {
+        $path = $request->getPath();
+
+        // Check if path requires session
+        foreach ($this->config['require_session_paths'] as $requiredPath) {
+            if (str_starts_with($path, $requiredPath)) {
+                return true;
+            }
+        }
+
         // Session required for:
         // - POST requests (for CSRF)
-        // - Authenticated areas
-        // - Forms
         // - When session cookie exists
-
+        // - Forms
         return $request->getMethod()->value === 'POST'
             || isset($request->getCookies()[session_name()])
             || str_contains($request->getHeader('Content-Type') ?? '', 'form-data')
-            || str_contains($request->getPath(), '/auth')
-            || str_contains($request->getPath(), '/admin');
+            || str_contains($path, '/auth');
     }
 
-    /**
-     * Initialize session for request
-     */
-    private function initializeSession(Request $request): void
+    private function startSession(Request $request): void
     {
-        if ($this->config['lazy_start']) {
-            // Only start if not already started
-            if (!$this->session->isStarted()) {
-                $this->session->start();
-            }
-        } else {
-            // Always start
+        if (!$this->session->isStarted()) {
             $this->session->start();
-        }
 
-        // Initialize security if new session
-        if (!$this->session->hasFramework('security_initialized')) {
-            $this->sessionSecurity->initializeSecurity($request);
-            $this->session->setFramework('security_initialized', true);
+            // Initialize security for new sessions
+            if (!$this->session->hasFramework('security_initialized')) {
+                $this->sessionSecurity->initializeSession($request);
+                $this->session->setFramework('security_initialized', true);
+
+                $this->logSessionEvent('session_started', $request);
+            }
         }
     }
 
-    /**
-     * Validate session security
-     */
-    private function validateSessionSecurity(Request $request): array
+    private function handleSecurityActions(array $actions): void
     {
-        return $this->sessionSecurity->validateSession($request);
+        foreach ($actions as $action) {
+            match ($action) {
+                'regenerate_session' => $this->sessionSecurity->regenerateSession('security_interval'),
+                default => null,
+            };
+        }
     }
 
-    /**
-     * Handle security violations
-     */
-    private function handleSecurityViolation(Request $request, array $result): Response
+    private function handleSecurityViolation(Request $request, array $validation): Response
     {
-        $violations = $result['violations'] ?? [];
+        $violations = $validation['violations'] ?? [];
 
-        // Log security violation
         $this->logSecurityViolation($request, $violations);
 
-        // Handle different violation types
-        foreach ($violations as $violation) {
-            switch ($violation['type']) {
-                case 'session_locked':
-                case 'locked_out':
-                    return $this->handleSessionLocked($request);
+        // Handle first violation type (most critical)
+        $violation = $violations[0] ?? [];
 
-                case 'session_expired':
-                    return $this->handleSessionExpired($request);
-
-                case 'fingerprint_mismatch':
-                    return $this->handleFingerprintMismatch($request);
-
-                default:
-                    return $this->handleGeneralSecurityViolation($request, $violation);
-            }
-        }
-
-        // Fallback
-        return $this->handleGeneralSecurityViolation($request, $violations[0] ?? []);
+        return match ($violation['type'] ?? 'unknown') {
+            'session_expired' => $this->handleSessionExpired($request),
+            'fingerprint_mismatch' => $this->handleFingerprintMismatch($request),
+            'locked_out' => $this->handleSessionLocked($request),
+            default => $this->handleGeneralSecurityViolation($request, $violation),
+        };
     }
 
-    /**
-     * Log security violation
-     */
+    private function handleSessionExpired(Request $request): Response
+    {
+        $this->session->destroy();
+
+        if ($request->expectsJson()) {
+            return $this->responseFactory->json([
+                'error' => 'Session expired',
+                'message' => 'Your session has expired. Please log in again.',
+                'code' => 'SESSION_EXPIRED'
+            ], HttpStatus::UNAUTHORIZED);
+        }
+
+        return $this->responseFactory->redirect('/auth/login?reason=expired');
+    }
+
+    private function handleFingerprintMismatch(Request $request): Response
+    {
+        $this->session->destroy();
+
+        if ($request->expectsJson()) {
+            return $this->responseFactory->json([
+                'error' => 'Security violation',
+                'message' => 'Session security validation failed',
+                'code' => 'SECURITY_VIOLATION'
+            ], HttpStatus::FORBIDDEN);
+        }
+
+        return $this->responseFactory->redirect('/auth/login?reason=security');
+    }
+
+    private function handleSessionLocked(Request $request): Response
+    {
+        if ($request->expectsJson()) {
+            return $this->responseFactory->json([
+                'error' => 'Session locked',
+                'message' => 'Session is temporarily locked due to security violations',
+                'code' => 'SESSION_LOCKED'
+            ], HttpStatus::from(423)); // HTTP 423 Locked
+        }
+
+        return $this->responseFactory->redirect('/auth/login?reason=locked');
+    }
+
+    private function handleGeneralSecurityViolation(Request $request, array $violation): Response
+    {
+        if ($request->expectsJson()) {
+            return $this->responseFactory->json([
+                'error' => 'Security violation',
+                'message' => $violation['message'] ?? 'Security validation failed',
+                'code' => 'SECURITY_VIOLATION'
+            ], HttpStatus::FORBIDDEN);
+        }
+
+        return $this->responseFactory->redirect('/auth/login?reason=security');
+    }
+
+    private function cleanup(): void
+    {
+        // Optional cleanup logic
+        // Could trigger garbage collection, cleanup expired data, etc.
+
+        // Probabilistic garbage collection (5% chance)
+        if (mt_rand(1, 100) <= 5) {
+            try {
+                $this->session->gc();
+            } catch (\Throwable $e) {
+                $this->logError('Session garbage collection failed', $e);
+            }
+        }
+    }
+
+    // =============================================================================
+    // PRIVATE METHODS - Logging
+    // =============================================================================
+
     private function logSecurityViolation(Request $request, array $violations): void
     {
         $logData = [
@@ -209,143 +294,30 @@ class SessionMiddleware implements MiddlewareInterface
                 'ip' => $request->ip(),
                 'user_agent' => $request->getHeader('User-Agent'),
             ],
-            'session' => [
-                'id' => $this->session->getId(),
-                'status' => $this->session->getStatus(),
-            ],
+            'session_id' => $this->session->getId(),
             'timestamp' => time(),
         ];
 
-        error_log('Session Security Violation: ' . json_encode($logData));
+        error_log('SessionMiddleware: ' . json_encode($logData));
     }
 
-    /**
-     * Get middleware status for debugging
-     */
-    public function getStatus(): array
-    {
-        return [
-            'config' => $this->config,
-            'session_started' => $this->session->isStarted(),
-            'session_status' => $this->session->getStatus(),
-        ];
-    }
-
-    /**
-     * Handle session locked
-     */
-    private function handleSessionLocked(Request $request): Response
-    {
-        if ($request->expectsJson()) {
-            return Response::json([
-                'error' => 'Session locked',
-                'message' => 'Session is temporarily locked due to security violations',
-                'code' => 'SESSION_LOCKED'
-            ], HttpStatus::from(423)); // HTTP 423 Locked
-        }
-
-        // Destroy current session
-        $this->session->destroy();
-
-        // Redirect to login or error page
-        return Response::redirect('/auth/login?reason=session_locked');
-    }
-
-    /**
-     * Handle session expired
-     */
-    private function handleSessionExpired(Request $request): Response
-    {
-        if ($request->expectsJson()) {
-            return Response::json([
-                'error' => 'Session expired',
-                'message' => 'Your session has expired. Please log in again.',
-                'code' => 'SESSION_EXPIRED'
-            ], HttpStatus::UNAUTHORIZED);
-        }
-
-        // Clear expired session
-        $this->session->destroy();
-
-        // Redirect to login
-        return Response::redirect('/auth/login?reason=expired');
-    }
-
-    /**
-     * Handle fingerprint mismatch
-     */
-    private function handleFingerprintMismatch(Request $request): Response
-    {
-        if ($request->expectsJson()) {
-            return Response::json([
-                'error' => 'Security violation',
-                'message' => 'Session security validation failed',
-                'code' => 'SECURITY_VIOLATION'
-            ], HttpStatus::FORBIDDEN);
-        }
-
-        // Destroy session for security
-        $this->session->destroy();
-
-        // Redirect to login with security warning
-        return Response::redirect('/auth/login?reason=security');
-    }
-
-    /**
-     * Handle general security violation
-     */
-    private function handleGeneralSecurityViolation(Request $request, array $violation): Response
-    {
-        if ($request->expectsJson()) {
-            return Response::json([
-                'error' => 'Security violation',
-                'message' => $violation['message'] ?? 'Security validation failed',
-                'code' => 'SECURITY_VIOLATION'
-            ], HttpStatus::FORBIDDEN);
-        }
-
-        return Response::redirect('/auth/login?reason=security');
-    }
-
-    /**
-     * Handle session regeneration
-     */
-    private function handleSessionRegeneration(Request $request): void
-    {
-        try {
-            // Use Session's built-in regenerate method instead of SessionSecurity
-            $this->session->regenerate();
-            $this->logSecurityEvent('session_regenerated', $request);
-        } catch (\Throwable $e) {
-            $this->logError('Session regeneration failed', $e);
-        }
-    }
-
-    /**
-     * Log security event
-     */
-    private function logSecurityEvent(string $event, Request $request): void
+    private function logSessionEvent(string $event, Request $request): void
     {
         $logData = [
-            'type' => 'security_event',
+            'type' => 'session_event',
             'event' => $event,
             'request' => [
                 'method' => $request->getMethod()->value,
                 'path' => $request->getPath(),
                 'ip' => $request->ip(),
             ],
-            'session' => [
-                'id' => $this->session->getId(),
-            ],
+            'session_id' => $this->session->getId(),
             'timestamp' => time(),
         ];
 
-        error_log('Session Security Event: ' . json_encode($logData));
+        error_log('SessionMiddleware: ' . json_encode($logData));
     }
 
-    /**
-     * Log general errors
-     */
     private function logError(string $message, \Throwable $e): void
     {
         $logData = [
@@ -360,61 +332,6 @@ class SessionMiddleware implements MiddlewareInterface
             'timestamp' => time(),
         ];
 
-        error_log('Session Middleware Error: ' . json_encode($logData));
-    }
-
-    /**
-     * Post-process session after request
-     */
-    private function postProcessSession(Request $request, Response $response): void
-    {
-        if (!$this->config['cleanup_on_response']) {
-            return;
-        }
-
-        try {
-            // Clean up expired data
-            $this->cleanupExpiredData();
-
-            // Garbage collection (probabilistic)
-            if (mt_rand(1, 100) <= 5) { // 5% chance
-                $this->session->gc();
-            }
-
-        } catch (\Throwable $e) {
-            $this->logError('Session cleanup failed', $e);
-        }
-    }
-
-    /**
-     * Clean up expired session data
-     */
-    private function cleanupExpiredData(): void
-    {
-        // This could be extended to clean up specific expired data
-        // For now, rely on PHP's built-in garbage collection
-    }
-
-    /**
-     * Public API for manual session operations
-     */
-    public function forceSessionStart(Request $request): void
-    {
-        $this->initializeSession($request);
-    }
-
-    public function forceSecurityValidation(Request $request): array
-    {
-        return $this->validateSessionSecurity($request);
-    }
-
-    public function forceRegeneration(Request $request): bool
-    {
-        try {
-            $this->handleSessionRegeneration($request);
-            return true;
-        } catch (\Throwable) {
-            return false;
-        }
+        error_log('SessionMiddleware: ' . json_encode($logData));
     }
 }

@@ -6,11 +6,12 @@ namespace Framework\Security;
 
 use Framework\Core\AbstractServiceProvider;
 use Framework\Core\ConfigValidation;
+use Framework\Http\ResponseFactory;
 
 /**
- * Security Service Provider - Registriert Security Services im Framework
+ * Security Service Provider - Registriert refactorierte Security Services
  *
- * BEREINIGT: Verwendet ConfigValidation Trait, eliminiert Code-Duplikation
+ * REFACTORED: Angepasst für die neue Session-Architektur
  */
 class SecurityServiceProvider extends AbstractServiceProvider
 {
@@ -21,7 +22,7 @@ class SecurityServiceProvider extends AbstractServiceProvider
      */
     protected function validateDependencies(): void
     {
-        // Config-Validierung (eliminiert die vorherige Duplikation)
+        // Config-Validierung
         $this->ensureConfigExists('security');
 
         // Security-spezifische Validierungen
@@ -35,34 +36,65 @@ class SecurityServiceProvider extends AbstractServiceProvider
     {
         $this->registerSession();
         $this->registerSessionSecurity();
+        $this->registerSessionMiddleware();
         $this->registerCsrf();
-        $this->registerMiddlewares();
     }
 
     /**
-     * Registriert Session als Singleton
+     * Registriert Session als Singleton (Pure Data Layer)
      */
     private function registerSession(): void
     {
         $this->singleton(Session::class, function () {
-            // Verwendet die neue loadAndValidateConfig() Methode
             $config = $this->loadAndValidateConfig('security');
             return new Session($config['session'] ?? []);
         });
     }
 
     /**
-     * Registriert Session Security
+     * Registriert SessionSecurity als Singleton (Security Layer)
      */
     private function registerSessionSecurity(): void
     {
         $this->singleton(SessionSecurity::class, function () {
-            return new SessionSecurity($this->get(Session::class));
+            $config = $this->loadAndValidateConfig('security');
+
+            $sessionSecurity = new SessionSecurity($this->get(Session::class));
+
+            // Konfiguration anwenden falls vorhanden
+            if (isset($config['session_security'])) {
+                $sessionSecurity->setConfig($config['session_security']);
+            }
+
+            return $sessionSecurity;
         });
     }
 
     /**
-     * Registriert CSRF Protection
+     * Registriert SessionMiddleware als Singleton (Orchestration Layer)
+     */
+    private function registerSessionMiddleware(): void
+    {
+        $this->singleton(SessionMiddleware::class, function () {
+            $config = $this->loadAndValidateConfig('security');
+
+            $middleware = new SessionMiddleware(
+                $this->get(Session::class),
+                $this->get(SessionSecurity::class),
+                $this->get(ResponseFactory::class)
+            );
+
+            // Middleware-Konfiguration anwenden falls vorhanden
+            if (isset($config['session_middleware'])) {
+                $middleware->setConfig($config['session_middleware']);
+            }
+
+            return $middleware;
+        });
+    }
+
+    /**
+     * Registriert CSRF Protection (unverändert)
      */
     private function registerCsrf(): void
     {
@@ -72,15 +104,7 @@ class SecurityServiceProvider extends AbstractServiceProvider
     }
 
     /**
-     * Registriert Security Middlewares
-     */
-    private function registerMiddlewares(): void
-    {
-        // Middleware-Registrierung falls benötigt
-    }
-
-    /**
-     * Validiert Session-Verzeichnis (Security-spezifisch)
+     * Validiert Session-Verzeichnis
      */
     private function validateSessionDirectory(): void
     {
@@ -96,7 +120,7 @@ class SecurityServiceProvider extends AbstractServiceProvider
     }
 
     /**
-     * Bindet Security-Interfaces
+     * Bindet Security-Interfaces (für zukünftige Erweiterungen)
      */
     protected function bindInterfaces(): void
     {
