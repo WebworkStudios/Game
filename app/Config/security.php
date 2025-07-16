@@ -18,6 +18,7 @@ return [
         'gc_maxlifetime' => 7200,
         'gc_probability' => 1,
         'gc_divisor' => 100,
+        'save_path' => 'storage/sessions', // ← HINZUGEFÜGT: Für SecurityServiceProvider
     ],
 
     /*

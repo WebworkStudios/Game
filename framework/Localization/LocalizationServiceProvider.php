@@ -10,7 +10,7 @@ use Framework\Security\Session;
 /**
  * Localization Service Provider - Registriert Mehrsprachigkeits-Services
  *
- * KORRIGIERTE VERSION: Verwendet Locale-Codes statt Display-Namen für Verzeichnisse
+ * BEREINIGT: Keine Default-Provider mehr - Config-Dateien sind die einzige Quelle
  */
 class LocalizationServiceProvider extends AbstractServiceProvider
 {
@@ -27,8 +27,16 @@ class LocalizationServiceProvider extends AbstractServiceProvider
             throw new \RuntimeException('mbstring extension is required for localization functionality');
         }
 
+        // Prüfe ob Config-Datei existiert
+        if (!$this->configExists()) {
+            throw new \RuntimeException(
+                "Localization config file not found: " . self::CONFIG_PATH . "\n" .
+                "Please create this file or run: php artisan config:publish localization"
+            );
+        }
+
         // Language-Verzeichnisse erstellen
-        $config = $this->getConfig(self::CONFIG_PATH, fn() => $this->getDefaultLocalizationConfig(), self::REQUIRED_KEYS);
+        $config = $this->getConfig(self::CONFIG_PATH, requiredKeys: self::REQUIRED_KEYS);
         $this->ensureLanguageDirectories($config);
     }
 
@@ -48,10 +56,10 @@ class LocalizationServiceProvider extends AbstractServiceProvider
     private function registerTranslator(): void
     {
         $this->singleton(Translator::class, function () {
-            $config = $this->getConfig(self::CONFIG_PATH, fn() => $this->getDefaultLocalizationConfig(), self::REQUIRED_KEYS);
+            $config = $this->getConfig(self::CONFIG_PATH, requiredKeys: self::REQUIRED_KEYS);
 
             $languagesPath = $this->basePath($config['languages_path']);
-            $this->ensureLanguageFiles($languagesPath, array_keys($config['supported_locales'])); // FIX: Verwende Locale-Codes
+            $this->ensureLanguageFiles($languagesPath, array_keys($config['supported_locales']));
 
             $translator = new Translator($languagesPath);
             $translator->setLocale($config['default_locale']);
@@ -67,7 +75,7 @@ class LocalizationServiceProvider extends AbstractServiceProvider
     private function registerLanguageDetector(): void
     {
         $this->singleton(LanguageDetector::class, function () {
-            $config = $this->getLocalizationConfig();
+            $config = $this->getConfig(self::CONFIG_PATH, requiredKeys: self::REQUIRED_KEYS);
 
             return new LanguageDetector(
                 session: $this->get(Session::class),
@@ -100,35 +108,33 @@ class LocalizationServiceProvider extends AbstractServiceProvider
     }
 
     /**
-     * Holt Localization-Konfiguration
+     * Stellt sicher, dass Language-Verzeichnisse existieren
      */
-    private function getLocalizationConfig(): array
+    private function ensureLanguageDirectories(array $config): void
     {
-        return $this->getConfig(
-            configPath: self::CONFIG_PATH,
-            defaultProvider: fn() => $this->getDefaultLocalizationConfig(),
-            requiredKeys: self::REQUIRED_KEYS
-        );
+        $languagesPath = $this->basePath($config['languages_path']);
+
+        if (!is_dir($languagesPath) && !mkdir($languagesPath, 0755, true)) {
+            throw new \RuntimeException("Cannot create languages directory: {$languagesPath}");
+        }
+
+        foreach (array_keys($config['supported_locales']) as $locale) {
+            $localePath = $languagesPath . '/' . $locale;
+            if (!is_dir($localePath) && !mkdir($localePath, 0755, true)) {
+                throw new \RuntimeException("Cannot create locale directory: {$localePath}");
+            }
+        }
     }
 
     /**
      * Erstellt Standard-Sprachdateien
-     *
-     * FIX: Verwendet jetzt Locale-Codes statt Display-Namen
      */
     private function ensureLanguageFiles(string $languagesPath, array $supportedLocales): void
     {
         $defaultFiles = ['auth.php', 'validation.php', 'game.php'];
 
-        foreach ($supportedLocales as $locale) { // FIX: $locale ist jetzt der Code, nicht der Name
+        foreach ($supportedLocales as $locale) {
             $localePath = $languagesPath . '/' . $locale;
-
-            // Stelle sicher, dass das Verzeichnis existiert
-            if (!is_dir($localePath)) {
-                if (!mkdir($localePath, 0755, true)) {
-                    throw new \RuntimeException("Cannot create locale directory: {$localePath}");
-                }
-            }
 
             foreach ($defaultFiles as $file) {
                 $filePath = $localePath . '/' . $file;
@@ -136,7 +142,6 @@ class LocalizationServiceProvider extends AbstractServiceProvider
                 if (!file_exists($filePath)) {
                     $content = $this->getDefaultLanguageContent($locale, pathinfo($file, PATHINFO_FILENAME));
 
-                    // Stelle sicher, dass file_put_contents erfolgreich ist
                     if (file_put_contents($filePath, $content) === false) {
                         throw new \RuntimeException("Cannot write language file: {$filePath}");
                     }
@@ -164,23 +169,30 @@ class LocalizationServiceProvider extends AbstractServiceProvider
             'validation' => [
                 'required' => 'The :field field is required.',
                 'email' => 'The :field must be a valid email address.',
-                'unique' => 'The :field has already been taken.',
                 'min' => 'The :field must be at least :min characters.',
                 'max' => 'The :field may not be greater than :max characters.',
+                'numeric' => 'The :field must be a number.',
+                'string' => 'The :field must be a string.',
             ],
             'game' => [
-                'goals' => 'Goals',
-                'assists' => 'Assists',
-                'yellow_cards' => 'Yellow Cards',
-                'red_cards' => 'Red Cards',
-                'minutes_played' => 'Minutes Played',
                 'team' => 'Team',
                 'player' => 'Player',
                 'match' => 'Match',
+                'goal' => 'Goal',
+                'goals' => 'Goals',
+                'win' => 'Win',
+                'loss' => 'Loss',
+                'draw' => 'Draw',
                 'season' => 'Season',
+                'league' => 'League',
             ],
-            default => ['placeholder' => 'Placeholder text'],
+            default => ['placeholder' => 'Placeholder content for ' . $group],
         };
+
+        // Lokalisiere Inhalte basierend auf Sprache
+        if ($locale === 'de') {
+            $content = $this->getGermanTranslations($group, $content);
+        }
 
         $exportedContent = var_export($content, true);
 
@@ -189,81 +201,55 @@ class LocalizationServiceProvider extends AbstractServiceProvider
 
 declare(strict_types=1);
 
-// Auto-generated language file for locale: {$locale}
-// Group: {$group}
-
 return {$exportedContent};
 PHP;
     }
 
     /**
-     * Erstellt Language-Verzeichnisse falls nötig
-     *
-     * FIX: Verwendet jetzt Locale-Codes statt Display-Namen
+     * Deutsche Übersetzungen
      */
-    private function ensureLanguageDirectories(array $config): void
+    private function getGermanTranslations(string $group, array $default): array
     {
-        $languagesPath = $this->basePath($config['languages_path']);
-
-        if (!is_dir($languagesPath) && !mkdir($languagesPath, 0755, true)) {
-            throw new \RuntimeException("Cannot create languages directory: {$languagesPath}");
-        }
-
-        // FIX: Verwende array_keys() um die Locale-Codes zu bekommen
-        foreach (array_keys($config['supported_locales']) as $locale) {
-            $localePath = $languagesPath . '/' . $locale;
-            if (!is_dir($localePath) && !mkdir($localePath, 0755, true)) {
-                throw new \RuntimeException("Cannot create locale directory: {$localePath}");
-            }
-        }
+        return match ($group) {
+            'auth' => [
+                'login' => 'Anmelden',
+                'logout' => 'Abmelden',
+                'register' => 'Registrieren',
+                'password' => 'Passwort',
+                'email' => 'E-Mail',
+                'remember_me' => 'Angemeldet bleiben',
+                'failed' => 'Diese Anmeldedaten stimmen nicht mit unseren Unterlagen überein.',
+                'password_reset' => 'Passwort zurücksetzen',
+            ],
+            'validation' => [
+                'required' => 'Das Feld :field ist erforderlich.',
+                'email' => 'Das Feld :field muss eine gültige E-Mail-Adresse sein.',
+                'min' => 'Das Feld :field muss mindestens :min Zeichen haben.',
+                'max' => 'Das Feld :field darf maximal :max Zeichen haben.',
+                'numeric' => 'Das Feld :field muss eine Zahl sein.',
+                'string' => 'Das Feld :field muss ein Text sein.',
+            ],
+            'game' => [
+                'team' => 'Team',
+                'player' => 'Spieler',
+                'match' => 'Spiel',
+                'goal' => 'Tor',
+                'goals' => 'Tore',
+                'win' => 'Sieg',
+                'loss' => 'Niederlage',
+                'draw' => 'Unentschieden',
+                'season' => 'Saison',
+                'league' => 'Liga',
+            ],
+            default => $default,
+        };
     }
 
     /**
-     * Default Localization Konfiguration
+     * Prüft ob Config-Datei existiert
      */
-    private function getDefaultLocalizationConfig(): array
+    private function configExists(): bool
     {
-        return [
-            'default_locale' => 'de', // FIX: Deutsch als Standard
-            'fallback_locale' => 'de',
-            'supported_locales' => [
-                'de' => 'Deutsch',
-                'en' => 'English',
-                'fr' => 'Français',
-                'es' => 'Español'
-            ],
-            'languages_path' => 'app/Languages',
-            'auto_detect' => true,
-            'detection_methods' => [
-                'session',
-                'header',
-                'subdomain',
-                'query_parameter',
-            ],
-            'session_key' => 'locale',
-            'query_parameter' => 'lang',
-            'subdomain_mapping' => [
-                'en' => 'www',
-                'de' => 'de',
-                'fr' => 'fr',
-                'es' => 'es',
-            ],
-            'rtl_locales' => ['ar', 'he', 'fa'],
-            'date_formats' => [
-                'en' => 'Y-m-d',
-                'de' => 'd.m.Y',
-                'fr' => 'd/m/Y',
-                'es' => 'd/m/Y',
-            ],
-            'pluralization' => [
-                'separator' => '|',
-                'rules' => [
-                    'en' => 'english',
-                    'de' => 'german',
-                    'fr' => 'french',
-                    'es' => 'spanish',
-                ],
-            ],
-        ];
+        return file_exists($this->basePath(self::CONFIG_PATH));
     }
 }

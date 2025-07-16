@@ -10,8 +10,7 @@ use Framework\Routing\RouterCache;
 /**
  * Security Service Provider - Registriert Security Services im Framework
  *
- * Vollständig migrierte Version mit AbstractServiceProvider und ConfigManager.
- * 85% weniger Code als das Original.
+ * BEREINIGT: Keine Default-Provider mehr - Config-Dateien sind die einzige Quelle
  */
 class SecurityServiceProvider extends AbstractServiceProvider
 {
@@ -22,11 +21,19 @@ class SecurityServiceProvider extends AbstractServiceProvider
      */
     protected function validateDependencies(): void
     {
+        // Prüfe ob Config-Datei existiert
+        if (!$this->configExists()) {
+            throw new \RuntimeException(
+                "Security config file not found: " . self::CONFIG_PATH . "\n" .
+                "Please create this file or run: php artisan config:publish security"
+            );
+        }
+
         // Prüfe ob Session-Verzeichnis existiert/erstellt werden kann
-        $config = $this->getConfig(self::CONFIG_PATH, fn() => $this->getDefaultSecurityConfig());
+        $config = $this->getConfig(self::CONFIG_PATH);
 
         if (isset($config['session']['save_path'])) {
-            $sessionPath = $this->basePath($config['session']['save_path']);
+            $sessionPath = $this->basePath($config['session']['save_path'] ?? 'storage/sessions');
             if (!is_dir($sessionPath) && !mkdir($sessionPath, 0755, true)) {
                 throw new \RuntimeException("Cannot create session directory: {$sessionPath}");
             }
@@ -50,7 +57,7 @@ class SecurityServiceProvider extends AbstractServiceProvider
     private function registerSession(): void
     {
         $this->singleton(Session::class, function () {
-            $config = $this->getConfig(self::CONFIG_PATH, fn() => $this->getDefaultSecurityConfig());
+            $config = $this->getConfig(self::CONFIG_PATH);
             return new Session($config['session'] ?? []);
         });
     }
@@ -89,7 +96,7 @@ class SecurityServiceProvider extends AbstractServiceProvider
         });
 
         $this->singleton(CsrfMiddleware::class, function () {
-            $config = $this->getConfig(self::CONFIG_PATH, fn() => $this->getDefaultSecurityConfig());
+            $config = $this->getConfig(self::CONFIG_PATH);
 
             $csrf = $this->get(Csrf::class);
             $routerCache = $this->get(RouterCache::class);
@@ -114,56 +121,10 @@ class SecurityServiceProvider extends AbstractServiceProvider
     }
 
     /**
-     * Default Security Konfiguration
+     * Prüft ob Config-Datei existiert
      */
-    private function getDefaultSecurityConfig(): array
+    private function configExists(): bool
     {
-        return [
-            'session' => [
-                'driver' => 'file',
-                'save_path' => 'storage/sessions',
-                'name' => 'kickers_session',
-                'lifetime' => 3600, // 1 hour
-                'expire_on_close' => false,
-                'encrypt' => false,
-                'cookie_httponly' => true,
-                'cookie_secure' => false, // Set to true in production with HTTPS
-                'cookie_samesite' => 'Lax',
-                'regenerate_interval' => 300, // 5 minutes
-            ],
-            'csrf' => [
-                'enabled' => true,
-                'token_name' => '_token',
-                'header_name' => 'X-CSRF-TOKEN',
-                'exclude_routes' => [
-                    'api/*',
-                    'webhooks/*',
-                ],
-                'token_lifetime' => 3600, // 1 hour
-            ],
-            'headers' => [
-                'X-Content-Type-Options' => 'nosniff',
-                'X-Frame-Options' => 'SAMEORIGIN',
-                'X-XSS-Protection' => '1; mode=block',
-                'Referrer-Policy' => 'strict-origin-when-cross-origin',
-                'Content-Security-Policy' => "default-src 'self'",
-            ],
-            'encryption' => [
-                'cipher' => 'AES-256-CBC',
-                'key' => '', // Should be set in production
-            ],
-            'rate_limiting' => [
-                'enabled' => true,
-                'max_attempts' => 60,
-                'decay_minutes' => 1,
-                'prefix' => 'rate_limit',
-            ],
-            'password_hashing' => [
-                'algorithm' => PASSWORD_ARGON2ID,
-                'memory_cost' => 65536, // 64 MB
-                'time_cost' => 4,
-                'threads' => 3,
-            ],
-        ];
+        return file_exists($this->basePath(self::CONFIG_PATH));
     }
 }

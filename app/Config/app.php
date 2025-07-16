@@ -9,11 +9,11 @@ return [
     |--------------------------------------------------------------------------
     */
 
-    'name' => 'Kickerscup.de',
+    'name' => 'KickersCup Manager',
     'version' => '2.0.0',
     'debug' => true, // Set to false in production
     'timezone' => 'UTC',
-    'locale' => 'en',
+    'locale' => 'de',
 
     /*
     |--------------------------------------------------------------------------

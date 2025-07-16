@@ -7,13 +7,11 @@ namespace Framework\Templating;
 use Framework\Core\AbstractServiceProvider;
 use Framework\Localization\Translator;
 use Framework\Security\Csrf;
-use InvalidArgumentException;
 
 /**
  * Templating Service Provider - Registriert Template Services im Framework
  *
- * Vollständig migrierte Version mit AbstractServiceProvider und ConfigManager.
- * 80% weniger Code als das Original - kein Publishing-Code mehr nötig.
+ * BEREINIGT: Keine Default-Provider mehr - Config-Dateien sind die einzige Quelle
  */
 class TemplatingServiceProvider extends AbstractServiceProvider
 {
@@ -24,8 +22,16 @@ class TemplatingServiceProvider extends AbstractServiceProvider
      */
     protected function validateDependencies(): void
     {
+        // Prüfe ob Config-Datei existiert
+        if (!$this->configExists()) {
+            throw new \RuntimeException(
+                "Templating config file not found: " . self::CONFIG_PATH . "\n" .
+                "Please create this file or run: php artisan config:publish templating"
+            );
+        }
+
         // Prüfe ob Template-Verzeichnisse existieren/erstellt werden können
-        $config = $this->getTemplatingConfig();
+        $config = $this->getConfig(self::CONFIG_PATH);
 
         foreach ($config['paths'] ?? ['app/Views'] as $path) {
             $fullPath = $this->basePath($path);
@@ -60,7 +66,7 @@ class TemplatingServiceProvider extends AbstractServiceProvider
     private function registerTemplateCache(): void
     {
         $this->singleton(TemplateCache::class, function () {
-            $config = $this->getTemplatingConfig();
+            $config = $this->getConfig(self::CONFIG_PATH);
 
             $cachePath = $this->basePath($config['cache']['path'] ?? 'storage/cache/views');
             $enabled = $config['cache']['enabled'] ?? true;
@@ -94,7 +100,7 @@ class TemplatingServiceProvider extends AbstractServiceProvider
     private function registerTemplateEngine(): void
     {
         $this->singleton(TemplateEngine::class, function () {
-            $config = $this->getTemplatingConfig();
+            $config = $this->getConfig(self::CONFIG_PATH);
 
             $cache = null;
             if ($config['cache']['enabled'] ?? false) {
@@ -110,7 +116,7 @@ class TemplatingServiceProvider extends AbstractServiceProvider
             return new TemplateEngine(
                 templatePaths: $templatePaths,
                 cache: $cache,
-                autoEscape: $config['auto_escape'] ?? true
+                autoEscape: $config['options']['auto_escape'] ?? true
             );
         });
     }
@@ -130,17 +136,6 @@ class TemplatingServiceProvider extends AbstractServiceProvider
     }
 
     /**
-     * Holt Konfiguration mit ConfigManager
-     */
-    protected function getTemplatingConfig(): array
-    {
-        return $this->getConfig(
-            configPath: self::CONFIG_PATH,
-            defaultProvider: fn() => $this->getDefaultConfig()
-        );
-    }
-
-    /**
      * Bindet Templating-Interfaces
      */
     protected function bindInterfaces(): void
@@ -150,25 +145,10 @@ class TemplatingServiceProvider extends AbstractServiceProvider
     }
 
     /**
-     * Standard-Konfiguration mit XSS-Schutz
+     * Prüft ob Config-Datei existiert
      */
-    private function getDefaultConfig(): array
+    private function configExists(): bool
     {
-        return [
-            'paths' => ['app/Views'],
-            'auto_escape' => true, // XSS-Schutz standardmäßig aktiviert
-            'cache' => [
-                'enabled' => true,
-                'path' => 'storage/cache/views',
-                'auto_reload' => true,
-            ],
-            'debug' => false,
-            'extension' => '.html',
-            'security_headers' => [
-                'X-Content-Type-Options' => 'nosniff',
-                'X-Frame-Options' => 'SAMEORIGIN',
-                'X-XSS-Protection' => '1; mode=block',
-            ],
-        ];
+        return file_exists($this->basePath(self::CONFIG_PATH));
     }
 }

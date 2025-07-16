@@ -7,6 +7,7 @@ return [
     |--------------------------------------------------------------------------
     | Template Paths
     |--------------------------------------------------------------------------
+    | Verzeichnisse in denen Templates gesucht werden
     */
     'paths' => [
         'app/Views',
@@ -14,21 +15,34 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Template Settings
-    |--------------------------------------------------------------------------
-    */
-    'auto_escape' => true,
-    'debug' => true,
-
-    /*
-    |--------------------------------------------------------------------------
-    | Template Compilation Caching
+    | Template Cache
     |--------------------------------------------------------------------------
     */
     'cache' => [
-        'enabled' => true, // Set to false in development for hot reload
+        'enabled' => true,
         'path' => 'storage/cache/views',
-        'auto_cleanup' => true,
-        'stats_logging' => false,
+        'auto_reload' => true, // Reload if template changed (dev mode)
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Template Engine Options
+    |--------------------------------------------------------------------------
+    */
+    'options' => [
+        'auto_escape' => true,        // XSS Protection
+        'strict_variables' => false,  // Throw error on undefined variables
+        'debug' => false,             // Debug mode
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Custom Filters
+    |--------------------------------------------------------------------------
+    */
+    'filters' => [
+        'custom_filter_classes' => [
+            // 'custom_filter' => App\Filters\CustomFilterClass::class,
+        ],
     ],
 ];

@@ -10,11 +10,12 @@ use Framework\Database\ConnectionManager;
 /**
  * Validation Service Provider - Registriert Validation Services im Framework
  *
- * Vollständig migrierte Version mit AbstractServiceProvider und ConfigManager.
- * 85% weniger Code als das Original.
+ * BEREINIGT: Keine Default-Provider mehr - Config-Dateien sind die einzige Quelle
+ * ValidationServiceProvider funktioniert ohne eigene Config-Datei
  */
 class ValidationServiceProvider extends AbstractServiceProvider
 {
+
     /**
      * Validiert, dass alle benötigten Abhängigkeiten verfügbar sind
      */
@@ -56,5 +57,14 @@ class ValidationServiceProvider extends AbstractServiceProvider
                 connectionManager: $this->get(ConnectionManager::class)
             );
         });
+    }
+
+    /**
+     * Bindet Validation-Interfaces
+     */
+    protected function bindInterfaces(): void
+    {
+        // Hier können Validation-Interfaces gebunden werden
+        // $this->bind(ValidatorInterface::class, Validator::class);
     }
 }

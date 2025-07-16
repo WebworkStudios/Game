@@ -9,13 +9,11 @@ use Framework\Core\AbstractServiceProvider;
 /**
  * Database Service Provider - Registriert Database Services im Framework
  *
- * Vollständig migrierte Version mit AbstractServiceProvider und ConfigManager.
- * 90% weniger Code als das Original.
+ * BEREINIGT: Keine Default-Provider mehr - Config-Dateien sind die einzige Quelle
  */
 class DatabaseServiceProvider extends AbstractServiceProvider
 {
     private const string CONFIG_PATH = 'app/Config/database.php';
-    private const array REQUIRED_KEYS = ['default', 'connections'];
 
     /**
      * Validiert Database-spezifische Abhängigkeiten
@@ -28,6 +26,14 @@ class DatabaseServiceProvider extends AbstractServiceProvider
 
         if (!extension_loaded('pdo_mysql')) {
             throw new \RuntimeException('PDO MySQL driver is required');
+        }
+
+        // Prüfe ob Config-Datei existiert
+        if (!$this->configExists()) {
+            throw new \RuntimeException(
+                "Database config file not found: " . self::CONFIG_PATH . "\n" .
+                "Please create this file or run: php artisan config:publish database"
+            );
         }
     }
 
@@ -47,13 +53,12 @@ class DatabaseServiceProvider extends AbstractServiceProvider
     private function registerConnectionManager(): void
     {
         $this->singleton(ConnectionManager::class, function () {
-            $config = $this->getConfig(
-                configPath: self::CONFIG_PATH,
-                defaultProvider: fn() => $this->getDefaultDatabaseConfig(),
-                requiredKeys: self::REQUIRED_KEYS
-            );
+            $config = $this->getConfig(self::CONFIG_PATH);
 
-            return new ConnectionManager($config);
+            // Struktur-Anpassung für ConnectionManager
+            $connectionManagerConfig = $this->adaptConfigForConnectionManager($config);
+
+            return new ConnectionManager($connectionManagerConfig);
         });
     }
 
@@ -102,63 +107,42 @@ class DatabaseServiceProvider extends AbstractServiceProvider
     }
 
     /**
-     * Default Database Konfiguration
+     * Adaptiert Config-Struktur für ConnectionManager
      */
-    private function getDefaultDatabaseConfig(): array
+    private function adaptConfigForConnectionManager(array $config): array
     {
-        return [
+        // Falls bereits im ConnectionManager-Format (mit 'connections' key)
+        if (isset($config['connections'])) {
+            return $config;
+        }
+
+        // Konvertiere app/Config/database.php Format zu ConnectionManager Format
+        $adapted = [
             'default' => 'mysql',
-            'connections' => [
-                'mysql' => [
-                    'driver' => 'mysql',
-                    'host' => 'localhost',
-                    'port' => 3306,
-                    'database' => 'kickerscup',
-                    'username' => 'root',
-                    'password' => '',
-                    'charset' => 'utf8mb4',
-                    'collation' => 'utf8mb4_unicode_ci',
-                    'prefix' => '',
-                    'strict' => true,
-                    'engine' => 'InnoDB',
-                    'options' => [
-                        \PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION,
-                        \PDO::ATTR_DEFAULT_FETCH_MODE => \PDO::FETCH_ASSOC,
-                        \PDO::ATTR_EMULATE_PREPARES => false,
-                        \PDO::MYSQL_ATTR_INIT_COMMAND => 'SET sql_mode="STRICT_TRANS_TABLES"',
-                    ],
-                ],
-                'game' => [
-                    'driver' => 'mysql',
-                    'host' => 'localhost',
-                    'port' => 3306,
-                    'database' => 'kickers_game',
-                    'username' => 'game_user',
-                    'password' => 'game_password',
-                    'charset' => 'utf8mb4',
-                    'collation' => 'utf8mb4_unicode_ci',
-                    'prefix' => 'game_',
-                    'strict' => true,
-                    'engine' => 'InnoDB',
-                    'options' => [
-                        \PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION,
-                        \PDO::ATTR_DEFAULT_FETCH_MODE => \PDO::FETCH_ASSOC,
-                        \PDO::ATTR_EMULATE_PREPARES => false,
-                    ],
-                ],
-            ],
-            'query_log' => [
-                'enabled' => false,
-                'log_file' => 'storage/logs/queries.log',
-                'log_slow_queries' => true,
-                'slow_query_threshold' => 1000,
-            ],
-            'pool' => [
-                'min_connections' => 1,
-                'max_connections' => 10,
-                'idle_timeout' => 600,
-                'validation_query' => 'SELECT 1',
-            ],
+            'connections' => []
         ];
+
+        // Hauptverbindung als 'mysql' Connection
+        if (isset($config['default'])) {
+            $adapted['connections']['mysql'] = array_merge($config['default'], [
+                'driver' => 'mysql',
+                'collation' => 'utf8mb4_unicode_ci',
+                'prefix' => '',
+                'strict' => true,
+                'engine' => 'InnoDB',
+                'options' => [],
+            ]);
+        }
+
+        return $adapted;
+    }
+
+    /**
+     * Prüft ob Config-Datei existiert
+     * @return bool
+     */
+    private function configExists(): bool
+    {
+        return file_exists($this->basePath(self::CONFIG_PATH));
     }
 }
