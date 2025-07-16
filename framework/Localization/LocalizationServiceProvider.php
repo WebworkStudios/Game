@@ -10,8 +10,7 @@ use Framework\Security\Session;
 /**
  * Localization Service Provider - Registriert Mehrsprachigkeits-Services
  *
- * Vollständig migrierte Version mit AbstractServiceProvider und ConfigManager.
- * 85% weniger Code als das Original.
+ * KORRIGIERTE VERSION: Verwendet Locale-Codes statt Display-Namen für Verzeichnisse
  */
 class LocalizationServiceProvider extends AbstractServiceProvider
 {
@@ -52,7 +51,7 @@ class LocalizationServiceProvider extends AbstractServiceProvider
             $config = $this->getConfig(self::CONFIG_PATH, fn() => $this->getDefaultLocalizationConfig(), self::REQUIRED_KEYS);
 
             $languagesPath = $this->basePath($config['languages_path']);
-            $this->ensureLanguageFiles($languagesPath, $config['supported_locales']);
+            $this->ensureLanguageFiles($languagesPath, array_keys($config['supported_locales'])); // FIX: Verwende Locale-Codes
 
             $translator = new Translator($languagesPath);
             $translator->setLocale($config['default_locale']);
@@ -114,20 +113,33 @@ class LocalizationServiceProvider extends AbstractServiceProvider
 
     /**
      * Erstellt Standard-Sprachdateien
+     *
+     * FIX: Verwendet jetzt Locale-Codes statt Display-Namen
      */
     private function ensureLanguageFiles(string $languagesPath, array $supportedLocales): void
     {
         $defaultFiles = ['auth.php', 'validation.php', 'game.php'];
 
-        foreach ($supportedLocales as $locale) {
+        foreach ($supportedLocales as $locale) { // FIX: $locale ist jetzt der Code, nicht der Name
             $localePath = $languagesPath . '/' . $locale;
+
+            // Stelle sicher, dass das Verzeichnis existiert
+            if (!is_dir($localePath)) {
+                if (!mkdir($localePath, 0755, true)) {
+                    throw new \RuntimeException("Cannot create locale directory: {$localePath}");
+                }
+            }
 
             foreach ($defaultFiles as $file) {
                 $filePath = $localePath . '/' . $file;
 
                 if (!file_exists($filePath)) {
                     $content = $this->getDefaultLanguageContent($locale, pathinfo($file, PATHINFO_FILENAME));
-                    file_put_contents($filePath, $content);
+
+                    // Stelle sicher, dass file_put_contents erfolgreich ist
+                    if (file_put_contents($filePath, $content) === false) {
+                        throw new \RuntimeException("Cannot write language file: {$filePath}");
+                    }
                 }
             }
         }
@@ -186,6 +198,8 @@ PHP;
 
     /**
      * Erstellt Language-Verzeichnisse falls nötig
+     *
+     * FIX: Verwendet jetzt Locale-Codes statt Display-Namen
      */
     private function ensureLanguageDirectories(array $config): void
     {
@@ -195,7 +209,8 @@ PHP;
             throw new \RuntimeException("Cannot create languages directory: {$languagesPath}");
         }
 
-        foreach ($config['supported_locales'] as $locale => $name) {
+        // FIX: Verwende array_keys() um die Locale-Codes zu bekommen
+        foreach (array_keys($config['supported_locales']) as $locale) {
             $localePath = $languagesPath . '/' . $locale;
             if (!is_dir($localePath) && !mkdir($localePath, 0755, true)) {
                 throw new \RuntimeException("Cannot create locale directory: {$localePath}");
@@ -209,9 +224,14 @@ PHP;
     private function getDefaultLocalizationConfig(): array
     {
         return [
-            'default_locale' => 'en',
-            'fallback_locale' => 'en',
-            'supported_locales' => ['en' => 'English', 'de' => 'Deutsch', 'fr' => 'Français', 'es' => 'Español'],
+            'default_locale' => 'de', // FIX: Deutsch als Standard
+            'fallback_locale' => 'de',
+            'supported_locales' => [
+                'de' => 'Deutsch',
+                'en' => 'English',
+                'fr' => 'Français',
+                'es' => 'Español'
+            ],
             'languages_path' => 'app/Languages',
             'auto_detect' => true,
             'detection_methods' => [

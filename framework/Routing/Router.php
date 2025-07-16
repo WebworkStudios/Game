@@ -8,11 +8,14 @@ use Framework\Core\ServiceContainer;
 use Framework\Http\HttpMethod;
 use Framework\Http\Request;
 use Framework\Http\Response;
+use Framework\Http\ResponseFactory;
 use InvalidArgumentException;
 use RuntimeException;
 
 /**
  * Router - Attribute-based HTTP Router mit Middleware-Support
+ *
+ * KORRIGIERTE VERSION: Verwendet ResponseFactory statt statische Response-Methoden
  */
 class Router
 {
@@ -107,6 +110,8 @@ class Router
 
     /**
      * Behandelt 404 Not Found
+     *
+     * FIX: Verwendet ResponseFactory statt statische Response-Methoden
      */
     private function handleNotFound(Request $request): Response
     {
@@ -118,11 +123,15 @@ class Router
             }
         }
 
-        return Response::notFound(self::DEFAULT_404_MESSAGE);
+        // FIX: Verwende ResponseFactory statt Response::notFound()
+        $responseFactory = $this->container->get(ResponseFactory::class);
+        return $responseFactory->notFound(self::DEFAULT_404_MESSAGE);
     }
 
     /**
      * Behandelt 405 Method Not Allowed
+     *
+     * FIX: Verwendet ResponseFactory statt statische Response-Methoden
      */
     private function handleMethodNotAllowed(Request $request, RouteEntry $route): Response
     {
@@ -139,7 +148,9 @@ class Router
             $route->methods
         );
 
-        return Response::methodNotAllowed(self::DEFAULT_405_MESSAGE)
+        // FIX: Verwende ResponseFactory statt Response::methodNotAllowed()
+        $responseFactory = $this->container->get(ResponseFactory::class);
+        return $responseFactory->methodNotAllowed(self::DEFAULT_405_MESSAGE)
             ->withHeader('Allow', implode(', ', $allowedMethods));
     }
 
@@ -274,67 +285,33 @@ class Router
         }
 
         $route = $this->namedRoutes[$name];
-        $pattern = $route->pattern;
-
-        // Entferne Regex-Anchors
-        $url = trim($pattern, '#^$');
-
-        // Ersetze Parameter
-        foreach ($parameters as $key => $value) {
-            $url = preg_replace("/\(\?\P<{$key}>[^)]+\)/", (string)$value, $url);
-        }
-
-        // Prüfe ob alle Parameter ersetzt wurden
-        if (preg_match('/\(\?\?P<\w+>[^)]+\)/', $url)) {
-            throw new InvalidArgumentException("Missing parameters for route '{$name}'");
-        }
-
-        return $url;
+        return $route->buildUrl($parameters);
     }
 
     /**
-     * Debug-Information über geladene Routes
+     * Holt benannte Route
+     */
+    public function getNamedRoute(string $name): ?RouteEntry
+    {
+        $this->loadRoutes();
+        return $this->namedRoutes[$name] ?? null;
+    }
+
+    /**
+     * Holt alle Routes
      */
     public function getRoutes(): array
     {
         $this->loadRoutes();
-
-        return array_map(function (RouteEntry $route) {
-            return [
-                'pattern' => $route->pattern,
-                'methods' => array_map(fn(HttpMethod $m) => $m->value, $route->methods),
-                'action' => $route->action,
-                'middlewares' => $route->middlewares,
-                'name' => $route->name,
-                'parameters' => $route->parameters,
-            ];
-        }, $this->routes);
+        return $this->routes;
     }
 
     /**
-     * Holt Debug-Information über Middleware
+     * Holt alle benannten Routes
      */
-    public function getMiddlewareInfo(): array
+    public function getNamedRoutes(): array
     {
-        $this->loadRoutes(); // Sicherstellen dass Routes geladen sind
-
-        return [
-            'global_middlewares' => $this->globalMiddlewares,
-            'total_global_count' => count($this->globalMiddlewares),
-            'routes_loaded' => $this->routesLoaded,
-            'route_count' => count($this->routes),
-        ];
-    }
-
-    /**
-     * Löscht Route-Cache
-     */
-    public function clearCache(): bool
-    {
-        $this->routesLoaded = false;
-        $this->routes = [];
-        $this->namedRoutes = [];
-
-        return $this->cache->clearCache();
+        $this->loadRoutes();
+        return $this->namedRoutes;
     }
 }

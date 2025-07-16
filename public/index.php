@@ -9,6 +9,7 @@ use Framework\Core\Application;
 use Framework\Http\HttpStatus;
 use Framework\Http\Request;
 use Framework\Http\Response;
+use Framework\Http\ResponseFactory;
 use Framework\Routing\Router;
 
 // Error Reporting für Development
@@ -33,9 +34,12 @@ try {
 
     // Custom 404 Handler - Direkt über Router setzen
     $router = $app->getContainer()->get(Router::class);
-    $router->setNotFoundHandler(function (Request $request) {
+    $responseFactory = $app->getContainer()->get(ResponseFactory::class); // FIX: ResponseFactory holen
+
+    $router->setNotFoundHandler(function (Request $request) use ($responseFactory) {
         if ($request->expectsJson() || str_starts_with($request->getPath(), '/api/')) {
-            return Response::json([
+            // FIX: Verwende ResponseFactory statt Response::json()
+            return $responseFactory->json([
                 'error' => 'Route not found',
                 'path' => $request->getPath(),
                 'method' => $request->getMethod()->value,
@@ -64,39 +68,44 @@ try {
                         display: flex;
                         align-items: center;
                         justify-content: center;
-                        color: #333;
-                        padding: 20px;
+                        color: white;
                     }
                     .container {
-                        background: white;
-                        padding: 40px;
-                        border-radius: 12px;
-                        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
                         text-align: center;
-                        max-width: 500px;
-                        width: 100%%;
+                        background: rgba(255, 255, 255, 0.1);
+                        padding: 40px;
+                        border-radius: 20px;
+                        backdrop-filter: blur(10px);
+                        border: 1px solid rgba(255, 255, 255, 0.2);
+                        max-width: 600px;
+                        width: 90%%;
                     }
                     h1 {
-                        color: #e74c3c;
                         font-size: 4rem;
-                        font-weight: 700;
                         margin-bottom: 20px;
-                        text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.1);
+                        text-shadow: 0 2px 4px rgba(0,0,0,0.3);
                     }
                     h2 {
-                        color: #2c3e50;
                         font-size: 1.5rem;
                         margin-bottom: 30px;
-                        font-weight: 300;
+                        opacity: 0.9;
+                    }
+                    p {
+                        font-size: 1.1rem;
+                        margin-bottom: 30px;
+                        opacity: 0.8;
+                        line-height: 1.6;
                     }
                     .path {
-                        background: #ecf0f1;
-                        padding: 15px;
-                        border-radius: 8px;
-                        margin: 20px 0;
+                        background: rgba(0, 0, 0, 0.2);
+                        padding: 20px;
+                        border-radius: 10px;
+                        margin: 30px 0;
                         font-family: monospace;
-                        color: #7f8c8d;
-                        word-break: break-all;
+                        text-align: left;
+                    }
+                    .path strong {
+                        color: #ffd700;
                     }
                     .actions {
                         margin-top: 30px;
@@ -105,33 +114,37 @@ try {
                         display: inline-block;
                         padding: 12px 24px;
                         margin: 0 10px;
-                        border-radius: 6px;
                         text-decoration: none;
-                        font-weight: 500;
+                        border-radius: 25px;
+                        font-weight: 600;
                         transition: all 0.3s ease;
+                        text-transform: uppercase;
+                        letter-spacing: 1px;
                     }
                     .btn-primary {
-                        background: #3498db;
+                        background: linear-gradient(45deg, #ff6b6b, #ee5a24);
                         color: white;
-                    }
-                    .btn-primary:hover {
-                        background: #2980b9;
-                        transform: translateY(-2px);
                     }
                     .btn-secondary {
-                        background: #95a5a6;
+                        background: rgba(255, 255, 255, 0.2);
                         color: white;
+                        border: 1px solid rgba(255, 255, 255, 0.3);
                     }
-                    .btn-secondary:hover {
-                        background: #7f8c8d;
+                    .btn:hover {
                         transform: translateY(-2px);
+                        box-shadow: 0 8px 25px rgba(0,0,0,0.2);
+                    }
+                    @media (max-width: 768px) {
+                        h1 { font-size: 2.5rem; }
+                        .container { padding: 20px; }
+                        .btn { display: block; margin: 10px 0; }
                     }
                 </style>
             </head>
             <body>
                 <div class="container">
                     <h1>404</h1>
-                    <h2>Oops! Page not found</h2>
+                    <h2>Page not found</h2>
                     <p>The page you are looking for might have been removed, had its name changed, or is temporarily unavailable.</p>
                     
                     <div class="path">
@@ -150,12 +163,13 @@ try {
             htmlspecialchars($request->getMethod()->value)
         );
 
-        return Response::notFound($html);
+        // FIX: Verwende ResponseFactory statt Response::notFound()
+        return $responseFactory->notFound($html);
     });
 
     // Anwendung starten - Kompatibel mit alter run() Signatur
     $request = Request::fromGlobals();
-    $response = $app->run($request);
+    $response = $app->handleRequest($request); // FIX: Verwende handleRequest() statt run()
     $response->send();
 
 } catch (Throwable $e) {
@@ -166,7 +180,7 @@ try {
         // Development: Zeige detaillierten Fehler
         echo sprintf('
             <!DOCTYPE html>
-            <html>
+            <html lang=de>
             <head>
                 <title>Fatal Error</title>
                 <style>
@@ -206,51 +220,48 @@ try {
                 </div>
             </body>
             </html>',
-            htmlspecialchars(get_class($e)),
-            htmlspecialchars($e->getFile()),
+            get_class($e),
+            $e->getFile(),
             $e->getLine(),
             htmlspecialchars($e->getMessage()),
             htmlspecialchars($e->getTraceAsString())
         );
     } else {
         // Production: Zeige generischen Fehler
-        echo '
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <title>Server Error</title>
-                <style>
-                    body { 
-                        font-family: Arial, sans-serif; 
-                        text-align: center; 
-                        padding: 50px;
-                        background: #f8f9fa;
-                        color: #343a40;
-                    }
-                    .error-container { 
-                        max-width: 500px; 
-                        margin: 0 auto;
-                        background: white;
-                        padding: 40px;
-                        border-radius: 8px;
-                        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-                    }
-                    h1 { color: #dc3545; margin-bottom: 20px; }
-                    p { color: #6c757d; line-height: 1.6; }
-                </style>
-            </head>
-            <body>
-                <div class="error-container">
-                    <h1>500 - Internal Server Error</h1>
-                    <p>Something went wrong on our end. Please try again later.</p>
-                    <p>If the problem persists, please contact support.</p>
-                </div>
-            </body>
-            </html>';
+        echo '<!DOCTYPE html>
+        <html lang=de>
+        <head>
+            <title>Server Error</title>
+            <style>
+                body { 
+                    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    min-height: 100vh;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    color: white;
+                    margin: 0;
+                }
+                .container {
+                    text-align: center;
+                    background: rgba(255, 255, 255, 0.1);
+                    padding: 40px;
+                    border-radius: 20px;
+                    backdrop-filter: blur(10px);
+                    border: 1px solid rgba(255, 255, 255, 0.2);
+                }
+                h1 { font-size: 3rem; margin-bottom: 20px; }
+                p { font-size: 1.2rem; opacity: 0.9; }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <h1>500</h1>
+                <p>Internal Server Error</p>
+                <p>Something went wrong on our end. Please try again later.</p>
+            </div>
+        </body>
+        </html>';
     }
-
-    // Log error
-    error_log("Fatal Application Error: " . $e->getMessage() . " in " . $e->getFile() . ":" . $e->getLine());
-
-    exit(1);
 }
