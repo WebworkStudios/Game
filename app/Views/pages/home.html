@@ -1,45 +1,414 @@
-<!-- app/Views/pages/home.html - Vollständige Demo -->
 {% extends 'layouts/base' %}
 
 {% block title %}{{ welcome_message }} - {{ app_name }}{% endblock %}
 
+
 {% block content %}
-<h1>🚀 {{ welcome_message }}</h1>
+<div class="dashboard">
+    <!-- Welcome Section -->
+    <div class="welcome-section">
+        <h1 class="welcome-title">⚽ {{ welcome_message }}</h1>
+        <p class="welcome-subtitle">Verwalte deinen Verein und führe ihn zum Erfolg</p>
 
-{% if user %}
-<div style="background: #e8f5e8; padding: 15px; border-radius: 5px; margin: 20px 0;">
-    <strong>Welcome {{ user.name }}!</strong> ({{ user.email }})
-    {% if user.team %}
-    <br>You are managing <strong>{{ user.team.name }}</strong> in {{ user.team.league }}.
-    {% endif %}
-    {% if user.isAdmin %}
-    <br><em>You have admin privileges</em>
-    {% endif %}
-</div>
-{% endif %}
+        {% if user %}
+        <div class="user-info">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;">
+                <div>
+                    <strong>{{ user.name }}</strong> • {{ user.email }}
+                    {% if user.is_admin %}
+                    <span style="background: rgba(255, 255, 255, 0.2); padding: 4px 8px; border-radius: 12px; font-size: 0.8rem; margin-left: 10px;">
+                        👑 Admin
+                    </span>
+                    {% endif %}
+                </div>
+                {% if user.team %}
+                <div class="team-badge">
+                    🏆 {{ user.team.name }} • {{ user.team.league }}
+                    <br>
+                    <small>Platz {{ user.team.position }} • {{ user.team.points }} Punkte</small>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
 
-<div style="background: #f0f8ff; padding: 20px; border-radius: 10px; margin: 20px 0;">
-    <h3>🎨 Template Engine Features Demo</h3>
-    <ul style="list-style: none; padding-left: 0;">
-        <li>✅ <strong>Variables:</strong> {{ user.name }}, {{ app_name }}</li>
-        <li>✅ <strong>Nested Variables:</strong> {{ user.team.name }} in {{ user.team.league }}</li>
-        <li>✅ <strong>Conditionals:</strong> {% if user.isAdmin %}Admin privileges shown{% endif %}</li>
-        <li>✅ <strong>Loops:</strong> {{ features|length }} features rendered below</li>
-        <li>✅ <strong>Inheritance:</strong> This page extends layouts/base.html</li>
-        <li>✅ <strong>Blocks:</strong> title and content blocks override parent</li>
-    </ul>
+    <!-- Main Dashboard Grid -->
+    <div class="dashboard-grid">
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Season Statistics -->
+            <div class="section">
+                <h2 class="section-title">
+                    📊 Saison-Übersicht
+                </h2>
+
+                <div class="season-stats">
+                    <div class="stats-row">
+                        <div class="stat-item">
+                            <span class="stat-value">{{ season_stats.current_matchday }}</span>
+                            <span class="stat-label">Aktueller Spieltag</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-value">{{ season_stats.total_matchdays }}</span>
+                            <span class="stat-label">Spieltage Gesamt</span>
+                        </div>
+                    </div>
+
+                    {% if season_stats.next_match %}
+                    <div class="next-match">
+                        <div class="match-opponent">vs {{ season_stats.next_match.opponent }}</div>
+                        <div class="match-details">
+                            📅 {{ season_stats.next_match.date }} • 🕘 {{ season_stats.next_match.time }}
+                            <br>
+                            🏟️ {{ season_stats.next_match.venue }}
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    {% if season_stats.last_result %}
+                    <div style="text-align: center; margin-top: 15px; padding: 10px; background: rgba(255, 255, 255, 0.5); border-radius: 6px;">
+                        <strong>Letztes Spiel:</strong> {{ season_stats.last_result.result }} vs {{ season_stats.last_result.opponent }}
+                        <small style="opacity: 0.8;">({{ season_stats.last_result.date }})</small>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Quick Actions -->
+            <div class="section">
+                <h2 class="section-title">
+                    🚀 Schnellzugriff
+                </h2>
+
+                <div class="quick-actions">
+                    {% for action in quick_actions %}
+                    <a href="{{ action.url }}" class="quick-action">
+                        <span class="action-icon">{{ action.icon }}</span>
+                        <div class="action-title">{{ action.title }}</div>
+                        <div class="action-description">{{ action.description }}</div>
+                    </a>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <!-- Framework Features -->
+            <div class="section">
+                <h2 class="section-title">
+                    🛠️ Framework Features
+                </h2>
+
+                <div class="framework-features">
+                    {% for feature in framework_features %}
+                    <div class="feature-card {{ feature.color }}">
+                        <span class="feature-icon">{{ feature.icon }}</span>
+                        <div class="feature-title">{{ feature.title }}</div>
+                        <div class="feature-description">{{ feature.description }}</div>
+                        {% if feature.status == 'active' %}
+                        <small style="color: #28a745; font-weight: 600; margin-top: 8px; display: block;">✅ Aktiv</small>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Sidebar -->
+        <div class="sidebar">
+            <!-- Recent Activities -->
+            <div class="section">
+                <h3 class="section-title">
+                    📰 Neueste Aktivitäten
+                </h3>
+
+                <div class="recent-activities">
+                    {% for activity in recent_activities %}
+                    <div class="activity-item">
+                        <span class="activity-icon">{{ activity.icon }}</span>
+                        <div class="activity-content">
+                            <div class="activity-message">{{ activity.message }}</div>
+                            <div class="activity-time">{{ activity.timestamp }}</div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 
-<h2>🎯 Framework Features</h2>
-{% for feature in features %}
-<div style="margin: 15px 0; padding: 20px; background: {% if feature.active %}#f0f8f0{% else %}#f8f8f8{% endif %}; border-radius: 8px; border-left: 4px solid {% if feature.active %}#28a745{% else %}#6c757d{% endif %};">
-    <h3>{{ feature.icon }} {{ feature.title }}</h3>
-    <p>{{ feature.description }}</p>
-    {% if feature.active %}
-    <small style="color: #28a745; font-weight: bold;">✅ Active</small>
-    {% else %}
-    <small style="color: #6c757d;">⏳ Coming Soon</small>
-    {% endif %}
-</div>
-{% endfor %}
+<style>
+    .dashboard {
+        max-width: 1200px;
+        margin: 0 auto;
+    }
+
+    .welcome-section {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 30px;
+        border-radius: 12px;
+        margin-bottom: 30px;
+        text-align: center;
+    }
+
+    .welcome-title {
+        font-size: 2.5rem;
+        margin-bottom: 10px;
+        font-weight: 700;
+    }
+
+    .welcome-subtitle {
+        font-size: 1.2rem;
+        opacity: 0.9;
+    }
+
+    .user-info {
+        background: rgba(255, 255, 255, 0.1);
+        padding: 20px;
+        border-radius: 8px;
+        margin-top: 20px;
+        text-align: left;
+    }
+
+    .team-badge {
+        display: inline-block;
+        background: rgba(255, 255, 255, 0.2);
+        padding: 8px 16px;
+        border-radius: 20px;
+        font-weight: 600;
+    }
+
+    .dashboard-grid {
+        display: grid;
+        grid-template-columns: 2fr 1fr;
+        gap: 30px;
+        margin-bottom: 30px;
+    }
+
+    .main-content {
+        display: flex;
+        flex-direction: column;
+        gap: 30px;
+    }
+
+    .sidebar {
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+    }
+
+    .section {
+        background: white;
+        border-radius: 12px;
+        padding: 25px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+        border: 1px solid #e2e8f0;
+    }
+
+    .section-title {
+        color: #1a365d;
+        margin-bottom: 20px;
+        font-size: 1.4rem;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .season-stats {
+        background: #f8f9fa;
+        padding: 20px;
+        border-radius: 8px;
+        border-left: 4px solid #667eea;
+    }
+
+    .stats-row {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 15px;
+        margin-bottom: 15px;
+    }
+
+    .stat-item {
+        text-align: center;
+    }
+
+    .stat-value {
+        font-size: 1.8rem;
+        font-weight: bold;
+        color: #2d3748;
+        display: block;
+    }
+
+    .stat-label {
+        font-size: 0.9rem;
+        color: #718096;
+        margin-top: 4px;
+    }
+
+    .next-match {
+        background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+        color: white;
+        padding: 20px;
+        border-radius: 8px;
+        text-align: center;
+    }
+
+    .match-opponent {
+        font-size: 1.5rem;
+        font-weight: bold;
+        margin-bottom: 8px;
+    }
+
+    .match-details {
+        opacity: 0.9;
+    }
+
+    .quick-actions {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 15px;
+    }
+
+    .quick-action {
+        background: white;
+        border: 2px solid #e2e8f0;
+        border-radius: 8px;
+        padding: 20px;
+        text-decoration: none;
+        color: inherit;
+        transition: all 0.2s;
+        display: block;
+    }
+
+    .quick-action:hover {
+        border-color: #667eea;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);
+    }
+
+    .action-icon {
+        font-size: 2rem;
+        margin-bottom: 10px;
+        display: block;
+    }
+
+    .action-title {
+        font-weight: 600;
+        margin-bottom: 8px;
+        color: #2d3748;
+    }
+
+    .action-description {
+        font-size: 0.9rem;
+        color: #718096;
+    }
+
+    .framework-features {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 20px;
+    }
+
+    .feature-card {
+        padding: 20px;
+        border-radius: 8px;
+        border-left: 4px solid;
+        transition: transform 0.2s;
+    }
+
+    .feature-card:hover {
+        transform: translateY(-2px);
+    }
+
+    .feature-card.success {
+        background: #f0f8f0;
+        border-color: #28a745;
+    }
+    .feature-card.primary {
+        background: #f0f4ff;
+        border-color: #667eea;
+    }
+    .feature-card.info {
+        background: #f0f9ff;
+        border-color: #17a2b8;
+    }
+    .feature-card.warning {
+        background: #fffbf0;
+        border-color: #ffc107;
+    }
+
+    .feature-icon {
+        font-size: 2rem;
+        margin-bottom: 10px;
+        display: block;
+    }
+
+    .feature-title {
+        font-weight: 600;
+        margin-bottom: 8px;
+        color: #2d3748;
+    }
+
+    .feature-description {
+        font-size: 0.9rem;
+        color: #718096;
+        line-height: 1.4;
+    }
+
+    .recent-activities {
+        max-height: 400px;
+        overflow-y: auto;
+    }
+
+    .activity-item {
+        display: flex;
+        align-items: center;
+        gap: 15px;
+        padding: 15px;
+        border-bottom: 1px solid #e2e8f0;
+        last-of-type: border-bottom: none;
+    }
+
+    .activity-icon {
+        font-size: 1.5rem;
+        width: 40px;
+        text-align: center;
+    }
+
+    .activity-content {
+        flex: 1;
+    }
+
+    .activity-message {
+        font-weight: 500;
+        color: #2d3748;
+        margin-bottom: 4px;
+    }
+
+    .activity-time {
+        font-size: 0.8rem;
+        color: #718096;
+    }
+
+    @media (max-width: 768px) {
+        .dashboard-grid {
+            grid-template-columns: 1fr;
+            gap: 20px;
+        }
+
+        .stats-row {
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+        }
+
+        .quick-actions {
+            grid-template-columns: 1fr;
+        }
+
+        .framework-features {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
 {% endblock %}

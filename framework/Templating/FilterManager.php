@@ -9,6 +9,8 @@ use RuntimeException;
 
 /**
  * Filter Manager - Verwaltet alle Template-Filter mit Lazy Loading und XSS-Schutz
+ *
+ * KORRIGIERTE VERSION: Sichere Behandlung von null-Werten
  */
 class FilterManager
 {
@@ -17,26 +19,25 @@ class FilterManager
 
     public function __construct(
         private ?Translator $translator = null
-    )
-    {
+    ) {
         // Register lazy filter definitions (no instantiation yet)
         $this->registerLazyFilters();
     }
 
     /**
-     * Registriert Lazy Filter Definitionen
+     * Registriert Lazy Filter Definitionen - MIT NULL-SICHERHEIT
      */
     private function registerLazyFilters(): void
     {
-        // Text/String Filter
-        $this->lazyFilters['upper'] = fn() => fn(string $value) => strtoupper($value);
-        $this->lazyFilters['lower'] = fn() => fn(string $value) => strtolower($value);
-        $this->lazyFilters['capitalize'] = fn() => fn(string $value) => ucfirst(strtolower($value));
+        // Text/String Filter - NULL-SAFE
+        $this->lazyFilters['upper'] = fn() => fn(mixed $value) => $value === null ? '' : strtoupper((string)$value);
+        $this->lazyFilters['lower'] = fn() => fn(mixed $value) => $value === null ? '' : strtolower((string)$value);
+        $this->lazyFilters['capitalize'] = fn() => fn(mixed $value) => $value === null ? '' : ucfirst(strtolower((string)$value));
         $this->lazyFilters['truncate'] = fn() => [$this, 'truncateFilter'];
         $this->lazyFilters['default'] = fn() => [$this, 'defaultFilter'];
         $this->lazyFilters['raw'] = fn() => [$this, 'rawFilter'];
 
-        // Number/Format Filter
+        // Number/Format Filter - NULL-SAFE
         $this->lazyFilters['number_format'] = fn() => [$this, 'numberFormatFilter'];
         $this->lazyFilters['currency'] = fn() => [$this, 'currencyFilter'];
 
@@ -48,7 +49,7 @@ class FilterManager
         $this->lazyFilters['count'] = fn() => [$this, 'lengthFilter'];
         $this->lazyFilters['plural'] = fn() => [$this, 'pluralFilter'];
 
-        // Advanced Text Filter
+        // Advanced Text Filter - NULL-SAFE
         $this->lazyFilters['slug'] = fn() => [$this, 'slugFilter'];
         $this->lazyFilters['nl2br'] = fn() => [$this, 'nl2brFilter'];
         $this->lazyFilters['strip_tags'] = fn() => [$this, 'stripTagsFilter'];
@@ -127,15 +128,21 @@ class FilterManager
         ));
     }
 
-    // Filter Implementations
+    // Filter Implementations - ALLE NULL-SAFE
 
-    private function truncateFilter(string $value, int $length = 100, string $suffix = '...'): string
+    private function truncateFilter(mixed $value, int $length = 100, string $suffix = '...'): string
     {
-        if (mb_strlen($value) <= $length) {
-            return $value;
+        if ($value === null) {
+            return '';
         }
 
-        return mb_substr($value, 0, $length) . $suffix;
+        $stringValue = (string)$value;
+
+        if (mb_strlen($stringValue) <= $length) {
+            return $stringValue;
+        }
+
+        return mb_substr($stringValue, 0, $length) . $suffix;
     }
 
     private function defaultFilter(mixed $value, mixed $default = ''): mixed
@@ -148,27 +155,44 @@ class FilterManager
         return $value;
     }
 
-    private function currencyFilter(float $value, string $currency = 'EUR', string $locale = 'de_DE'): string
+    private function currencyFilter(mixed $value, string $currency = 'EUR', string $locale = 'de_DE'): string
     {
-        return $this->numberFormatFilter($value, 2) . ' ' . $currency;
+        if ($value === null) {
+            return '0 ' . $currency;
+        }
+
+        $numericValue = is_numeric($value) ? (float)$value : 0.0;
+        return $this->numberFormatFilter($numericValue, 2) . ' ' . $currency;
     }
 
-    private function numberFormatFilter(float $value, int|string $decimals = 2, string $decimalPoint = ',', string $thousandsSeparator = '.'): string
+    private function numberFormatFilter(mixed $value, int|string $decimals = 2, string $decimalPoint = ',', string $thousandsSeparator = '.'): string
     {
+        if ($value === null) {
+            return '0';
+        }
+
+        // Convert to float if possible, otherwise use 0
+        $numericValue = is_numeric($value) ? (float)$value : 0.0;
+
         // Convert string to int for decimals parameter
         $decimals = is_string($decimals) ? (int)$decimals : $decimals;
 
-        return number_format($value, $decimals, $decimalPoint, $thousandsSeparator);
+        return number_format($numericValue, $decimals, $decimalPoint, $thousandsSeparator);
     }
 
     private function dateFilter(mixed $value, string $format = 'Y-m-d H:i:s'): string
     {
+        if ($value === null) {
+            return '';
+        }
+
         if ($value instanceof \DateTimeInterface) {
             return $value->format($format);
         }
 
         if (is_string($value)) {
-            return date($format, strtotime($value));
+            $timestamp = strtotime($value);
+            return $timestamp !== false ? date($format, $timestamp) : '';
         }
 
         if (is_int($value)) {
@@ -180,6 +204,10 @@ class FilterManager
 
     private function lengthFilter(mixed $value): int
     {
+        if ($value === null) {
+            return 0;
+        }
+
         if (is_string($value)) {
             return mb_strlen($value);
         }
@@ -196,21 +224,34 @@ class FilterManager
         return $count === 1 ? $singular : $plural;
     }
 
-    private function slugFilter(string $value): string
+    private function slugFilter(mixed $value): string
     {
-        $value = strtolower($value);
-        $value = preg_replace('/[^a-z0-9]+/', '-', $value);
-        return trim($value, '-');
+        if ($value === null) {
+            return '';
+        }
+
+        $stringValue = (string)$value;
+        $stringValue = strtolower($stringValue);
+        $stringValue = preg_replace('/[^a-z0-9]+/', '-', $stringValue);
+        return trim($stringValue, '-');
     }
 
-    private function nl2brFilter(string $value): string
+    private function nl2brFilter(mixed $value): string
     {
-        return nl2br($value);
+        if ($value === null) {
+            return '';
+        }
+
+        return nl2br((string)$value);
     }
 
-    private function stripTagsFilter(string $value, string $allowedTags = ''): string
+    private function stripTagsFilter(mixed $value, string $allowedTags = ''): string
     {
-        return strip_tags($value, $allowedTags);
+        if ($value === null) {
+            return '';
+        }
+
+        return strip_tags((string)$value, $allowedTags);
     }
 
     private function jsonFilter(mixed $value): string
@@ -220,6 +261,10 @@ class FilterManager
 
     private function firstFilter(mixed $value): mixed
     {
+        if ($value === null) {
+            return null;
+        }
+
         if (is_array($value)) {
             return reset($value);
         }
@@ -233,6 +278,10 @@ class FilterManager
 
     private function lastFilter(mixed $value): mixed
     {
+        if ($value === null) {
+            return null;
+        }
+
         if (is_array($value)) {
             return end($value);
         }
@@ -247,10 +296,10 @@ class FilterManager
     /**
      * Translation Filter - Uses injected translator
      */
-    private function translateFilter(string $key, mixed ...$args): string
+    private function translateFilter(mixed $key, mixed ...$args): string
     {
-        if ($this->translator === null) {
-            return $key;
+        if ($this->translator === null || $key === null) {
+            return (string)$key;
         }
 
         $parameters = [];
@@ -258,18 +307,18 @@ class FilterManager
             $parameters = $args[0];
         }
 
-        return $this->translator->translate($key, $parameters);
+        return $this->translator->translate((string)$key, $parameters);
     }
 
     /**
      * Translation Plural Filter - Uses injected translator
      */
-    private function translatePluralFilter(string $key, int $count, array $parameters = []): string
+    private function translatePluralFilter(mixed $key, int $count, array $parameters = []): string
     {
-        if ($this->translator === null) {
-            return $key;
+        if ($this->translator === null || $key === null) {
+            return (string)$key;
         }
 
-        return $this->translator->translatePlural($key, $count, $parameters);
+        return $this->translator->translatePlural((string)$key, $count, $parameters);
     }
 }
