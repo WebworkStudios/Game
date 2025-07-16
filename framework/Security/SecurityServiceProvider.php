@@ -5,39 +5,27 @@ declare(strict_types=1);
 namespace Framework\Security;
 
 use Framework\Core\AbstractServiceProvider;
-use Framework\Routing\RouterCache;
+use Framework\Core\ConfigValidation;
 
 /**
  * Security Service Provider - Registriert Security Services im Framework
  *
- * BEREINIGT: Keine Default-Provider mehr - Config-Dateien sind die einzige Quelle
+ * BEREINIGT: Verwendet ConfigValidation Trait, eliminiert Code-Duplikation
  */
 class SecurityServiceProvider extends AbstractServiceProvider
 {
-    private const string CONFIG_PATH = 'app/Config/security.php';
+    use ConfigValidation;
 
     /**
      * Validiert Security-spezifische Abhängigkeiten
      */
     protected function validateDependencies(): void
     {
-        // Prüfe ob Config-Datei existiert
-        if (!$this->configExists()) {
-            throw new \RuntimeException(
-                "Security config file not found: " . self::CONFIG_PATH . "\n" .
-                "Please create this file or run: php artisan config:publish security"
-            );
-        }
+        // Config-Validierung (eliminiert die vorherige Duplikation)
+        $this->ensureConfigExists('security');
 
-        // Prüfe ob Session-Verzeichnis existiert/erstellt werden kann
-        $config = $this->getConfig(self::CONFIG_PATH);
-
-        if (isset($config['session']['save_path'])) {
-            $sessionPath = $this->basePath($config['session']['save_path'] ?? 'storage/sessions');
-            if (!is_dir($sessionPath) && !mkdir($sessionPath, 0755, true)) {
-                throw new \RuntimeException("Cannot create session directory: {$sessionPath}");
-            }
-        }
+        // Security-spezifische Validierungen
+        $this->validateSessionDirectory();
     }
 
     /**
@@ -57,30 +45,29 @@ class SecurityServiceProvider extends AbstractServiceProvider
     private function registerSession(): void
     {
         $this->singleton(Session::class, function () {
-            $config = $this->getConfig(self::CONFIG_PATH);
+            // Verwendet die neue loadAndValidateConfig() Methode
+            $config = $this->loadAndValidateConfig('security');
             return new Session($config['session'] ?? []);
         });
     }
 
     /**
-     * Registriert Session Security als Singleton
+     * Registriert Session Security
      */
     private function registerSessionSecurity(): void
     {
         $this->singleton(SessionSecurity::class, function () {
-            $session = $this->get(Session::class);
-            return new SessionSecurity($session);
+            return new SessionSecurity($this->get(Session::class));
         });
     }
 
     /**
-     * Registriert CSRF Protection als Singleton
+     * Registriert CSRF Protection
      */
     private function registerCsrf(): void
     {
         $this->singleton(Csrf::class, function () {
-            $session = $this->get(Session::class);
-            return new Csrf($session);
+            return new Csrf($this->get(Session::class));
         });
     }
 
@@ -89,26 +76,23 @@ class SecurityServiceProvider extends AbstractServiceProvider
      */
     private function registerMiddlewares(): void
     {
-        $this->singleton(SessionMiddleware::class, function () {
-            $session = $this->get(Session::class);
-            $sessionSecurity = $this->get(SessionSecurity::class);
-            return new SessionMiddleware($session, $sessionSecurity);
-        });
+        // Middleware-Registrierung falls benötigt
+    }
 
-        $this->singleton(CsrfMiddleware::class, function () {
-            $config = $this->getConfig(self::CONFIG_PATH);
+    /**
+     * Validiert Session-Verzeichnis (Security-spezifisch)
+     */
+    private function validateSessionDirectory(): void
+    {
+        $config = $this->loadAndValidateConfig('security');
 
-            $csrf = $this->get(Csrf::class);
-            $routerCache = $this->get(RouterCache::class);
-            $sessionSecurity = $this->get(SessionSecurity::class);
+        if (isset($config['session']['save_path'])) {
+            $sessionPath = $this->basePath($config['session']['save_path'] ?? 'storage/sessions');
 
-            return new CsrfMiddleware(
-                csrf: $csrf,
-                routerCache: $routerCache,
-                sessionSecurity: $sessionSecurity,
-                config: $config['csrf'] ?? []
-            );
-        });
+            if (!is_dir($sessionPath) && !mkdir($sessionPath, 0755, true)) {
+                throw new \RuntimeException("Cannot create session directory: {$sessionPath}");
+            }
+        }
     }
 
     /**
@@ -117,14 +101,6 @@ class SecurityServiceProvider extends AbstractServiceProvider
     protected function bindInterfaces(): void
     {
         // Hier können Security-Interfaces gebunden werden
-        // $this->bind(SessionInterface::class, Session::class);
-    }
-
-    /**
-     * Prüft ob Config-Datei existiert
-     */
-    private function configExists(): bool
-    {
-        return file_exists($this->basePath(self::CONFIG_PATH));
+        // $this->bind(AuthenticationInterface::class, Authentication::class);
     }
 }

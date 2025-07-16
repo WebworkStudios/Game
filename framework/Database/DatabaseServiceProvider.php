@@ -5,21 +5,23 @@ declare(strict_types=1);
 namespace Framework\Database;
 
 use Framework\Core\AbstractServiceProvider;
+use Framework\Core\ConfigValidation;
 
 /**
  * Database Service Provider - Registriert Database Services im Framework
  *
- * BEREINIGT: Keine Default-Provider mehr - Config-Dateien sind die einzige Quelle
+ * BEREINIGT: Verwendet ConfigValidation Trait, eliminiert Code-Duplikation
  */
 class DatabaseServiceProvider extends AbstractServiceProvider
 {
-    private const string CONFIG_PATH = 'app/Config/database.php';
+    use ConfigValidation;
 
     /**
      * Validiert Database-spezifische Abhängigkeiten
      */
     protected function validateDependencies(): void
     {
+        // PHP Extension Checks
         if (!extension_loaded('pdo')) {
             throw new \RuntimeException('PDO extension is required for database functionality');
         }
@@ -28,13 +30,8 @@ class DatabaseServiceProvider extends AbstractServiceProvider
             throw new \RuntimeException('PDO MySQL driver is required');
         }
 
-        // Prüfe ob Config-Datei existiert
-        if (!$this->configExists()) {
-            throw new \RuntimeException(
-                "Database config file not found: " . self::CONFIG_PATH . "\n" .
-                "Please create this file or run: php artisan config:publish database"
-            );
-        }
+        // Config-Validierung (eliminiert die vorherige Duplikation)
+        $this->ensureConfigExists('database');
     }
 
     /**
@@ -53,7 +50,8 @@ class DatabaseServiceProvider extends AbstractServiceProvider
     private function registerConnectionManager(): void
     {
         $this->singleton(ConnectionManager::class, function () {
-            $config = $this->getConfig(self::CONFIG_PATH);
+            // Verwendet die neue loadAndValidateConfig() Methode
+            $config = $this->loadAndValidateConfig('database');
 
             // Struktur-Anpassung für ConnectionManager
             $connectionManagerConfig = $this->adaptConfigForConnectionManager($config);
@@ -135,14 +133,5 @@ class DatabaseServiceProvider extends AbstractServiceProvider
         }
 
         return $adapted;
-    }
-
-    /**
-     * Prüft ob Config-Datei existiert
-     * @return bool
-     */
-    private function configExists(): bool
-    {
-        return file_exists($this->basePath(self::CONFIG_PATH));
     }
 }

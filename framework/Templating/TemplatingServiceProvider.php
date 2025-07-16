@@ -5,48 +5,30 @@ declare(strict_types=1);
 namespace Framework\Templating;
 
 use Framework\Core\AbstractServiceProvider;
+use Framework\Core\ConfigValidation;
 use Framework\Localization\Translator;
 use Framework\Security\Csrf;
 
 /**
  * Templating Service Provider - Registriert Template Services im Framework
  *
- * BEREINIGT: Keine Default-Provider mehr - Config-Dateien sind die einzige Quelle
+ * BEREINIGT: Verwendet ConfigValidation Trait, eliminiert Code-Duplikation
  */
 class TemplatingServiceProvider extends AbstractServiceProvider
 {
-    private const string CONFIG_PATH = 'app/Config/templating.php';
+    use ConfigValidation;
 
     /**
      * Validiert Template-spezifische Abhängigkeiten
      */
     protected function validateDependencies(): void
     {
-        // Prüfe ob Config-Datei existiert
-        if (!$this->configExists()) {
-            throw new \RuntimeException(
-                "Templating config file not found: " . self::CONFIG_PATH . "\n" .
-                "Please create this file or run: php artisan config:publish templating"
-            );
-        }
+        // Config-Validierung (eliminiert die vorherige Duplikation)
+        $this->ensureConfigExists('templating');
 
-        // Prüfe ob Template-Verzeichnisse existieren/erstellt werden können
-        $config = $this->getConfig(self::CONFIG_PATH);
-
-        foreach ($config['paths'] ?? ['app/Views'] as $path) {
-            $fullPath = $this->basePath($path);
-            if (!is_dir($fullPath) && !mkdir($fullPath, 0755, true)) {
-                throw new \RuntimeException("Cannot create template directory: {$fullPath}");
-            }
-        }
-
-        // Prüfe ob Cache-Verzeichnis erstellt werden kann
-        if ($config['cache']['enabled'] ?? true) {
-            $cachePath = $this->basePath($config['cache']['path'] ?? 'storage/cache/views');
-            if (!is_dir($cachePath) && !mkdir($cachePath, 0755, true)) {
-                throw new \RuntimeException("Cannot create template cache directory: {$cachePath}");
-            }
-        }
+        // Template-spezifische Validierungen
+        $this->validateTemplateDirectories();
+        $this->validateCacheDirectory();
     }
 
     /**
@@ -66,7 +48,7 @@ class TemplatingServiceProvider extends AbstractServiceProvider
     private function registerTemplateCache(): void
     {
         $this->singleton(TemplateCache::class, function () {
-            $config = $this->getConfig(self::CONFIG_PATH);
+            $config = $this->loadAndValidateConfig('templating');
 
             $cachePath = $this->basePath($config['cache']['path'] ?? 'storage/cache/views');
             $enabled = $config['cache']['enabled'] ?? true;
@@ -100,7 +82,7 @@ class TemplatingServiceProvider extends AbstractServiceProvider
     private function registerTemplateEngine(): void
     {
         $this->singleton(TemplateEngine::class, function () {
-            $config = $this->getConfig(self::CONFIG_PATH);
+            $config = $this->loadAndValidateConfig('templating');
 
             $cache = null;
             if ($config['cache']['enabled'] ?? false) {
@@ -127,10 +109,26 @@ class TemplatingServiceProvider extends AbstractServiceProvider
     private function registerViewRenderer(): void
     {
         $this->singleton(ViewRenderer::class, function () {
+            // Try to get optional dependencies gracefully
+            $translator = null;
+            $csrf = null;
+
+            try {
+                $translator = $this->get(Translator::class);
+            } catch (\Throwable) {
+                // Translator not available - ViewRenderer can work without it
+            }
+
+            try {
+                $csrf = $this->get(Csrf::class);
+            } catch (\Throwable) {
+                // CSRF not available - ViewRenderer can work without it
+            }
+
             return new ViewRenderer(
                 engine: $this->get(TemplateEngine::class),
-                translator: $this->get(Translator::class),
-                csrf: $this->get(Csrf::class)
+                translator: $translator,
+                csrf: $csrf
             );
         });
     }
@@ -145,10 +143,32 @@ class TemplatingServiceProvider extends AbstractServiceProvider
     }
 
     /**
-     * Prüft ob Config-Datei existiert
+     * Validiert Template-Verzeichnisse (Templating-spezifisch)
      */
-    private function configExists(): bool
+    private function validateTemplateDirectories(): void
     {
-        return file_exists($this->basePath(self::CONFIG_PATH));
+        $config = $this->loadAndValidateConfig('templating');
+
+        foreach ($config['paths'] ?? ['app/Views'] as $path) {
+            $fullPath = $this->basePath($path);
+            if (!is_dir($fullPath) && !mkdir($fullPath, 0755, true)) {
+                throw new \RuntimeException("Cannot create template directory: {$fullPath}");
+            }
+        }
+    }
+
+    /**
+     * Validiert Cache-Verzeichnis (Templating-spezifisch)
+     */
+    private function validateCacheDirectory(): void
+    {
+        $config = $this->loadAndValidateConfig('templating');
+
+        if ($config['cache']['enabled'] ?? true) {
+            $cachePath = $this->basePath($config['cache']['path'] ?? 'storage/cache/views');
+            if (!is_dir($cachePath) && !mkdir($cachePath, 0755, true)) {
+                throw new \RuntimeException("Cannot create template cache directory: {$cachePath}");
+            }
+        }
     }
 }

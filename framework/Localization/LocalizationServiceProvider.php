@@ -5,16 +5,18 @@ declare(strict_types=1);
 namespace Framework\Localization;
 
 use Framework\Core\AbstractServiceProvider;
+use Framework\Core\ConfigValidation;
 use Framework\Security\Session;
 
 /**
  * Localization Service Provider - Registriert Mehrsprachigkeits-Services
  *
- * BEREINIGT: Keine Default-Provider mehr - Config-Dateien sind die einzige Quelle
+ * BEREINIGT: Verwendet ConfigValidation Trait, eliminiert Code-Duplikation
  */
 class LocalizationServiceProvider extends AbstractServiceProvider
 {
-    private const string CONFIG_PATH = 'app/Config/localization.php';
+    use ConfigValidation;
+
     private const array REQUIRED_KEYS = ['default_locale', 'fallback_locale', 'supported_locales', 'languages_path'];
 
     /**
@@ -27,16 +29,10 @@ class LocalizationServiceProvider extends AbstractServiceProvider
             throw new \RuntimeException('mbstring extension is required for localization functionality');
         }
 
-        // Prüfe ob Config-Datei existiert
-        if (!$this->configExists()) {
-            throw new \RuntimeException(
-                "Localization config file not found: " . self::CONFIG_PATH . "\n" .
-                "Please create this file or run: php artisan config:publish localization"
-            );
-        }
+        // Config-Validierung mit Required Keys (eliminiert die vorherige Duplikation)
+        $config = $this->loadAndValidateConfig('localization', self::REQUIRED_KEYS);
 
         // Language-Verzeichnisse erstellen
-        $config = $this->getConfig(self::CONFIG_PATH, requiredKeys: self::REQUIRED_KEYS);
         $this->ensureLanguageDirectories($config);
     }
 
@@ -56,7 +52,7 @@ class LocalizationServiceProvider extends AbstractServiceProvider
     private function registerTranslator(): void
     {
         $this->singleton(Translator::class, function () {
-            $config = $this->getConfig(self::CONFIG_PATH, requiredKeys: self::REQUIRED_KEYS);
+            $config = $this->loadAndValidateConfig('localization', self::REQUIRED_KEYS);
 
             $languagesPath = $this->basePath($config['languages_path']);
             $this->ensureLanguageFiles($languagesPath, array_keys($config['supported_locales']));
@@ -75,7 +71,7 @@ class LocalizationServiceProvider extends AbstractServiceProvider
     private function registerLanguageDetector(): void
     {
         $this->singleton(LanguageDetector::class, function () {
-            $config = $this->getConfig(self::CONFIG_PATH, requiredKeys: self::REQUIRED_KEYS);
+            $config = $this->loadAndValidateConfig('localization', self::REQUIRED_KEYS);
 
             return new LanguageDetector(
                 session: $this->get(Session::class),
@@ -155,7 +151,25 @@ class LocalizationServiceProvider extends AbstractServiceProvider
      */
     private function getDefaultLanguageContent(string $locale, string $group): string
     {
-        $content = match ($group) {
+        // Standard-Inhalte in Englisch
+        $content = $this->getEnglishContent($group);
+
+        // Deutsche Übersetzungen falls locale = 'de'
+        if ($locale === 'de') {
+            $content = $this->getGermanContent($group);
+        }
+
+        $exportedContent = var_export($content, true);
+
+        return "<?php\n\ndeclare(strict_types=1);\n\nreturn " . $exportedContent . ";\n";
+    }
+
+    /**
+     * Standard englische Inhalte
+     */
+    private function getEnglishContent(string $group): array
+    {
+        return match ($group) {
             'auth' => [
                 'login' => 'Login',
                 'logout' => 'Logout',
@@ -186,29 +200,14 @@ class LocalizationServiceProvider extends AbstractServiceProvider
                 'season' => 'Season',
                 'league' => 'League',
             ],
-            default => ['placeholder' => 'Placeholder content for ' . $group],
+            default => ['placeholder' => 'Placeholder content for ' . $group]
         };
-
-        // Lokalisiere Inhalte basierend auf Sprache
-        if ($locale === 'de') {
-            $content = $this->getGermanTranslations($group, $content);
-        }
-
-        $exportedContent = var_export($content, true);
-
-        return <<<PHP
-<?php
-
-declare(strict_types=1);
-
-return {$exportedContent};
-PHP;
     }
 
     /**
      * Deutsche Übersetzungen
      */
-    private function getGermanTranslations(string $group, array $default): array
+    private function getGermanContent(string $group): array
     {
         return match ($group) {
             'auth' => [
@@ -241,15 +240,7 @@ PHP;
                 'season' => 'Saison',
                 'league' => 'Liga',
             ],
-            default => $default,
+            default => ['placeholder' => 'Placeholder-Inhalt für ' . $group]
         };
-    }
-
-    /**
-     * Prüft ob Config-Datei existiert
-     */
-    private function configExists(): bool
-    {
-        return file_exists($this->basePath(self::CONFIG_PATH));
     }
 }
