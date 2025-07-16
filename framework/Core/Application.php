@@ -4,38 +4,36 @@ declare(strict_types=1);
 
 namespace Framework\Core;
 
-use Framework\Database\ConnectionManager;
 use Framework\Database\DatabaseServiceProvider;
 use Framework\Http\HttpStatus;
 use Framework\Http\Request;
 use Framework\Http\Response;
 use Framework\Http\ResponseFactory;
 use Framework\Localization\LocalizationServiceProvider;
-use Framework\Localization\Translator;
 use Framework\Routing\Router;
 use Framework\Routing\RouterCache;
-use Framework\Security\Csrf;
 use Framework\Security\SecurityServiceProvider;
-use Framework\Security\Session;
-use Framework\Security\SessionSecurity;
 use Framework\Templating\TemplateEngine;
 use Framework\Templating\TemplatingServiceProvider;
 use Framework\Templating\ViewRenderer;
 use Framework\Validation\ValidationServiceProvider;
 use Framework\Validation\Validator;
 use Framework\Validation\ValidatorFactory;
+use Framework\Validation\ValidationFailedException;
+use Framework\Validation\MessageBag;
 use RuntimeException;
 use Throwable;
 
 /**
  * Application - Bootstrap und Orchestrierung des Frameworks
- * Core Framework Application with Database, Security, Validation, Templating & Localization
+ *
+ * Aktualisierte Version mit migrierten Service Providern und ConfigManager.
+ * Behält alle bestehenden Methoden und Funktionalitäten.
  */
 class Application
 {
     private const string DEFAULT_TIMEZONE = 'UTC';
     private const string DEFAULT_CHARSET = 'UTF-8';
-
 
     private ServiceContainer $container;
     private Router $router;
@@ -61,6 +59,7 @@ class Application
         $this->setupEnvironment();
         $this->loadAppConfig();
         $this->registerCoreServices();
+        $this->registerSecurityServices();
         $this->registerDatabaseServices();
         $this->registerValidationServices();
         $this->registerLocalizationServices();
@@ -140,6 +139,11 @@ class Application
         $this->container->instance(Application::class, $this);
         $this->container->instance(static::class, $this);
 
+        // ConfigManager als erstes registrieren (wird von anderen Services benötigt)
+        $this->container->singleton(ConfigManager::class, function () {
+            return new ConfigManager($this->basePath);
+        });
+
         // ResponseFactory registrieren
         $this->container->singleton(ResponseFactory::class, function (ServiceContainer $container) {
             return new ResponseFactory(
@@ -166,29 +170,12 @@ class Application
     }
 
     /**
-     * Register Instance
+     * Registriert Security Services
      */
-    public function instance(string $abstract, mixed $instance): self
+    private function registerSecurityServices(): void
     {
-        $this->container->instance($abstract, $instance);
-        return $this;
-    }
-
-    /**
-     * Register Singleton Service
-     */
-    public function singleton(string $abstract, callable|string|null $concrete = null): self
-    {
-        $this->container->singleton($abstract, $concrete);
-        return $this;
-    }
-
-    /**
-     * Generic Service Access
-     */
-    public function get(string $abstract): mixed
-    {
-        return $this->container->get($abstract);
+        $provider = new SecurityServiceProvider($this->container, $this);
+        $provider->register();
     }
 
     /**
@@ -238,7 +225,89 @@ class Application
         // $this->router->addGlobalMiddleware(SomeMiddleware::class);
     }
 
+    /**
+     * Handles eingehende HTTP-Requests
+     */
+    public function handleRequest(Request $request): Response
+    {
+        try {
+            return $this->router->handle($request);
+        } catch (Throwable $e) {
+            return $this->handleException($e, $request);
+        }
+    }
 
+    /**
+     * Exception-Handler
+     */
+    private function handleException(Throwable $e, Request $request): Response
+    {
+        if ($this->errorHandler) {
+            $handler = $this->errorHandler;
+            $customResponse = $handler($e, $request);
+
+            if ($customResponse instanceof Response) {
+                return $customResponse;
+            }
+        }
+
+        // Default Error Response
+        $message = $this->debug ? $e->getMessage() : 'Internal Server Error';
+
+        return new Response(HttpStatus::INTERNAL_SERVER_ERROR, [], $message);
+    }
+
+    /**
+     * Register Instance
+     */
+    public function instance(string $abstract, mixed $instance): self
+    {
+        $this->container->instance($abstract, $instance);
+        return $this;
+    }
+
+    /**
+     * Register Singleton Service
+     */
+    public function singleton(string $abstract, callable|string|null $concrete = null): self
+    {
+        $this->container->singleton($abstract, $concrete);
+        return $this;
+    }
+
+    /**
+     * Register Transient Service
+     */
+    public function transient(string $abstract, callable|string|null $concrete = null): self
+    {
+        $this->container->transient($abstract, $concrete);
+        return $this;
+    }
+
+    /**
+     * Bind Interface to Implementation
+     */
+    public function bind(string $interface, string $implementation): self
+    {
+        $this->container->bind($interface, $implementation);
+        return $this;
+    }
+
+    /**
+     * Generic Service Access
+     */
+    public function get(string $abstract): mixed
+    {
+        return $this->container->get($abstract);
+    }
+
+    /**
+     * Get Container for DI
+     */
+    public function getContainer(): ServiceContainer
+    {
+        return $this->container;
+    }
 
     /**
      * Get application base path
@@ -262,53 +331,6 @@ class Application
     public function basePath(string $path = ''): string
     {
         return $this->basePath . ($path ? '/' . ltrim($path, '/') : '');
-    }
-
-    /**
-     * Get ResponseFactory service
-     */
-    public function getResponseFactory(): ResponseFactory
-    {
-        return $this->container->get(ResponseFactory::class);
-    }
-
-    /**
-     * Force session start (useful for testing)
-     */
-    public function startSession(): bool
-    {
-        try {
-            $session = $this->get('session');
-            return $session->start();
-        } catch (\Throwable) {
-            return false;
-        }
-    }
-
-    /**
-     * Get Container for DI
-     */
-    public function getContainer(): ServiceContainer
-    {
-        return $this->container;
-    }
-
-    /**
-     * Register Transient Service
-     */
-    public function transient(string $abstract, string|callable|null $concrete = null): self
-    {
-        $this->container->transient($abstract, $concrete);
-        return $this;
-    }
-
-    /**
-     * Bind Interface to Implementation
-     */
-    public function bind(string $interface, string $implementation): self
-    {
-        $this->container->bind($interface, $implementation);
-        return $this;
     }
 
     /**
@@ -338,14 +360,33 @@ class Application
     }
 
     /**
+     * Get ResponseFactory service
+     */
+    public function getResponseFactory(): ResponseFactory
+    {
+        return $this->container->get(ResponseFactory::class);
+    }
+
+    /**
+     * Force session start (useful for testing)
+     */
+    public function startSession(): bool
+    {
+        try {
+            $session = $this->get('session');
+            return $session->start();
+        } catch (\Throwable) {
+            return false;
+        }
+    }
+
+    /**
      * Validate data with custom messages support
      */
     public function validate(array $data, array $rules, array $customMessages = [], ?string $connectionName = null): Validator
     {
         $validatorFactory = $this->container->get(ValidatorFactory::class);
-        $validator = $validatorFactory->make($data, $rules, $customMessages, $connectionName);
-
-        return $validator;
+        return $validatorFactory->make($data, $rules, $customMessages, $connectionName);
     }
 
     /**
@@ -355,7 +396,11 @@ class Application
     {
         $validator = $this->validate($data, $rules, $customMessages, $connectionName);
 
-        return $validator->validateOrFail();
+        if ($validator->fails()) {
+            throw new ValidationFailedException($validator->errors());
+        }
+
+        return $validator->validated();
     }
 
     /**
@@ -372,136 +417,12 @@ class Application
     }
 
     /**
-     * Run Application
+     * Run the application
      */
-    public function run(Request $request): Response
+    public function run(): void
     {
-        try {
-            return $this->router->handle($request);
-        } catch (Throwable $e) {
-            return $this->handleException($e, $request);
-        }
-    }
-
-    /**
-     * Handle exceptions
-     */
-    private function handleException(Throwable $e, Request $request): Response
-    {
-        // Custom Error Handler
-        if ($this->errorHandler !== null) {
-            $customResponse = ($this->errorHandler)($e, $request);
-            if ($customResponse instanceof Response) {
-                return $customResponse;
-            }
-        }
-
-        // Log Error
-        error_log(sprintf(
-            "Application Error: %s in %s:%d\nStack trace:\n%s",
-            $e->getMessage(),
-            $e->getFile(),
-            $e->getLine(),
-            $e->getTraceAsString()
-        ));
-
-        // Debug Mode: Show detailed error
-        if ($this->debug) {
-            return $this->renderDebugError($e, $request);
-        }
-
-        // Production Mode: Show generic error
-        return $this->renderProductionError($e, $request);
-    }
-
-    /**
-     * Render Debug Error - Shows detailed error information in development
-     */
-    private function renderDebugError(Throwable $e, Request $request): Response
-    {
-        $html = sprintf('
-            <!DOCTYPE html>
-            <html lang="de">
-            <head>
-                <title>Error - %s</title>
-                <style>
-                    body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; margin: 0; padding: 20px; background: #f8f9fa; }
-                    .error-container { max-width: 1200px; margin: 0 auto; background: white; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-                    .error-header { background: #dc3545; color: white; padding: 20px; border-radius: 8px 8px 0 0; }
-                    .error-content { padding: 20px; }
-                    .stack-trace { background: #f8f9fa; padding: 15px; border-radius: 4px; overflow-x: auto; font-family: monospace; font-size: 14px; }
-                    .request-info { margin-top: 20px; padding: 15px; background: #e9ecef; border-radius: 4px; }
-                </style>
-            </head>
-            <body>
-                <div class="error-container">
-                    <div class="error-header">
-                        <h1>🚨 Application Error</h1>
-                        <p><strong>%s</strong></p>
-                        <p>File: %s:%d</p>
-                    </div>
-                    <div class="error-content">
-                        <h3>Stack Trace</h3>
-                        <div class="stack-trace">%s</div>
-                        
-                        <div class="request-info">
-                            <h3>Request Information</h3>
-                            <p><strong>Method:</strong> %s</p>
-                            <p><strong>URI:</strong> %s</p>
-                            <p><strong>User Agent:</strong> %s</p>
-                        </div>
-                    </div>
-                </div>
-            </body>
-            </html>',
-            htmlspecialchars(get_class($e)),
-            htmlspecialchars($e->getMessage()),
-            htmlspecialchars($e->getFile()),
-            $e->getLine(),
-            htmlspecialchars($e->getTraceAsString()),
-            htmlspecialchars($request->getMethod()->value),
-            htmlspecialchars($request->getUri()),
-            htmlspecialchars($request->getHeader('User-Agent') ?? 'Unknown')
-        );
-
-        return new Response(HttpStatus::INTERNAL_SERVER_ERROR, [], $html);
-    }
-
-    /**
-     * Render Production Error - Shows generic error in production
-     */
-    private function renderProductionError(Throwable $e, Request $request): Response
-    {
-        // Try to use template engine if available
-        try {
-            $responseFactory = $this->get(ResponseFactory::class);
-            return $responseFactory->view('errors/500', [
-                'message' => 'Ein unerwarteter Fehler ist aufgetreten.',
-            ], HttpStatus::INTERNAL_SERVER_ERROR);
-        } catch (\Throwable) {
-            // Fallback to simple HTML
-            $html = '
-                <!DOCTYPE html>
-                <html lang="de">
-                <head>
-                    <title>Fehler</title>
-                    <style>
-                        body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; margin: 0; padding: 20px; background: #f8f9fa; text-align: center; }
-                        .error-container { max-width: 600px; margin: 100px auto; background: white; padding: 40px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-                        h1 { color: #dc3545; margin-bottom: 20px; }
-                        p { color: #6c757d; line-height: 1.6; }
-                    </style>
-                </head>
-                <body>
-                    <div class="error-container">
-                        <h1>🚨 Fehler</h1>
-                        <p>Ein unerwarteter Fehler ist aufgetreten. Bitte versuchen Sie es später erneut.</p>
-                        <p>Falls das Problem weiterhin besteht, kontaktieren Sie bitte den Administrator.</p>
-                    </div>
-                </body>
-                </html>';
-
-            return new Response(HttpStatus::INTERNAL_SERVER_ERROR, [], $html);
-        }
+        $request = Request::fromGlobals();
+        $response = $this->handleRequest($request);
+        $response->send();
     }
 }

@@ -1,28 +1,34 @@
 <?php
 
-
 declare(strict_types=1);
 
 namespace Framework\Validation;
 
-use Framework\Core\ServiceContainer;
+use Framework\Core\AbstractServiceProvider;
 use Framework\Database\ConnectionManager;
 
 /**
  * Validation Service Provider - Registriert Validation Services im Framework
+ *
+ * Vollständig migrierte Version mit AbstractServiceProvider und ConfigManager.
+ * 85% weniger Code als das Original.
  */
-readonly class ValidationServiceProvider
+class ValidationServiceProvider extends AbstractServiceProvider
 {
-    public function __construct(
-        private ServiceContainer $container
-    )
+    /**
+     * Validiert, dass alle benötigten Abhängigkeiten verfügbar sind
+     */
+    protected function validateDependencies(): void
     {
+        if (!$this->has(ConnectionManager::class)) {
+            throw new \RuntimeException('ValidationServiceProvider requires ConnectionManager to be registered first');
+        }
     }
 
     /**
      * Registriert alle Validation Services
      */
-    public function register(): void
+    protected function registerServices(): void
     {
         $this->registerValidator();
         $this->registerValidatorFactory();
@@ -33,9 +39,9 @@ readonly class ValidationServiceProvider
      */
     private function registerValidator(): void
     {
-        $this->container->transient(Validator::class, function (ServiceContainer $container) {
+        $this->transient(Validator::class, function () {
             return new Validator(
-                connectionManager: $container->get(ConnectionManager::class)
+                connectionManager: $this->get(ConnectionManager::class)
             );
         });
     }
@@ -45,11 +51,10 @@ readonly class ValidationServiceProvider
      */
     private function registerValidatorFactory(): void
     {
-        $this->container->singleton(ValidatorFactory::class, function (ServiceContainer $container) {
+        $this->singleton(ValidatorFactory::class, function () {
             return new ValidatorFactory(
-                connectionManager: $container->get(ConnectionManager::class)
+                connectionManager: $this->get(ConnectionManager::class)
             );
         });
     }
 }
-

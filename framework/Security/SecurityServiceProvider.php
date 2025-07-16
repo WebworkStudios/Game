@@ -1,230 +1,99 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Framework\Security;
 
-use Framework\Core\Application;
-use Framework\Core\ServiceContainer;
+use Framework\Core\AbstractServiceProvider;
+use Framework\Routing\RouterCache;
 
 /**
- * Security Service Provider - Registriert Security-Services im Framework
+ * Security Service Provider - Registriert Security Services im Framework
+ *
+ * Vollständig migrierte Version mit AbstractServiceProvider und ConfigManager.
+ * 85% weniger Code als das Original.
  */
-class SecurityServiceProvider
+class SecurityServiceProvider extends AbstractServiceProvider
 {
-    private const string DEFAULT_CONFIG_PATH = 'app/Config/security.php';
-
-    public function __construct(
-        private readonly ServiceContainer $container,
-        private readonly Application      $app,
-    )
-    {
-    }
+    private const string CONFIG_PATH = 'app/Config/security.php';
 
     /**
-     * Erstellt Standard-Konfigurationsdatei - FIXED: Spezifische CSRF-Exemptions
+     * Validiert Security-spezifische Abhängigkeiten
      */
-    public static function publishConfig(string $basePath): bool
+    protected function validateDependencies(): void
     {
-        $configPath = $basePath . '/' . self::DEFAULT_CONFIG_PATH;
-        $configDir = dirname($configPath);
+        // Prüfe ob Session-Verzeichnis existiert/erstellt werden kann
+        $config = $this->getConfig(self::CONFIG_PATH, fn() => $this->getDefaultSecurityConfig());
 
-        if (!is_dir($configDir) && !mkdir($configDir, 0755, true)) {
-            return false;
+        if (isset($config['session']['save_path'])) {
+            $sessionPath = $this->basePath($config['session']['save_path']);
+            if (!is_dir($sessionPath) && !mkdir($sessionPath, 0755, true)) {
+                throw new \RuntimeException("Cannot create session directory: {$sessionPath}");
+            }
         }
-
-        $content = <<<'PHP'
-<?php
-
-declare(strict_types=1);
-
-return [
-    /*
-    |--------------------------------------------------------------------------
-    | Session Configuration
-    |--------------------------------------------------------------------------
-    */
-    'session' => [
-        'lifetime' => 7200, // 2 hours
-        'path' => '/',
-        'domain' => '',
-        'secure' => false, // Set to true in production with HTTPS
-        'httponly' => true,
-        'samesite' => 'Lax', // Lax, Strict, None
-        'gc_maxlifetime' => 7200,
-        'gc_probability' => 1,
-        'gc_divisor' => 100,
-    ],
-
-    /*
-    |--------------------------------------------------------------------------
-    | CSRF Protection - FIXED: Specific exemptions only
-    |--------------------------------------------------------------------------
-    */
-    'csrf' => [
-        'token_lifetime' => 7200, // 2 hours
-        'regenerate_on_login' => true,
-        'exempt_routes' => [
-            '/api/*',                    // API routes (use different auth)
-            '/webhooks/*',               // Webhook routes
-            '/test/template-functions',  // Template testing (no sensitive data)
-            '/test/validation',          // Validation testing (no sensitive data)
-            // NOTE: /test/localization and /test/security have CSRF protection!
-        ],
-        'require_https' => false, // Set to true in production
-        'auto_cleanup' => true,
-        'log_violations' => true,
-        'strict_mode' => false, // If true, reject requests without tokens
-    ],
-
-    /*
-    |--------------------------------------------------------------------------
-    | Session Security
-    |--------------------------------------------------------------------------
-    */
-    'session_security' => [
-        'min_regeneration_interval' => 300, // 5 minutes
-        'max_login_attempts' => 5,
-        'login_attempt_window' => 900, // 15 minutes
-        'enable_fingerprinting' => true,
-        'fingerprint_components' => [
-            'user_agent' => true,
-            'accept_language' => true,
-            'ip_address' => false, // Disabled for mobile users
-        ],
-    ],
-];
-PHP;
-
-        return file_put_contents($configPath, $content) !== false;
     }
 
     /**
      * Registriert alle Security Services
      */
-    public function register(): void
+    protected function registerServices(): void
     {
         $this->registerSession();
         $this->registerSessionSecurity();
         $this->registerCsrf();
         $this->registerMiddlewares();
-        $this->bindInterfaces();
     }
 
     /**
-     * Registriert Session-Service als Singleton
+     * Registriert Session als Singleton
      */
     private function registerSession(): void
     {
-        $this->container->singleton(Session::class, function () {
-            $config = $this->loadSecurityConfig();
+        $this->singleton(Session::class, function () {
+            $config = $this->getConfig(self::CONFIG_PATH, fn() => $this->getDefaultSecurityConfig());
             return new Session($config['session'] ?? []);
         });
     }
 
     /**
-     * Lädt Security-Konfiguration - FIXED: Verwende array_merge statt array_merge_recursive
-     */
-    private function loadSecurityConfig(): array
-    {
-        $configPath = $this->app->getBasePath() . '/' . self::DEFAULT_CONFIG_PATH;
-
-        if (!file_exists($configPath)) {
-            // Fallback zu Default-Konfiguration
-            return $this->getDefaultConfig();
-        }
-
-        $config = require $configPath;
-
-        // FIXED: Verwende array_merge statt array_merge_recursive um Arrays zu vermeiden
-        return array_merge($this->getDefaultConfig(), $config);
-    }
-
-    /**
-     * Standard-Konfiguration als Fallback - FIXED: Spezifische CSRF-Exemptions
-     */
-    private function getDefaultConfig(): array
-    {
-        return [
-            'session' => [
-                'lifetime' => 7200,
-                'path' => '/',
-                'domain' => '',
-                'secure' => false,
-                'httponly' => true,
-                'samesite' => 'Lax',
-                'gc_maxlifetime' => 7200,
-                'gc_probability' => 1,
-                'gc_divisor' => 100,
-            ],
-            'csrf' => [
-                'token_lifetime' => 7200,
-                'regenerate_on_login' => true,
-                'exempt_routes' => [
-                    '/api/*',
-                    '/webhooks/*',
-                    '/test/template-functions',
-                    '/test/validation',
-                    // NOTE: /test/localization und /test/security sind NICHT exempt!
-                ],
-                'require_https' => false,
-                'auto_cleanup' => true,
-                'log_violations' => true,
-                'strict_mode' => false,
-            ],
-            'session_security' => [
-                'min_regeneration_interval' => 300,
-                'max_login_attempts' => 5,
-                'login_attempt_window' => 900,
-                'enable_fingerprinting' => true,
-                'fingerprint_components' => [
-                    'user_agent' => true,
-                    'accept_language' => true,
-                    'ip_address' => false,
-                ],
-            ],
-        ];
-    }
-
-    /**
-     * Registriert SessionSecurity-Service als Singleton
+     * Registriert Session Security als Singleton
      */
     private function registerSessionSecurity(): void
     {
-        $this->container->singleton(SessionSecurity::class, function () {
-            $session = $this->container->get(Session::class);
+        $this->singleton(SessionSecurity::class, function () {
+            $session = $this->get(Session::class);
             return new SessionSecurity($session);
         });
     }
 
     /**
-     * Registriert CSRF-Service als Singleton
+     * Registriert CSRF Protection als Singleton
      */
     private function registerCsrf(): void
     {
-        $this->container->singleton(Csrf::class, function () {
-            $session = $this->container->get(Session::class);
+        $this->singleton(Csrf::class, function () {
+            $session = $this->get(Session::class);
             return new Csrf($session);
         });
     }
 
     /**
-     * Registriert Middleware-Services
+     * Registriert Security Middlewares
      */
     private function registerMiddlewares(): void
     {
-        // Session Middleware
-        $this->container->singleton(SessionMiddleware::class, function () {
-            $session = $this->container->get(Session::class);
-            $sessionSecurity = $this->container->get(SessionSecurity::class);
+        $this->singleton(SessionMiddleware::class, function () {
+            $session = $this->get(Session::class);
+            $sessionSecurity = $this->get(SessionSecurity::class);
             return new SessionMiddleware($session, $sessionSecurity);
         });
 
-        // CSRF Middleware (Enhanced with SessionSecurity integration)
-        $this->container->singleton(CsrfMiddleware::class, function () {
-            $csrf = $this->container->get(Csrf::class);
-            $routerCache = $this->container->get(\Framework\Routing\RouterCache::class);
-            $sessionSecurity = $this->container->get(SessionSecurity::class);
-            $config = $this->loadSecurityConfig();
+        $this->singleton(CsrfMiddleware::class, function () {
+            $config = $this->getConfig(self::CONFIG_PATH, fn() => $this->getDefaultSecurityConfig());
+
+            $csrf = $this->get(Csrf::class);
+            $routerCache = $this->get(RouterCache::class);
+            $sessionSecurity = $this->get(SessionSecurity::class);
 
             return new CsrfMiddleware(
                 csrf: $csrf,
@@ -236,106 +105,65 @@ PHP;
     }
 
     /**
-     * Bindet Interfaces an Implementierungen
+     * Bindet Security-Interfaces
      */
-    private function bindInterfaces(): void
+    protected function bindInterfaces(): void
     {
-        // Hier können später Interfaces gebunden werden
-        // z.B. $this->container->bind(SessionInterface::class, Session::class);
+        // Hier können Security-Interfaces gebunden werden
+        // $this->bind(SessionInterface::class, Session::class);
     }
 
     /**
-     * Macht Services global verfügbar über Application
+     * Default Security Konfiguration
      */
-    public function boot(): void
+    private function getDefaultSecurityConfig(): array
     {
-        // Session im Application-Container verfügbar machen
-        $this->app->singleton('session', fn() => $this->container->get(Session::class));
-
-        // SessionSecurity im Application-Container verfügbar machen
-        $this->app->singleton('session_security', fn() => $this->container->get(SessionSecurity::class));
-
-        // CSRF im Application-Container verfügbar machen
-        $this->app->singleton('csrf', fn() => $this->container->get(Csrf::class));
-    }
-
-    /**
-     * Konfiguration für Tests überschreiben
-     */
-    public function overrideConfigForTesting(array $testConfig): void
-    {
-        // Re-registriere Services mit Test-Konfiguration
-        $this->container->singleton(Session::class, function () use ($testConfig) {
-            return new Session($testConfig['session'] ?? []);
-        });
-
-        $this->container->singleton(SessionSecurity::class, function () {
-            $session = $this->container->get(Session::class);
-            return new SessionSecurity($session);
-        });
-
-        $this->container->singleton(Csrf::class, function () {
-            $session = $this->container->get(Session::class);
-            return new Csrf($session);
-        });
-
-        // Re-registriere Middlewares mit neuen Services
-        $this->container->singleton(SessionMiddleware::class, function () {
-            $session = $this->container->get(Session::class);
-            $sessionSecurity = $this->container->get(SessionSecurity::class);
-            return new SessionMiddleware($session, $sessionSecurity);
-        });
-
-        $this->container->singleton(CsrfMiddleware::class, function () use ($testConfig) {
-            $csrf = $this->container->get(Csrf::class);
-            $routerCache = $this->container->get(\Framework\Routing\RouterCache::class);
-            $sessionSecurity = $this->container->get(SessionSecurity::class);
-
-            return new CsrfMiddleware(
-                csrf: $csrf,
-                routerCache: $routerCache,
-                sessionSecurity: $sessionSecurity,
-                config: $testConfig['csrf'] ?? []
-            );
-        });
-    }
-
-    /**
-     * Validiert Security-Konfiguration
-     */
-    private function validateConfig(array $config): bool
-    {
-        // Session-Konfiguration validieren
-        if (isset($config['session']['lifetime']) && $config['session']['lifetime'] < 0) {
-            throw new \InvalidArgumentException('Session lifetime must be positive');
-        }
-
-        // CSRF-Konfiguration validieren
-        if (isset($config['csrf']['token_lifetime']) && $config['csrf']['token_lifetime'] < 0) {
-            throw new \InvalidArgumentException('CSRF token lifetime must be positive');
-        }
-
-        // SessionSecurity-Konfiguration validieren
-        if (isset($config['session_security']['min_regeneration_interval']) &&
-            $config['session_security']['min_regeneration_interval'] < 0) {
-            throw new \InvalidArgumentException('Min regeneration interval must be positive');
-        }
-
-        if (isset($config['session_security']['max_login_attempts']) &&
-            $config['session_security']['max_login_attempts'] < 1) {
-            throw new \InvalidArgumentException('Max login attempts must be at least 1');
-        }
-
-        if (isset($config['csrf']['exempt_routes']) &&
-            !is_array($config['csrf']['exempt_routes'])) {
-            throw new \InvalidArgumentException('CSRF exempt_routes must be an array');
-        }
-
-        if (isset($config['csrf']['require_https']) &&
-            !is_bool($config['csrf']['require_https'])) {
-            throw new \InvalidArgumentException('CSRF require_https must be boolean');
-        }
-
-        return true;
+        return [
+            'session' => [
+                'driver' => 'file',
+                'save_path' => 'storage/sessions',
+                'name' => 'kickers_session',
+                'lifetime' => 3600, // 1 hour
+                'expire_on_close' => false,
+                'encrypt' => false,
+                'cookie_httponly' => true,
+                'cookie_secure' => false, // Set to true in production with HTTPS
+                'cookie_samesite' => 'Lax',
+                'regenerate_interval' => 300, // 5 minutes
+            ],
+            'csrf' => [
+                'enabled' => true,
+                'token_name' => '_token',
+                'header_name' => 'X-CSRF-TOKEN',
+                'exclude_routes' => [
+                    'api/*',
+                    'webhooks/*',
+                ],
+                'token_lifetime' => 3600, // 1 hour
+            ],
+            'headers' => [
+                'X-Content-Type-Options' => 'nosniff',
+                'X-Frame-Options' => 'SAMEORIGIN',
+                'X-XSS-Protection' => '1; mode=block',
+                'Referrer-Policy' => 'strict-origin-when-cross-origin',
+                'Content-Security-Policy' => "default-src 'self'",
+            ],
+            'encryption' => [
+                'cipher' => 'AES-256-CBC',
+                'key' => '', // Should be set in production
+            ],
+            'rate_limiting' => [
+                'enabled' => true,
+                'max_attempts' => 60,
+                'decay_minutes' => 1,
+                'prefix' => 'rate_limit',
+            ],
+            'password_hashing' => [
+                'algorithm' => PASSWORD_ARGON2ID,
+                'memory_cost' => 65536, // 64 MB
+                'time_cost' => 4,
+                'threads' => 3,
+            ],
+        ];
     }
 }

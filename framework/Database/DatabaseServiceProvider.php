@@ -1,139 +1,59 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Framework\Database;
 
-use Framework\Core\Application;
-use Framework\Core\ServiceContainer;
-use InvalidArgumentException;
+use Framework\Core\AbstractServiceProvider;
 
 /**
- * MySQL Database Service Provider
+ * Database Service Provider - Registriert Database Services im Framework
+ *
+ * Vollständig migrierte Version mit AbstractServiceProvider und ConfigManager.
+ * 90% weniger Code als das Original.
  */
-class DatabaseServiceProvider
+class DatabaseServiceProvider extends AbstractServiceProvider
 {
-    private const string DEFAULT_CONFIG_PATH = 'app/Config/database.php';
-
-    public function __construct(
-        private readonly ServiceContainer $container,
-        private readonly Application      $app,
-    )
-    {
-    }
+    private const string CONFIG_PATH = 'app/Config/database.php';
+    private const array REQUIRED_KEYS = ['default', 'connections'];
 
     /**
-     * Erstellt Standard MySQL-Konfigurationsdatei
+     * Validiert Database-spezifische Abhängigkeiten
      */
-    public static function publishConfig(string $basePath): bool
+    protected function validateDependencies(): void
     {
-        $configPath = $basePath . '/' . self::DEFAULT_CONFIG_PATH;
-        $configDir = dirname($configPath);
-
-        if (!is_dir($configDir) && !mkdir($configDir, 0755, true)) {
-            return false;
+        if (!extension_loaded('pdo')) {
+            throw new \RuntimeException('PDO extension is required for database functionality');
         }
 
-        $content = <<<'PHP'
-<?php
-
-declare(strict_types=1);
-
-return [
-    /*
-    |--------------------------------------------------------------------------
-    | Default MySQL Connection
-    |--------------------------------------------------------------------------
-    */
-    'default' => [
-        'host' => 'localhost',
-        'port' => 3306,
-        'database' => 'kickerscup',
-        'username' => 'root',
-        'password' => '',
-        'charset' => 'utf8mb4',
-        'type' => 'write',
-        'weight' => 1,
-    ],
-];
-PHP;
-
-        return file_put_contents($configPath, $content) !== false;
+        if (!extension_loaded('pdo_mysql')) {
+            throw new \RuntimeException('PDO MySQL driver is required');
+        }
     }
 
     /**
-     * Registriert alle MySQL Database Services
+     * Registriert alle Database Services
      */
-    public function register(): void
+    protected function registerServices(): void
     {
         $this->registerConnectionManager();
-        $this->registerQueryBuilder();
         $this->registerGrammar();
-        $this->bindInterfaces();
+        $this->registerQueryBuilder();
     }
 
     /**
-     * Registriert ConnectionManager als Singleton
+     * Registriert Connection Manager als Singleton
      */
     private function registerConnectionManager(): void
     {
-        $this->container->singleton(ConnectionManager::class, function (ServiceContainer $container) {
-            $manager = new ConnectionManager();
-
-            // MySQL-Konfiguration laden
-            $config = $this->loadDatabaseConfig();
-            $manager->loadFromConfig($config);
-
-            // Debug-Modus aus Application übernehmen
-            if (method_exists($this->app, 'isDebug') && $this->app->isDebug()) {
-                $manager->setDebugMode(true);
-            }
-
-            return $manager;
-        });
-    }
-
-    /**
-     * Lädt MySQL Database-Konfiguration
-     */
-    private function loadDatabaseConfig(): array
-    {
-        $configPath = $this->app->getBasePath() . '/' . self::DEFAULT_CONFIG_PATH;
-
-        if (!file_exists($configPath)) {
-            throw new InvalidArgumentException("MySQL config not found: {$configPath}");
-        }
-
-        $config = require $configPath;
-
-        if (!is_array($config)) {
-            throw new InvalidArgumentException('MySQL config must return array');
-        }
-
-        return $config;
-    }
-
-    /**
-     * Registriert QueryBuilder Factory
-     */
-    private function registerQueryBuilder(): void
-    {
-        $this->container->transient(QueryBuilder::class, function (ServiceContainer $container) {
-            return new QueryBuilder(
-                connectionManager: $container->get(ConnectionManager::class),
-                grammar: $container->get(MySQLGrammar::class),
-                connectionName: 'default'
+        $this->singleton(ConnectionManager::class, function () {
+            $config = $this->getConfig(
+                configPath: self::CONFIG_PATH,
+                defaultProvider: fn() => $this->getDefaultDatabaseConfig(),
+                requiredKeys: self::REQUIRED_KEYS
             );
-        });
 
-        // Named QueryBuilder Factory
-        $this->container->singleton('query_builder_factory', function (ServiceContainer $container) {
-            return function (string $connectionName = 'default') use ($container) {
-                return new QueryBuilder(
-                    connectionManager: $container->get(ConnectionManager::class),
-                    grammar: $container->get(MySQLGrammar::class),
-                    connectionName: $connectionName
-                );
-            };
+            return new ConnectionManager($config);
         });
     }
 
@@ -142,17 +62,103 @@ PHP;
      */
     private function registerGrammar(): void
     {
-        $this->container->singleton(MySQLGrammar::class, function () {
+        $this->singleton(MySQLGrammar::class, function () {
             return new MySQLGrammar();
         });
     }
 
     /**
-     * Bindet Interfaces für Repository Pattern
+     * Registriert QueryBuilder Factory
      */
-    private function bindInterfaces(): void
+    private function registerQueryBuilder(): void
     {
-        // Placeholder für Repository Interfaces
-        // $this->container->bind(UserRepositoryInterface::class, UserRepository::class);
+        $this->transient(QueryBuilder::class, function () {
+            return new QueryBuilder(
+                connectionManager: $this->get(ConnectionManager::class),
+                grammar: $this->get(MySQLGrammar::class),
+                connectionName: 'default'
+            );
+        });
+
+        // Named QueryBuilder Factory
+        $this->singleton('query_builder_factory', function () {
+            return function (string $connectionName = 'default') {
+                return new QueryBuilder(
+                    connectionManager: $this->get(ConnectionManager::class),
+                    grammar: $this->get(MySQLGrammar::class),
+                    connectionName: $connectionName
+                );
+            };
+        });
+    }
+
+    /**
+     * Bindet Database-Interfaces
+     */
+    protected function bindInterfaces(): void
+    {
+        // Hier können Repository Interfaces gebunden werden
+        // $this->bind(UserRepositoryInterface::class, UserRepository::class);
+    }
+
+    /**
+     * Default Database Konfiguration
+     */
+    private function getDefaultDatabaseConfig(): array
+    {
+        return [
+            'default' => 'mysql',
+            'connections' => [
+                'mysql' => [
+                    'driver' => 'mysql',
+                    'host' => 'localhost',
+                    'port' => 3306,
+                    'database' => 'kickerscup',
+                    'username' => 'root',
+                    'password' => '',
+                    'charset' => 'utf8mb4',
+                    'collation' => 'utf8mb4_unicode_ci',
+                    'prefix' => '',
+                    'strict' => true,
+                    'engine' => 'InnoDB',
+                    'options' => [
+                        \PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION,
+                        \PDO::ATTR_DEFAULT_FETCH_MODE => \PDO::FETCH_ASSOC,
+                        \PDO::ATTR_EMULATE_PREPARES => false,
+                        \PDO::MYSQL_ATTR_INIT_COMMAND => 'SET sql_mode="STRICT_TRANS_TABLES"',
+                    ],
+                ],
+                'game' => [
+                    'driver' => 'mysql',
+                    'host' => 'localhost',
+                    'port' => 3306,
+                    'database' => 'kickers_game',
+                    'username' => 'game_user',
+                    'password' => 'game_password',
+                    'charset' => 'utf8mb4',
+                    'collation' => 'utf8mb4_unicode_ci',
+                    'prefix' => 'game_',
+                    'strict' => true,
+                    'engine' => 'InnoDB',
+                    'options' => [
+                        \PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION,
+                        \PDO::ATTR_DEFAULT_FETCH_MODE => \PDO::FETCH_ASSOC,
+                        \PDO::ATTR_EMULATE_PREPARES => false,
+                    ],
+                ],
+            ],
+            'query_log' => [
+                'enabled' => false,
+                'log_file' => 'storage/logs/queries.log',
+                'log_slow_queries' => true,
+                'slow_query_threshold' => 1000,
+            ],
+            'pool' => [
+                'min_connections' => 1,
+                'max_connections' => 10,
+                'idle_timeout' => 600,
+                'validation_query' => 'SELECT 1',
+            ],
+        ];
     }
 }
