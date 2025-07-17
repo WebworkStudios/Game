@@ -4,16 +4,24 @@ declare(strict_types=1);
 
 namespace Framework\Validation;
 
-use Framework\Core\Application;
+use Framework\Core\ServiceContainer;
 use Framework\Http\HttpStatus;
 use Framework\Http\Request;
 use Framework\Http\Response;
 use Framework\Http\ResponseFactory;
+use Framework\Validation\ValidatorFactory;
 
 /**
- * ValidatesRequests - Trait for easy validation in Actions
+ * ValidatesRequest - Modern ApplicationKernel-compatible validation trait
  *
- * KORRIGIERT: Korrekte Parametersignatur für Application::validateOrFail
+ * REFACTORED: Ersetzt Application-Dependency durch ServiceContainer + ValidatorFactory
+ *
+ * Neue Architektur:
+ * - ✅ ApplicationKernel-kompatibel
+ * - ✅ Keine hard-coded Application dependency
+ * - ✅ Service Container Injection
+ * - ✅ Modern ValidatorFactory pattern
+ * - ✅ ResponseFactory integration
  */
 trait ValidatesRequest
 {
@@ -39,64 +47,23 @@ trait ValidatesRequest
         $data = $request->all();
         $customMessages = $this->messages();
 
-        if (property_exists($this, 'app') && $this->app instanceof Application) {
-            // KORRIGIERT: Korrekte Parameterreihenfolge für Application::validate
-            return $this->app->validate($data, $rules, $customMessages, $connectionName);
-        }
+        $validatorFactory = $this->getValidatorFactory();
 
-        throw new \RuntimeException('Application instance not found. Ensure $app property exists in Action.');
+        return $validatorFactory->make($data, $rules, $customMessages, $connectionName);
     }
 
     /**
-     * Override this method to provide custom validation messages
+     * Validate request data or fail with exception
      */
-    protected function messages(): array
+    protected function validateOrFail(Request $request, array $rules, ?string $connectionName = null): array
     {
-        return [];
-    }
+        $validator = $this->validate($request, $rules, $connectionName);
 
-    /**
-     * Erstellt einheitliche Validation Error Response
-     */
-    private function createValidationErrorResponse(Request $request, Validator $validator): Response
-    {
-        $responseFactory = $this->getResponseFactory();
-        $errors = $validator->errors();
-
-        // JSON Response for API requests
-        if ($request->expectsJson()) {
-            return $responseFactory->json([
-                'message' => 'The given data was invalid.',
-                'errors' => $errors,
-            ], HttpStatus::UNPROCESSABLE_ENTITY);
+        if ($validator->fails()) {
+            throw new ValidationFailedException($validator->errors());
         }
 
-        // HTML Response with error display
-        return $responseFactory->view('errors/validation', [
-            'errors' => $errors,
-            'old_input' => $request->all(),
-        ], HttpStatus::UNPROCESSABLE_ENTITY);
-    }
-
-    /**
-     * Holt ResponseFactory aus Action
-     */
-    private function getResponseFactory(): ResponseFactory
-    {
-        // Check if Action has ResponseFactory injected
-        if (property_exists($this, 'responseFactory') && $this->responseFactory instanceof ResponseFactory) {
-            return $this->responseFactory;
-        }
-
-        // Fallback: Get from container if available
-        if (property_exists($this, 'container') && method_exists($this->container, 'get')) {
-            return $this->container->get(ResponseFactory::class);
-        }
-
-        throw new \RuntimeException(
-            'ResponseFactory not found. Actions using ValidatesRequest must inject ResponseFactory:' . "\n" .
-            'public function __construct(private readonly ResponseFactory $responseFactory) {}'
-        );
+        return $validator->validated();
     }
 
     /**
@@ -107,96 +74,22 @@ trait ValidatesRequest
         $data = $request->only($fields);
         $customMessages = $this->messages();
 
-        if (property_exists($this, 'app') && $this->app instanceof Application) {
-            return $this->app->validateOrFail($data, $rules, $customMessages, $connectionName);
+        $validatorFactory = $this->getValidatorFactory();
+        $validator = $validatorFactory->make($data, $rules, $customMessages, $connectionName);
+
+        if ($validator->fails()) {
+            throw new ValidationFailedException($validator->errors());
         }
 
-        throw new \RuntimeException('Application instance not found. Ensure $app property exists in Action.');
+        return $validator->validated();
     }
 
     /**
-     * Validate request data or fail with exception
+     * Override this method to provide custom validation messages
      */
-    protected function validateOrFail(Request $request, array $rules, ?string $connectionName = null): array
+    protected function messages(): array
     {
-        $data = $request->all();
-        $customMessages = $this->messages();
-
-        if (property_exists($this, 'app') && $this->app instanceof Application) {
-            // KORRIGIERT: Korrekte Parameterreihenfolge für Application::validateOrFail
-            return $this->app->validateOrFail($data, $rules, $customMessages, $connectionName);
-        }
-
-        throw new \RuntimeException('Application instance not found. Ensure $app property exists in Action.');
-    }
-
-    /**
-     * NEU: Validate multiple files
-     */
-    protected function validateFiles(Request $request, array $fileFields, array $rules): array
-    {
-        $files = $request->getFiles();
-        $fileData = [];
-
-        foreach ($fileFields as $field) {
-            if (!isset($files[$field])) {
-                throw new \InvalidArgumentException("File field '{$field}' not found in request");
-            }
-            $fileData[$field] = $files[$field];
-        }
-
-        $customMessages = $this->messages();
-
-        if (property_exists($this, 'app') && $this->app instanceof Application) {
-            return $this->app->validateOrFail($fileData, $rules, $customMessages);
-        }
-
-        throw new \RuntimeException('Application instance not found. Ensure $app property exists in Action.');
-    }
-
-    /**
-     * NEU: Validate uploaded file with convenience checks
-     */
-    protected function validateUploadedFile(Request $request, string $field, array $allowedTypes = [], int $maxSize = 0): array
-    {
-        if (!$request->hasFile($field)) {
-            throw new \InvalidArgumentException("No file uploaded for field '{$field}'");
-        }
-
-        $rules = ['required', 'file'];
-
-        // Add file type validation
-        if (!empty($allowedTypes)) {
-            $rules[] = 'mimes:' . implode(',', $allowedTypes);
-        }
-
-        // Add max size validation (in KB)
-        if ($maxSize > 0) {
-            $rules[] = 'max:' . $maxSize;
-        }
-
-        return $this->validateFile($request, $field, [$field => $rules]);
-    }
-
-    /**
-     * KORRIGIERT: Validate file uploads - verwendet getFiles() statt files()
-     */
-    protected function validateFile(Request $request, string $field, array $rules): array
-    {
-        $files = $request->getFiles();
-
-        if (!isset($files[$field])) {
-            throw new \InvalidArgumentException("File field '{$field}' not found in request");
-        }
-
-        $fileData = [$field => $files[$field]];
-        $customMessages = $this->messages();
-
-        if (property_exists($this, 'app') && $this->app instanceof Application) {
-            return $this->app->validateOrFail($fileData, $rules, $customMessages);
-        }
-
-        throw new \RuntimeException('Application instance not found. Ensure $app property exists in Action.');
+        return [];
     }
 
     /**
@@ -234,7 +127,7 @@ trait ValidatesRequest
     }
 
     /**
-     * NEU: Validate JSON payload
+     * Validate JSON payload
      */
     protected function validateJson(Request $request, array $rules, ?string $connectionName = null): array
     {
@@ -245,44 +138,43 @@ trait ValidatesRequest
         $data = $request->json();
         $customMessages = $this->messages();
 
-        if (property_exists($this, 'app') && $this->app instanceof Application) {
-            return $this->app->validateOrFail($data, $rules, $customMessages, $connectionName);
-        }
-
-        throw new \RuntimeException('Application instance not found. Ensure $app property exists in Action.');
-    }
-
-    /**
-     * NEU: Validate with custom error messages
-     */
-    protected function validateWithMessages(Request $request, array $rules, array $messages, ?string $connectionName = null): array
-    {
-        $data = $request->all();
-
-        if (property_exists($this, 'app') && $this->app instanceof Application) {
-            return $this->app->validateOrFail($data, $rules, $messages, $connectionName);
-        }
-
-        throw new \RuntimeException('Application instance not found. Ensure $app property exists in Action.');
-    }
-
-    /**
-     * NEU: Validate and return only validated data
-     */
-    protected function validated(Request $request, array $rules, ?string $connectionName = null): array
-    {
-        $validator = $this->validate($request, $rules, $connectionName);
+        $validatorFactory = $this->getValidatorFactory();
+        $validator = $validatorFactory->make($data, $rules, $customMessages, $connectionName);
 
         if ($validator->fails()) {
-            throw new \InvalidArgumentException('Validation failed: ' . implode(', ', $validator->errors()->flatten()));
+            throw new ValidationFailedException($validator->errors());
         }
 
         return $validator->validated();
     }
 
+    /**
+     * Validate with custom error messages
+     */
+    protected function validateWithMessages(Request $request, array $rules, array $messages, ?string $connectionName = null): array
+    {
+        $data = $request->all();
+
+        $validatorFactory = $this->getValidatorFactory();
+        $validator = $validatorFactory->make($data, $rules, $messages, $connectionName);
+
+        if ($validator->fails()) {
+            throw new ValidationFailedException($validator->errors());
+        }
+
+        return $validator->validated();
+    }
 
     /**
-     * NEU: Safe validation that returns null on failure
+     * Validate and return only validated data
+     */
+    protected function validated(Request $request, array $rules, ?string $connectionName = null): array
+    {
+        return $this->validateOrFail($request, $rules, $connectionName);
+    }
+
+    /**
+     * Safe validation that returns null on failure
      */
     protected function safeValidate(Request $request, array $rules, ?string $connectionName = null): ?array
     {
@@ -291,5 +183,157 @@ trait ValidatesRequest
         } catch (\Exception) {
             return null;
         }
+    }
+
+    /**
+     * Validate multiple files
+     */
+    protected function validateFiles(Request $request, array $fileFields, array $rules): array
+    {
+        $files = $request->getFiles();
+        $fileData = [];
+
+        foreach ($fileFields as $field) {
+            if (!isset($files[$field])) {
+                throw new \InvalidArgumentException("File field '{$field}' not found in request");
+            }
+            $fileData[$field] = $files[$field];
+        }
+
+        $customMessages = $this->messages();
+
+        $validatorFactory = $this->getValidatorFactory();
+        $validator = $validatorFactory->make($fileData, $rules, $customMessages);
+
+        if ($validator->fails()) {
+            throw new ValidationFailedException($validator->errors());
+        }
+
+        return $validator->validated();
+    }
+
+    /**
+     * Validate uploaded file with convenience checks
+     */
+    protected function validateUploadedFile(Request $request, string $field, array $allowedTypes = [], int $maxSize = 0): array
+    {
+        if (!$request->hasFile($field)) {
+            throw new \InvalidArgumentException("No file uploaded for field '{$field}'");
+        }
+
+        $rules = ['required', 'file'];
+
+        // Add file type validation
+        if (!empty($allowedTypes)) {
+            $rules[] = 'mimes:' . implode(',', $allowedTypes);
+        }
+
+        // Add max size validation (in KB)
+        if ($maxSize > 0) {
+            $rules[] = 'max:' . $maxSize;
+        }
+
+        return $this->validateFile($request, $field, [$field => $rules]);
+    }
+
+    /**
+     * Validate file uploads
+     */
+    protected function validateFile(Request $request, string $field, array $rules): array
+    {
+        $files = $request->getFiles();
+
+        if (!isset($files[$field])) {
+            throw new \InvalidArgumentException("File field '{$field}' not found in request");
+        }
+
+        $fileData = [$field => $files[$field]];
+        $customMessages = $this->messages();
+
+        $validatorFactory = $this->getValidatorFactory();
+        $validator = $validatorFactory->make($fileData, $rules, $customMessages);
+
+        if ($validator->fails()) {
+            throw new ValidationFailedException($validator->errors());
+        }
+
+        return $validator->validated();
+    }
+
+    // ===================================================================
+    // PRIVATE HELPER METHODS
+    // ===================================================================
+
+    /**
+     * Erstellt einheitliche Validation Error Response
+     */
+    private function createValidationErrorResponse(Request $request, Validator $validator): Response
+    {
+        $responseFactory = $this->getResponseFactory();
+        $errors = $validator->errors();
+
+        // JSON Response for API requests
+        if ($request->expectsJson()) {
+            return $responseFactory->json([
+                'message' => 'The given data was invalid.',
+                'errors' => $errors,
+            ], HttpStatus::UNPROCESSABLE_ENTITY);
+        }
+
+        // HTML Response with error display
+        return $responseFactory->view('errors/validation', [
+            'errors' => $errors,
+            'old_input' => $request->all(),
+        ], HttpStatus::UNPROCESSABLE_ENTITY);
+    }
+
+    /**
+     * Gets ValidatorFactory from Service Container
+     */
+    private function getValidatorFactory(): ValidatorFactory
+    {
+        $container = $this->getServiceContainer();
+        return $container->get(ValidatorFactory::class);
+    }
+
+    /**
+     * Gets ResponseFactory from Action (modern pattern)
+     */
+    private function getResponseFactory(): ResponseFactory
+    {
+        // Check if Action has ResponseFactory injected
+        if (property_exists($this, 'responseFactory') && $this->responseFactory instanceof ResponseFactory) {
+            return $this->responseFactory;
+        }
+
+        // Fallback: Get from container
+        $container = $this->getServiceContainer();
+        return $container->get(ResponseFactory::class);
+    }
+
+    /**
+     * Gets Service Container from Action
+     */
+    private function getServiceContainer(): ServiceContainer
+    {
+        // Modern Actions should inject ServiceContainer
+        if (property_exists($this, 'container') && $this->container instanceof ServiceContainer) {
+            return $this->container;
+        }
+
+        // Alternative: Check for direct ValidatorFactory injection
+        if (property_exists($this, 'validatorFactory') && $this->validatorFactory instanceof ValidatorFactory) {
+            // Create minimal container-like access
+            throw new \RuntimeException(
+                'Direct ValidatorFactory injection not yet supported. ' .
+                'Actions using ValidatesRequest must inject ServiceContainer: ' . "\n" .
+                'public function __construct(private readonly ServiceContainer $container) {}'
+            );
+        }
+
+        throw new \RuntimeException(
+            'ServiceContainer not found. Actions using ValidatesRequest must inject ServiceContainer: ' . "\n" .
+            'public function __construct(private readonly ServiceContainer $container, private readonly ResponseFactory $responseFactory) {}'
+        );
     }
 }
