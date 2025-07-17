@@ -42,11 +42,12 @@ class TemplateRenderer
     {
         return match ($token->getType()) {
             'text' => $token->getContent(),
-            'variable' => $this->renderVariable($token),
-            'control' => $this->renderControl($token),
+            'variable' => $this->renderVariable($token instanceof VariableToken ? $token : throw new \LogicException('Expected VariableToken')),
+            'control' => $this->renderControl($token instanceof ControlToken ? $token : throw new \LogicException('Expected ControlToken')),
             default => ''
         };
     }
+
 
     private function renderVariable(VariableToken $token): string
     {
