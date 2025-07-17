@@ -71,6 +71,10 @@ class FilterManager
         $this->registry->registerLazy('replace', fn() => [TextFilters::class, 'replace']);
         $this->registry->registerLazy('repeat', fn() => [TextFilters::class, 'repeat']);
         $this->registry->registerLazy('reverse', fn() => [TextFilters::class, 'reverse']);
+
+        // Escape-Filter (migriert von EscapeFilter.php)
+        $this->registry->registerLazy('escape', fn() => [TextFilters::class, 'escape']);
+        $this->registry->registerLazy('e', fn() => [TextFilters::class, 'e']);
     }
 
     /**

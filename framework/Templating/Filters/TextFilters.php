@@ -1,6 +1,5 @@
 <?php
 
-
 declare(strict_types=1);
 
 namespace Framework\Templating\Filters;
@@ -97,10 +96,77 @@ class TextFilters
 
     /**
      * Gibt den Wert unverändert zurück (für raw-Output)
+     *
+     * WARNUNG: Nur für vertrauenswürdige Inhalte verwenden!
+     * Verhindert automatisches HTML-Escaping
      */
     public static function raw(mixed $value): mixed
     {
         return $value;
+    }
+
+    /**
+     * Explizites HTML-Escaping mit verschiedenen Strategien
+     *
+     * Verfügbare Strategien: html, attr, js, css, url
+     */
+    public static function escape(mixed $value, string $strategy = 'html'): string
+    {
+        if ($value === null) {
+            return '';
+        }
+
+        $stringValue = (string)$value;
+
+        return match ($strategy) {
+            'html' => htmlspecialchars(
+                $stringValue,
+                ENT_QUOTES | ENT_HTML5 | ENT_SUBSTITUTE,
+                'UTF-8',
+                true
+            ),
+            'attr' => htmlspecialchars(
+                $stringValue,
+                ENT_QUOTES | ENT_HTML5 | ENT_SUBSTITUTE,
+                'UTF-8',
+                true
+            ),
+            'js' => self::escapeJavaScript($stringValue),
+            'css' => self::escapeCss($stringValue),
+            'url' => rawurlencode($stringValue),
+            default => htmlspecialchars(
+                $stringValue,
+                ENT_QUOTES | ENT_HTML5 | ENT_SUBSTITUTE,
+                'UTF-8',
+                true
+            ),
+        };
+    }
+
+    /**
+     * Alias für escape mit html-Strategie
+     */
+    public static function e(mixed $value): string
+    {
+        return self::escape($value, 'html');
+    }
+
+    /**
+     * JavaScript-String escaping
+     */
+    private static function escapeJavaScript(string $value): string
+    {
+        $escaped = json_encode($value, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP);
+        return $escaped !== false ? $escaped : '""';
+    }
+
+    /**
+     * CSS-String escaping
+     */
+    private static function escapeCss(string $value): string
+    {
+        // Entferne gefährliche CSS-Zeichen
+        return preg_replace('/[^a-zA-Z0-9\-_\s]/', '', $value);
     }
 
     /**
