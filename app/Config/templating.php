@@ -32,7 +32,7 @@ return [
     'options' => [
         'auto_escape' => true,        // XSS Protection
         'strict_variables' => false,  // Throw error on undefined variables
-        'debug' => false,             // Debug mode
+        'debug' => true,             // Debug mode
     ],
 
     /*

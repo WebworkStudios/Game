@@ -38,9 +38,6 @@ class Router
     {
     }
 
-    /**
-     * Verarbeitet HTTP-Request und gibt Response zurück
-     */
     public function handle(Request $request): Response
     {
         $this->loadRoutes();
@@ -48,13 +45,44 @@ class Router
         $method = $request->getMethod();
         $path = $request->getPath();
 
+        // DEBUG: Ausgabe der aktuellen Route-Anfrage
+        error_log("=== ROUTER DEBUG ===");
+        error_log("Requested method: " . $method->value);
+        error_log("Requested path: " . $path);
+        error_log("Routes loaded: " . ($this->routesLoaded ? 'YES' : 'NO'));
+        error_log("Total routes: " . count($this->routes));
+
+        // DEBUG: Alle verfügbaren Routes anzeigen
+        if (!empty($this->routes)) {
+            error_log("Available routes:");
+            foreach ($this->routes as $route) {
+                error_log("  - " . $route->pattern . " [" . implode(',', array_map(fn($m) => $m->value, $route->methods)) . "] -> " . $route->action);
+            }
+        } else {
+            error_log("NO ROUTES FOUND!");
+        }
+
+        // DEBUG: Named routes
+        if (!empty($this->namedRoutes)) {
+            error_log("Named routes:");
+            foreach ($this->namedRoutes as $name => $route) {
+                error_log("  - {$name}: " . $route->pattern . " -> " . $route->action);
+            }
+        }
+
         $matchedRoute = $this->findRoute($path, $method);
 
+        // DEBUG: Route-Matching Ergebnis
         if ($matchedRoute === null) {
+            error_log("NO ROUTE MATCHED for path: " . $path);
             return $this->handleNotFound($request);
+        } else {
+            error_log("ROUTE MATCHED: " . $matchedRoute['route']->action);
+            error_log("Parameters: " . json_encode($matchedRoute['parameters']));
         }
 
         if (!$matchedRoute['route']->supportsMethod($method)) {
+            error_log("METHOD NOT ALLOWED: " . $method->value);
             return $this->handleMethodNotAllowed($request, $matchedRoute['route']);
         }
 
@@ -67,20 +95,56 @@ class Router
     private function loadRoutes(): void
     {
         if ($this->routesLoaded) {
+            error_log("Routes already loaded, skipping...");
             return;
         }
 
+        error_log("=== LOADING ROUTES ===");
+        error_log("Cache file: " . $this->cache->getCacheFile());
+        error_log("Actions path: " . $this->cache->getActionsPath());
+        error_log("Cache exists: " . ($this->cache->exists() ? 'YES' : 'NO'));
+
+        // Zeige Cache-Debug-Informationen
+        $cacheDebug = $this->cache->debug();
+        error_log("Cache debug info: " . json_encode($cacheDebug, JSON_PRETTY_PRINT));
+
+        // Lösche Cache für frische Generierung
+        error_log("Clearing cache for fresh build...");
+        $this->cache->clear();
+
+        // Lade Routes über Cache
         $routes = $this->cache->loadRouteEntries();
+        error_log("Routes loaded from cache: " . count($routes));
 
-        foreach ($routes as $route) {
-            $this->routes[] = $route;
+        if (!empty($routes)) {
+            foreach ($routes as $route) {
+                error_log("Loaded route: " . $route->pattern . " [" .
+                    implode(',', array_map(fn($m) => $m->value, $route->methods)) . "] -> " . $route->action);
+            }
+        }
 
+        $this->routes = $routes;
+        $this->buildNamedRoutes();
+
+        error_log("Named routes built: " . count($this->namedRoutes));
+
+        $this->routesLoaded = true;
+    }
+
+    private function buildNamedRoutes(): void
+    {
+        error_log("=== BUILDING NAMED ROUTES ===");
+
+        $this->namedRoutes = [];
+
+        foreach ($this->routes as $route) {
             if ($route->name !== null) {
+                error_log("Named route: " . $route->name . " -> " . $route->pattern);
                 $this->namedRoutes[$route->name] = $route;
             }
         }
 
-        $this->routesLoaded = true;
+        error_log("Total named routes: " . count($this->namedRoutes));
     }
 
     /**

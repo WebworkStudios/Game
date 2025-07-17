@@ -50,7 +50,8 @@ class TemplateTokenizer
                 $tokens[] = $token;
             }
 
-            $offset = $nextTag['end'];
+            // KORRIGIERT: Verwende die von parseTag berechnete End-Position
+            $offset = $nextTag['end'] ?? $offset + 1; // Fallback falls 'end' nicht gesetzt
         }
 
         return $tokens;
@@ -72,16 +73,20 @@ class TemplateTokenizer
         return $nextMatch;
     }
 
-    private function parseTag(string $content, array $tagInfo): ?TemplateToken
+    private function parseTag(string $content, array &$tagInfo): ?TemplateToken
     {
         $ending = self::TAG_ENDINGS[$tagInfo['type']];
         $endPos = strpos($content, $ending, $tagInfo['position']);
 
         if ($endPos === false) {
+            // KORRIGIERT: Setze End-Position auch wenn kein Ende gefunden
+            $tagInfo['end'] = $tagInfo['position'] + strlen(array_search($tagInfo['type'], self::TAG_PATTERNS));
             return null;
         }
 
+        // KORRIGIERT: Setze End-Position im tagInfo Array
         $tagInfo['end'] = $endPos + strlen($ending);
+
         $startPos = $tagInfo['position'] + strlen(array_search($tagInfo['type'], self::TAG_PATTERNS));
         $expression = trim(substr($content, $startPos, $endPos - $startPos));
 

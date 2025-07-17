@@ -22,10 +22,14 @@ class HomeAction
 {
     public function __construct(
         private readonly ResponseFactory $responseFactory
-    ) {}
+    ) {
+        // Debug: Überprüfe ob Constructor aufgerufen wird
+        error_log('HomeAction constructor called');
+    }
 
     public function __invoke(Request $request): Response
     {
+        error_log('HomeAction __invoke called');
         $dashboardData = $this->prepareDashboardData();
 
         return $this->responseFactory->view('pages/home', $dashboardData);

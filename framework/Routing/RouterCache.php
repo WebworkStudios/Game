@@ -9,7 +9,7 @@ use Framework\Http\HttpMethod;
 /**
  * Router Cache - Cached Routes für Performance
  *
- * KORRIGIERT: filemtime() Fehler behoben
+ * KORRIGIERT: Windows-Pfad-Unterstützung hinzugefügt
  */
 readonly class RouterCache
 {
@@ -68,8 +68,6 @@ readonly class RouterCache
 
     /**
      * Bestimmt ob Cache neu erstellt werden soll
-     *
-     * KORRIGIERT: Verwendet getRealPath() oder getPathname() für filemtime()
      */
     private function shouldRebuildCache(): bool
     {
@@ -87,7 +85,6 @@ readonly class RouterCache
             );
 
             foreach ($iterator as $file) {
-                // KORRIGIERT: Verwende getPathname() statt $file direkt
                 if ($file->getExtension() === 'php' && filemtime($file->getPathname()) > $cacheTime) {
                     return true;
                 }
@@ -163,44 +160,100 @@ readonly class RouterCache
     {
         $routes = [];
 
+        error_log("=== BUILDING ROUTES ===");
+        error_log("Actions path: " . $this->actionsPath);
+        error_log("Actions path exists: " . (is_dir($this->actionsPath) ? 'YES' : 'NO'));
+
         if (!is_dir($this->actionsPath)) {
+            error_log("Actions directory does not exist!");
             return $routes;
         }
+
+        // Zeige alle Dateien im Actions-Verzeichnis
+        $files = scandir($this->actionsPath);
+        error_log("Files in actions directory: " . implode(', ', $files));
 
         $iterator = new \RecursiveIteratorIterator(
             new \RecursiveDirectoryIterator($this->actionsPath, \RecursiveDirectoryIterator::SKIP_DOTS)
         );
 
+        $processedFiles = 0;
         foreach ($iterator as $file) {
+            error_log("Processing file: " . $file->getPathname());
+
             if ($file->getExtension() === 'php') {
+                $processedFiles++;
+                error_log("  -> PHP file found: " . $file->getFilename());
+
                 $className = $this->getClassNameFromFile($file->getPathname());
+                error_log("  -> Extracted class name: " . ($className ?? 'NULL'));
+
                 if ($className) {
+                    error_log("  -> Loading class: " . $className);
                     $this->loadClass($className, $file->getPathname());
-                    $routes = array_merge($routes, $this->extractRoutesFromClass($className));
+
+                    error_log("  -> Class exists after loading: " . (class_exists($className) ? 'YES' : 'NO'));
+
+                    if (class_exists($className)) {
+                        $classRoutes = $this->extractRoutesFromClass($className);
+                        error_log("  -> Routes extracted from class: " . count($classRoutes));
+
+                        if (!empty($classRoutes)) {
+                            foreach ($classRoutes as $route) {
+                                error_log("    -> Route: " . $route->pattern . " -> " . $route->action);
+                            }
+                        }
+
+                        $routes = array_merge($routes, $classRoutes);
+                    }
                 }
             }
         }
+
+        error_log("Total PHP files processed: " . $processedFiles);
+        error_log("Total routes built: " . count($routes));
 
         return $routes;
     }
 
     /**
      * Extrahiert Klassen-Name aus Datei-Pfad
+     * KORRIGIERT: Windows-Pfad-Unterstützung hinzugefügt
      */
     private function getClassNameFromFile(string $filepath): ?string
     {
-        $relativePath = str_replace($this->actionsPath, '', $filepath);
-        $relativePath = ltrim($relativePath, '/\\');
-        $relativePath = str_replace(['/', '\\'], '\\', $relativePath);
-        $relativePath = preg_replace('/\.php$/', '', $relativePath);
+        error_log("=== EXTRACTING CLASS NAME ===");
+        error_log("File path: " . $filepath);
 
-        // Bestimme Namespace basierend auf Pfad
-        if (str_contains($filepath, '/app/Actions/')) {
+        // Normalisiere Pfad-Separatoren für Windows-Kompatibilität
+        $normalizedFilePath = str_replace('\\', '/', $filepath);
+        $normalizedActionsPath = str_replace('\\', '/', $this->actionsPath);
+
+        error_log("Normalized file path: " . $normalizedFilePath);
+        error_log("Normalized actions path: " . $normalizedActionsPath);
+
+        $relativePath = str_replace($normalizedActionsPath, '', $normalizedFilePath);
+        error_log("Relative path: " . $relativePath);
+
+        $relativePath = ltrim($relativePath, '/\\');
+        error_log("Trimmed path: " . $relativePath);
+
+        $relativePath = str_replace(['/', '\\'], '\\', $relativePath);
+        error_log("Normalized path: " . $relativePath);
+
+        $relativePath = preg_replace('/\.php$/', '', $relativePath);
+        error_log("Without .php: " . $relativePath);
+
+        // Prüfe ob es ein Actions-Pfad ist (mit normalisierten Pfaden)
+        if (str_contains($normalizedFilePath, '/app/Actions/')) {
             $namespace = 'App\\Actions';
-            $className = str_replace(['/', '\\'], '\\', $relativePath);
-            return $namespace . '\\' . $className;
+            $className = $relativePath;
+            $fullClassName = $namespace . '\\' . $className;
+            error_log("Full class name: " . $fullClassName);
+            return $fullClassName;
         }
 
+        error_log("No valid namespace found for: " . $filepath);
         return null;
     }
 
@@ -221,32 +274,56 @@ readonly class RouterCache
     {
         $routes = [];
 
+        error_log("=== EXTRACTING ROUTES FROM CLASS ===");
+        error_log("Class name: " . $className);
+
         if (!class_exists($className)) {
+            error_log("Class does not exist: " . $className);
             return $routes;
         }
 
-        $reflection = new \ReflectionClass($className);
-        $attributes = $reflection->getAttributes();
+        try {
+            $reflection = new \ReflectionClass($className);
+            $attributes = $reflection->getAttributes();
+            error_log("Attributes found: " . count($attributes));
 
-        foreach ($attributes as $attribute) {
-            if ($attribute->getName() === 'Framework\\Routing\\Route') {
-                $args = $attribute->getArguments();
+            foreach ($attributes as $attribute) {
+                error_log("Attribute name: " . $attribute->getName());
 
-                $route = new RouteEntry(
-                    pattern: $args['path'] ?? $args[0] ?? '/',
-                    methods: isset($args['methods']) ?
-                        array_map(fn($m) => HttpMethod::from($m), $args['methods']) :
-                        [HttpMethod::GET],
-                    action: $className,
-                    middlewares: $args['middlewares'] ?? [],
-                    name: $args['name'] ?? null,
-                    parameters: []
-                );
+                if ($attribute->getName() === 'Framework\\Routing\\Route') {
+                    error_log("Route attribute found!");
 
-                $routes[] = $route;
+                    // KORRIGIERT: Verwende Route-Instanz statt Raw-Arguments
+                    $routeInstance = $attribute->newInstance();
+                    error_log("Route instance created");
+
+                    // Verwende Route-Methoden für korrekte Pattern-Erstellung
+                    $pattern = $routeInstance->getPattern();
+                    $methods = $routeInstance->getValidatedMethods();
+                    $parameters = $routeInstance->getParameters();
+
+                    error_log("Route pattern: " . $pattern);
+                    error_log("Route methods: " . implode(', ', array_map(fn($m) => $m->value, $methods)));
+                    error_log("Route parameters: " . implode(', ', $parameters));
+
+                    $route = new RouteEntry(
+                        pattern: $pattern,
+                        methods: $methods,
+                        action: $className,
+                        middlewares: $routeInstance->middlewares,
+                        name: $routeInstance->name,
+                        parameters: $parameters
+                    );
+
+                    error_log("Route created: " . $route->pattern . " -> " . $route->action);
+                    $routes[] = $route;
+                }
             }
+        } catch (\Exception $e) {
+            error_log("Error extracting routes from class " . $className . ": " . $e->getMessage());
         }
 
+        error_log("Total routes extracted: " . count($routes));
         return $routes;
     }
 
