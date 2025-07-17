@@ -16,11 +16,7 @@ class BooleanRule implements RuleInterface
 
     public function passes(string $field, mixed $value, array $parameters, array $data): bool
     {
-        if ($value === null) {
-            return true;
-        }
-
-        return in_array($value, self::BOOLEAN_VALUES, true);
+        return $value === null || in_array($value, self::BOOLEAN_VALUES, true);
     }
 
     public function message(string $field, mixed $value, array $parameters): string

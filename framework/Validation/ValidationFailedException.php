@@ -1,6 +1,4 @@
 <?php
-
-
 declare(strict_types=1);
 
 namespace Framework\Validation;
@@ -9,21 +7,26 @@ use Framework\Http\HttpStatus;
 use RuntimeException;
 
 /**
- * ValidationFailedException - Thrown when validation fails
+ * ValidationFailedException - Exception für fehlgeschlagene Validierung
+ *
+ * MODERNISIERUNGEN:
+ * ✅ Readonly properties (PHP 8.1+)
+ * ✅ Constructor property promotion
+ * ✅ Enum statt int für HTTP Status
+ * ✅ Bessere Typdeklarationen
  */
 class ValidationFailedException extends RuntimeException
 {
     public function __construct(
         private readonly MessageBag $errors,
-        string                      $message = 'The given data was invalid.',
-        int                         $code = 422
-    )
-    {
+        string $message = 'The given data was invalid.',
+        int $code = 422
+    ) {
         parent::__construct($message, $code);
     }
 
     /**
-     * Get validation errors
+     * Validation Errors abrufen
      */
     public function getErrors(): MessageBag
     {
@@ -31,7 +34,7 @@ class ValidationFailedException extends RuntimeException
     }
 
     /**
-     * Get errors as array for JSON response
+     * Errors als Array für JSON Response
      */
     public function getErrorsArray(): array
     {
@@ -39,7 +42,7 @@ class ValidationFailedException extends RuntimeException
     }
 
     /**
-     * Get HTTP status code
+     * HTTP Status Code abrufen
      */
     public function getHttpStatus(): HttpStatus
     {

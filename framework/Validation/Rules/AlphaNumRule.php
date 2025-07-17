@@ -16,11 +16,7 @@ class AlphaNumRule implements RuleInterface
             return true;
         }
 
-        if (!is_string($value)) {
-            return false;
-        }
-
-        return ctype_alnum($value);
+        return is_string($value) && ctype_alnum($value);
     }
 
     public function message(string $field, mixed $value, array $parameters): string

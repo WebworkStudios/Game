@@ -21,14 +21,11 @@ class InRule implements RuleInterface
             return true;
         }
 
-        if (empty($parameters)) {
+        if ($parameters === []) {
             throw new InvalidArgumentException('In rule requires at least one parameter');
         }
 
-        // Convert value to string for comparison (consistent with form inputs)
-        $stringValue = (string)$value;
-
-        return in_array($stringValue, $parameters, true);
+        return in_array((string) $value, $parameters, true);
     }
 
     public function message(string $field, mixed $value, array $parameters): string

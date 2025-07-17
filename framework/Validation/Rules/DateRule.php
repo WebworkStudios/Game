@@ -15,6 +15,7 @@ namespace Framework\Validation\Rules;
  * - d.m.Y (31.12.2024)
  * - Any format parseable by strtotime()
  */
+
 class DateRule implements RuleInterface
 {
     public function passes(string $field, mixed $value, array $parameters, array $data): bool
@@ -27,23 +28,21 @@ class DateRule implements RuleInterface
             return false;
         }
 
-        // Try to parse the date
-        $timestamp = strtotime($value);
+        // Format-Parameter optional berücksichtigen
+        $format = $parameters[0] ?? null;
 
-        if ($timestamp === false) {
-            return false;
+        if ($format !== null) {
+            $date = \DateTime::createFromFormat($format, $value);
+            return $date !== false && $date->format($format) === $value;
         }
 
-        // Additional validation: check if the parsed date matches original input
-        // This prevents cases like "2024-02-30" being converted to "2024-03-02"
-        $parsedDate = date('Y-m-d', $timestamp);
-        $normalizedInput = date('Y-m-d', strtotime($value));
-
-        return $parsedDate === $normalizedInput;
+        // Standard-Date-Validierung
+        return strtotime($value) !== false;
     }
 
     public function message(string $field, mixed $value, array $parameters): string
     {
-        return "The {$field} is not a valid date.";
+        $format = $parameters[0] ?? 'valid date';
+        return "The {$field} does not match the format {$format}.";
     }
 }

@@ -12,19 +12,12 @@ class RequiredRule implements RuleInterface
 {
     public function passes(string $field, mixed $value, array $parameters, array $data): bool
     {
-        if ($value === null) {
-            return false;
-        }
-
-        if (is_string($value) && trim($value) === '') {
-            return false;
-        }
-
-        if (is_array($value) && empty($value)) {
-            return false;
-        }
-
-        return true;
+        return match (true) {
+            $value === null => false,
+            is_string($value) && trim($value) === '' => false,
+            is_array($value) && $value === [] => false,
+            default => true
+        };
     }
 
     public function message(string $field, mixed $value, array $parameters): string

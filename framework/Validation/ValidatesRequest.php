@@ -9,38 +9,34 @@ use Framework\Http\HttpStatus;
 use Framework\Http\Request;
 use Framework\Http\Response;
 use Framework\Http\ResponseFactory;
-use Framework\Validation\ValidatorFactory;
+use RuntimeException;
 
 /**
  * ValidatesRequest - Modern ApplicationKernel-compatible validation trait
  *
- * REFACTORED: Ersetzt Application-Dependency durch ServiceContainer + ValidatorFactory
- *
- * Neue Architektur:
- * - ✅ ApplicationKernel-kompatibel
- * - ✅ Keine hard-coded Application dependency
- * - ✅ Service Container Injection
- * - ✅ Modern ValidatorFactory pattern
- * - ✅ ResponseFactory integration
+ * MODERNISIERUNGEN:
+ * ✅ Union Types für Return Values (PHP 8.0+)
+ * ✅ Match-Expressions für Response-Handling
+ * ✅ Bessere Error-Handling
+ * ✅ Type-safe Service Container Integration
+ * ✅ Improved Method Signatures
  */
 trait ValidatesRequest
 {
     /**
-     * Validate request and return Response on failure
+     * Request validieren und Response bei Fehler zurückgeben
      */
     protected function validateWithResponse(Request $request, array $rules, ?string $connectionName = null): Validator|Response
     {
         $validator = $this->validate($request, $rules, $connectionName);
 
-        if ($validator->fails()) {
-            return $this->createValidationErrorResponse($request, $validator);
-        }
-
-        return $validator;
+        return $validator->fails()
+            ? $this->createValidationErrorResponse($request, $validator)
+            : $validator;
     }
 
     /**
-     * Validate request data without throwing exceptions
+     * Request-Daten validieren ohne Exceptions
      */
     protected function validate(Request $request, array $rules, ?string $connectionName = null): Validator
     {
@@ -53,7 +49,10 @@ trait ValidatesRequest
     }
 
     /**
-     * Validate request data or fail with exception
+     * Request-Daten validieren oder Exception werfen
+     *
+     * @return array<string, mixed>
+     * @throws ValidationFailedException
      */
     protected function validateOrFail(Request $request, array $rules, ?string $connectionName = null): array
     {
@@ -67,7 +66,12 @@ trait ValidatesRequest
     }
 
     /**
-     * Validate specific fields from request
+     * Spezifische Felder validieren
+     *
+     * @param array<string> $fields
+     * @param array<string, string> $rules
+     * @return array<string, mixed>
+     * @throws ValidationFailedException
      */
     protected function validateFields(Request $request, array $fields, array $rules, ?string $connectionName = null): array
     {
@@ -85,7 +89,9 @@ trait ValidatesRequest
     }
 
     /**
-     * Override this method to provide custom validation messages
+     * Custom Validation Messages überschreiben
+     *
+     * @return array<string, string>
      */
     protected function messages(): array
     {
@@ -93,20 +99,21 @@ trait ValidatesRequest
     }
 
     /**
-     * Quick validation for common patterns
+     * Schnelle Validierung für Required-Felder
+     *
+     * @param array<string> $fields
+     * @return array<string, mixed>
      */
     protected function requireFields(Request $request, array $fields): array
     {
-        $rules = [];
-        foreach ($fields as $field) {
-            $rules[$field] = 'required';
-        }
-
+        $rules = array_fill_keys($fields, 'required');
         return $this->validateOrFail($request, $rules);
     }
 
     /**
-     * Validate email field
+     * Email-Feld validieren
+     *
+     * @return array<string, mixed>
      */
     protected function validateEmail(Request $request, string $field = 'email'): array
     {
@@ -116,18 +123,24 @@ trait ValidatesRequest
     }
 
     /**
-     * Validate password confirmation
+     * Password-Confirmation validieren
+     *
+     * @return array<string, mixed>
      */
     protected function validatePasswordConfirmation(Request $request): array
     {
         return $this->validateOrFail($request, [
             'password' => 'required|min:8',
-            'password_confirmation' => 'required|same:password'
+            'password_confirmation' => 'required|confirmed'
         ]);
     }
 
     /**
-     * Validate JSON payload
+     * JSON-Payload validieren
+     *
+     * @param array<string, string> $rules
+     * @return array<string, mixed>
+     * @throws ValidationFailedException
      */
     protected function validateJson(Request $request, array $rules, ?string $connectionName = null): array
     {
@@ -149,7 +162,11 @@ trait ValidatesRequest
     }
 
     /**
-     * Validate with custom error messages
+     * Validierung mit Custom Error Messages
+     *
+     * @param array<string, string> $rules
+     * @param array<string, string> $messages
+     * @return array<string, mixed>
      */
     protected function validateWithMessages(Request $request, array $rules, array $messages, ?string $connectionName = null): array
     {
@@ -166,129 +183,29 @@ trait ValidatesRequest
     }
 
     /**
-     * Validate and return only validated data
-     */
-    protected function validated(Request $request, array $rules, ?string $connectionName = null): array
-    {
-        return $this->validateOrFail($request, $rules, $connectionName);
-    }
-
-    /**
-     * Safe validation that returns null on failure
-     */
-    protected function safeValidate(Request $request, array $rules, ?string $connectionName = null): ?array
-    {
-        try {
-            return $this->validateOrFail($request, $rules, $connectionName);
-        } catch (\Exception) {
-            return null;
-        }
-    }
-
-    /**
-     * Validate multiple files
-     */
-    protected function validateFiles(Request $request, array $fileFields, array $rules): array
-    {
-        $files = $request->getFiles();
-        $fileData = [];
-
-        foreach ($fileFields as $field) {
-            if (!isset($files[$field])) {
-                throw new \InvalidArgumentException("File field '{$field}' not found in request");
-            }
-            $fileData[$field] = $files[$field];
-        }
-
-        $customMessages = $this->messages();
-
-        $validatorFactory = $this->getValidatorFactory();
-        $validator = $validatorFactory->make($fileData, $rules, $customMessages);
-
-        if ($validator->fails()) {
-            throw new ValidationFailedException($validator->errors());
-        }
-
-        return $validator->validated();
-    }
-
-    /**
-     * Validate uploaded file with convenience checks
-     */
-    protected function validateUploadedFile(Request $request, string $field, array $allowedTypes = [], int $maxSize = 0): array
-    {
-        if (!$request->hasFile($field)) {
-            throw new \InvalidArgumentException("No file uploaded for field '{$field}'");
-        }
-
-        $rules = ['required', 'file'];
-
-        // Add file type validation
-        if (!empty($allowedTypes)) {
-            $rules[] = 'mimes:' . implode(',', $allowedTypes);
-        }
-
-        // Add max size validation (in KB)
-        if ($maxSize > 0) {
-            $rules[] = 'max:' . $maxSize;
-        }
-
-        return $this->validateFile($request, $field, [$field => $rules]);
-    }
-
-    /**
-     * Validate file uploads
-     */
-    protected function validateFile(Request $request, string $field, array $rules): array
-    {
-        $files = $request->getFiles();
-
-        if (!isset($files[$field])) {
-            throw new \InvalidArgumentException("File field '{$field}' not found in request");
-        }
-
-        $fileData = [$field => $files[$field]];
-        $customMessages = $this->messages();
-
-        $validatorFactory = $this->getValidatorFactory();
-        $validator = $validatorFactory->make($fileData, $rules, $customMessages);
-
-        if ($validator->fails()) {
-            throw new ValidationFailedException($validator->errors());
-        }
-
-        return $validator->validated();
-    }
-
-    // ===================================================================
-    // PRIVATE HELPER METHODS
-    // ===================================================================
-
-    /**
-     * Erstellt einheitliche Validation Error Response
+     * Validation Error Response erstellen - MODERNISIERT
      */
     private function createValidationErrorResponse(Request $request, Validator $validator): Response
     {
         $responseFactory = $this->getResponseFactory();
-        $errors = $validator->errors();
+        $errors = $validator->errors()->toArray();
 
-        // JSON Response for API requests
-        if ($request->expectsJson()) {
-            return $responseFactory->json([
+        // Modern Match-Expression für Response-Type
+        return match ($request->expectsJson()) {
+            true => $responseFactory->json([
                 'message' => 'The given data was invalid.',
                 'errors' => $errors,
-            ], HttpStatus::UNPROCESSABLE_ENTITY);
-        }
+            ], HttpStatus::UNPROCESSABLE_ENTITY),
 
-        // HTML Response with error display
-        return $responseFactory->view('errors/validation', [
-            'errors' => $errors,
-            'old_input' => $request->all(),
-        ], HttpStatus::UNPROCESSABLE_ENTITY);
+            false => $responseFactory->view('errors/validation', [
+                'errors' => $errors,
+                'old_input' => $request->all(),
+            ], HttpStatus::UNPROCESSABLE_ENTITY)
+        };
     }
 
     /**
-     * Gets ValidatorFactory from Service Container
+     * ValidatorFactory aus Service Container abrufen
      */
     private function getValidatorFactory(): ValidatorFactory
     {
@@ -297,41 +214,31 @@ trait ValidatesRequest
     }
 
     /**
-     * Gets ResponseFactory from Action (modern pattern)
+     * ResponseFactory aus Action abrufen
      */
     private function getResponseFactory(): ResponseFactory
     {
-        // Check if Action has ResponseFactory injected
+        // Check ob Action ResponseFactory injiziert hat
         if (property_exists($this, 'responseFactory') && $this->responseFactory instanceof ResponseFactory) {
             return $this->responseFactory;
         }
 
-        // Fallback: Get from container
+        // Fallback: Aus Container abrufen
         $container = $this->getServiceContainer();
         return $container->get(ResponseFactory::class);
     }
 
     /**
-     * Gets Service Container from Action
+     * Service Container aus Action abrufen
      */
     private function getServiceContainer(): ServiceContainer
     {
-        // Modern Actions should inject ServiceContainer
+        // Moderne Actions sollten ServiceContainer injizieren
         if (property_exists($this, 'container') && $this->container instanceof ServiceContainer) {
             return $this->container;
         }
 
-        // Alternative: Check for direct ValidatorFactory injection
-        if (property_exists($this, 'validatorFactory') && $this->validatorFactory instanceof ValidatorFactory) {
-            // Create minimal container-like access
-            throw new \RuntimeException(
-                'Direct ValidatorFactory injection not yet supported. ' .
-                'Actions using ValidatesRequest must inject ServiceContainer: ' . "\n" .
-                'public function __construct(private readonly ServiceContainer $container) {}'
-            );
-        }
-
-        throw new \RuntimeException(
+        throw new RuntimeException(
             'ServiceContainer not found. Actions using ValidatesRequest must inject ServiceContainer: ' . "\n" .
             'public function __construct(private readonly ServiceContainer $container, private readonly ResponseFactory $responseFactory) {}'
         );

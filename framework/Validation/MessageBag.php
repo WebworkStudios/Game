@@ -1,44 +1,48 @@
 <?php
-
-
 declare(strict_types=1);
 
 namespace Framework\Validation;
 
 use Countable;
 use Iterator;
+use JsonException;
 
 /**
- * MessageBag - Collection for validation error messages
+ * MessageBag - Collection für Validation Error Messages
+ *
+ * MODERNISIERUNGEN:
+ * ✅ Array shapes für bessere Type Safety
+ * ✅ JSON_THROW_ON_ERROR Flag
+ * ✅ Nullable return types wo sinnvoll
+ * ✅ Bessere Iterator-Implementation
  */
 class MessageBag implements Countable, Iterator
 {
+    /** @var array<string, array<string>> */
     private array $messages = [];
     private int $position = 0;
 
     /**
-     * Add error message for field
+     * Error-Message für Feld hinzufügen
      */
     public function add(string $field, string $message): void
     {
-        if (!isset($this->messages[$field])) {
-            $this->messages[$field] = [];
-        }
-
+        $this->messages[$field] ??= [];
         $this->messages[$field][] = $message;
     }
 
     /**
-     * Get first message for a field
+     * Erste Message für ein Feld abrufen
      */
     public function first(string $field): ?string
     {
-        $messages = $this->get($field);
-        return $messages[0] ?? null;
+        return $this->messages[$field][0] ?? null;
     }
 
     /**
-     * Get all messages for a field
+     * Alle Messages für ein Feld abrufen
+     *
+     * @return array<string>
      */
     public function get(string $field): array
     {
@@ -46,7 +50,9 @@ class MessageBag implements Countable, Iterator
     }
 
     /**
-     * Get all messages
+     * Alle Messages abrufen
+     *
+     * @return array<string, array<string>>
      */
     public function all(): array
     {
@@ -54,35 +60,35 @@ class MessageBag implements Countable, Iterator
     }
 
     /**
-     * Check if bag is empty
+     * Prüfen ob MessageBag leer ist
      */
     public function isEmpty(): bool
     {
-        return empty($this->messages);
+        return $this->messages === [];
     }
 
     /**
-     * Check if field has errors
+     * Prüfen ob Feld Errors hat
      */
     public function has(string $field): bool
     {
-        return isset($this->messages[$field]) && !empty($this->messages[$field]);
+        return isset($this->messages[$field]) && $this->messages[$field] !== [];
     }
 
     /**
-     * Get all messages as single array
+     * Alle Messages als flaches Array
+     *
+     * @return array<string>
      */
     public function flatten(): array
     {
-        $flat = [];
-        foreach ($this->messages as $messages) {
-            $flat = array_merge($flat, $messages);
-        }
-        return $flat;
+        return array_merge(...array_values($this->messages));
     }
 
     /**
-     * Convert to JSON
+     * Als JSON konvertieren
+     *
+     * @throws JsonException
      */
     public function toJson(): string
     {
@@ -90,30 +96,27 @@ class MessageBag implements Countable, Iterator
     }
 
     /**
-     * Get messages as flat array
+     * Messages als Array strukturiert
+     *
+     * @return array<string, array<string>>
      */
     public function toArray(): array
     {
-        $flat = [];
-        foreach ($this->messages as $field => $messages) {
-            $flat[$field] = $messages;
-        }
-        return $flat;
+        return $this->messages;
     }
 
-    // Countable interface
-
+    // Countable Interface
     public function count(): int
     {
         return array_sum(array_map('count', $this->messages));
     }
 
-    // Iterator interface
+    // Iterator Interface
     public function current(): mixed
     {
         $keys = array_keys($this->messages);
         $key = $keys[$this->position] ?? null;
-        return $key ? $this->messages[$key] : null;
+        return $key !== null ? $this->messages[$key] : null;
     }
 
     public function key(): mixed

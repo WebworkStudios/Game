@@ -20,8 +20,18 @@ class UrlRule implements RuleInterface
             return false;
         }
 
-        // Use PHP's built-in URL validation
-        return filter_var($value, FILTER_VALIDATE_URL) !== false;
+        // Erweiterte Validierung basierend auf Parametern
+        $flags = FILTER_VALIDATE_URL;
+
+        if (in_array('strict', $parameters, true)) {
+            $flags |= FILTER_FLAG_PATH_REQUIRED;
+        }
+
+        if (in_array('query', $parameters, true)) {
+            $flags |= FILTER_FLAG_QUERY_REQUIRED;
+        }
+
+        return filter_var($value, $flags) !== false;
     }
 
     public function message(string $field, mixed $value, array $parameters): string

@@ -12,39 +12,26 @@ class MaxRule implements RuleInterface
 {
     public function passes(string $field, mixed $value, array $parameters, array $data): bool
     {
-        if ($value === null) {
+        if ($value === null || $parameters === []) {
             return true;
         }
 
-        if (empty($parameters)) {
-            throw new \InvalidArgumentException('Max rule requires a parameter');
-        }
+        $max = (int) $parameters[0];
 
-        $max = (int)$parameters[0];
-
-        if (is_numeric($value)) {
-            return (float)$value <= $max;
-        }
-
-        if (is_string($value)) {
-            return mb_strlen($value) <= $max;
-        }
-
-        if (is_array($value)) {
-            return count($value) <= $max;
-        }
-
-        return false;
+        return match (true) {
+            is_numeric($value) => (float) $value <= $max,
+            is_string($value) => mb_strlen($value) <= $max,
+            is_array($value) => count($value) <= $max,
+            default => false
+        };
     }
 
     public function message(string $field, mixed $value, array $parameters): string
     {
         $max = $parameters[0];
 
-        if (is_numeric($value)) {
-            return "The {$field} may not be greater than {$max}.";
-        }
-
-        return "The {$field} may not be greater than {$max} characters.";
+        return is_numeric($value)
+            ? "The {$field} may not be greater than {$max}."
+            : "The {$field} may not be greater than {$max} characters.";
     }
 }

@@ -23,17 +23,13 @@ class RegexRule implements RuleInterface
             return true;
         }
 
-        if (!is_string($value)) {
+        if (!is_string($value) || $parameters === []) {
             return false;
-        }
-
-        if (empty($parameters)) {
-            throw new InvalidArgumentException('Regex rule requires a pattern parameter');
         }
 
         $pattern = $parameters[0];
 
-        // Validate regex pattern
+        // Pattern-Validierung
         if (@preg_match($pattern, '') === false) {
             throw new InvalidArgumentException("Invalid regex pattern: {$pattern}");
         }

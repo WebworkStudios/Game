@@ -16,11 +16,7 @@ class EmailRule implements RuleInterface
             return true;
         }
 
-        if (!is_string($value)) {
-            return false;
-        }
-
-        return filter_var($value, FILTER_VALIDATE_EMAIL) !== false;
+        return is_string($value) && filter_var($value, FILTER_VALIDATE_EMAIL) !== false;
     }
 
     public function message(string $field, mixed $value, array $parameters): string

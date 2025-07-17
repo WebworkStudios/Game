@@ -1,70 +1,83 @@
 <?php
-
 declare(strict_types=1);
 
 namespace Framework\Validation;
 
 use Framework\Core\AbstractServiceProvider;
+use Framework\Core\ApplicationKernel;
+use Framework\Core\ServiceContainer;
 use Framework\Database\ConnectionManager;
 
 /**
- * Validation Service Provider - Registriert Validation Services im Framework
+ * ValidationServiceProvider - Registriert Validation Services
  *
- * BEREINIGT: Keine Default-Provider mehr - Config-Dateien sind die einzige Quelle
- * ValidationServiceProvider funktioniert ohne eigene Config-Datei
+ * MODERNISIERUNGEN:
+ * ✅ Type-safe Service Registration
+ * ✅ Lazy Loading Support
+ * ✅ Modern Dependency Injection
+ * ✅ Korrekte AbstractServiceProvider Verwendung
  */
 class ValidationServiceProvider extends AbstractServiceProvider
 {
+    public function __construct(ServiceContainer $container, ApplicationKernel $app)
+    {
+        parent::__construct($container, $app);
+    }
 
     /**
-     * Validiert, dass alle benötigten Abhängigkeiten verfügbar sind
+     * Dependency Validation - Prüft ob ConnectionManager verfügbar ist
      */
+    #[\Override]
     protected function validateDependencies(): void
     {
         if (!$this->has(ConnectionManager::class)) {
-            throw new \RuntimeException('ValidationServiceProvider requires ConnectionManager to be registered first');
+            throw new \RuntimeException(
+                'ValidationServiceProvider requires ConnectionManager. ' .
+                'Please ensure DatabaseServiceProvider is registered first.'
+            );
         }
     }
 
     /**
-     * Registriert alle Validation Services
+     * Registriert Validation Services
      */
+    #[\Override]
     protected function registerServices(): void
     {
-        $this->registerValidator();
-        $this->registerValidatorFactory();
-    }
-
-    /**
-     * Registriert Validator als Transient (neue Instanz pro Request)
-     */
-    private function registerValidator(): void
-    {
-        $this->transient(Validator::class, function () {
-            return new Validator(
-                connectionManager: $this->get(ConnectionManager::class)
-            );
-        });
-    }
-
-    /**
-     * Registriert Validator Factory für verschiedene Connections
-     */
-    private function registerValidatorFactory(): void
-    {
-        $this->singleton(ValidatorFactory::class, function () {
+        // ValidatorFactory als Singleton registrieren
+        $this->singleton(ValidatorFactory::class, function (ServiceContainer $container) {
             return new ValidatorFactory(
-                connectionManager: $this->get(ConnectionManager::class)
+                $container->get(ConnectionManager::class)
+            );
+        });
+
+        // Validator als Transient (neue Instanz pro Request)
+        $this->transient(Validator::class, function (ServiceContainer $container) {
+            return new Validator(
+                $container->get(ConnectionManager::class)
             );
         });
     }
 
     /**
-     * Bindet Validation-Interfaces
+     * Interface Bindings - Für Dependency Injection
      */
+    #[\Override]
     protected function bindInterfaces(): void
     {
-        // Hier können Validation-Interfaces gebunden werden
-        // $this->bind(ValidatorInterface::class, Validator::class);
+        // Hier könnten Rule-Interfaces gebunden werden
+        // Beispiel: $this->bind(RuleInterface::class, CustomRule::class);
+    }
+
+    /**
+     * Custom Rules registrieren (Extension Point)
+     */
+    private function registerCustomRules(): void
+    {
+        // Beispiel für Custom Rule Registration
+        // Kann von Anwendungen überschrieben werden
+
+        // $this->singleton(CustomRule::class);
+        // RuleRegistry::register('custom_rule', CustomRule::class);
     }
 }
