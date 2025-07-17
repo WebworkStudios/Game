@@ -4,321 +4,205 @@ declare(strict_types=1);
 
 namespace Framework\Templating;
 
+use Framework\Templating\Filters\FilterRegistry;
+use Framework\Templating\Filters\FilterExecutor;
+use Framework\Templating\Filters\TextFilters;
+use Framework\Templating\Filters\NumberFilters;
+use Framework\Templating\Filters\DateFilters;
+use Framework\Templating\Filters\UtilityFilters;
+use Framework\Templating\Filters\TranslationFilters;
 use Framework\Localization\Translator;
-use RuntimeException;
 
 /**
- * Filter Manager - Verwaltet alle Template-Filter mit Lazy Loading und XSS-Schutz
+ * FilterManager - Schlanke Facade für Filter-System
  *
- * KORRIGIERTE VERSION: Sichere Behandlung von null-Werten
+ * REFACTORED: Neue Architektur mit klarer Trennung der Verantwortlichkeiten
+ * - FilterRegistry: Filter-Verwaltung + Lazy Loading
+ * - FilterExecutor: Ausführungslogik + Pipeline-Support
+ * - Filter-Klassen: Konkrete Implementierungen (statische Methoden)
+ * - FilterManager: Schlanke Facade (nur Koordination)
+ *
+ * SRP-konforme Lösung: Jede Klasse hat eine klare Verantwortlichkeit
  */
 class FilterManager
 {
-    private array $filters = [];
-    private array $lazyFilters = [];
+    private FilterRegistry $registry;
+    private FilterExecutor $executor;
 
     public function __construct(
-        private ?Translator $translator = null
+        private readonly ?Translator $translator = null
     ) {
-        // Register lazy filter definitions (no instantiation yet)
-        $this->registerLazyFilters();
+        $this->registry = new FilterRegistry();
+        $this->executor = new FilterExecutor($this->registry);
+
+        $this->registerDefaultFilters();
     }
 
     /**
-     * Registriert Lazy Filter Definitionen - MIT NULL-SICHERHEIT
+     * Registriert alle Standard-Filter
      */
-    private function registerLazyFilters(): void
+    private function registerDefaultFilters(): void
     {
-        // Text/String Filter - NULL-SAFE
-        $this->lazyFilters['upper'] = fn() => fn(mixed $value) => $value === null ? '' : strtoupper((string)$value);
-        $this->lazyFilters['lower'] = fn() => fn(mixed $value) => $value === null ? '' : strtolower((string)$value);
-        $this->lazyFilters['capitalize'] = fn() => fn(mixed $value) => $value === null ? '' : ucfirst(strtolower((string)$value));
-        $this->lazyFilters['truncate'] = fn() => [$this, 'truncateFilter'];
-        $this->lazyFilters['default'] = fn() => [$this, 'defaultFilter'];
-        $this->lazyFilters['raw'] = fn() => [$this, 'rawFilter'];
+        $this->registerTextFilters();
+        $this->registerNumberFilters();
+        $this->registerDateFilters();
+        $this->registerUtilityFilters();
 
-        // Number/Format Filter - NULL-SAFE
-        $this->lazyFilters['number_format'] = fn() => [$this, 'numberFormatFilter'];
-        $this->lazyFilters['currency'] = fn() => [$this, 'currencyFilter'];
-
-        // Date Filter
-        $this->lazyFilters['date'] = fn() => [$this, 'dateFilter'];
-
-        // Utility Filter
-        $this->lazyFilters['length'] = fn() => [$this, 'lengthFilter'];
-        $this->lazyFilters['count'] = fn() => [$this, 'lengthFilter'];
-        $this->lazyFilters['plural'] = fn() => [$this, 'pluralFilter'];
-
-        // Advanced Text Filter - NULL-SAFE
-        $this->lazyFilters['slug'] = fn() => [$this, 'slugFilter'];
-        $this->lazyFilters['nl2br'] = fn() => [$this, 'nl2brFilter'];
-        $this->lazyFilters['strip_tags'] = fn() => [$this, 'stripTagsFilter'];
-
-        // Advanced Utility Filter
-        $this->lazyFilters['json'] = fn() => [$this, 'jsonFilter'];
-        $this->lazyFilters['first'] = fn() => [$this, 'firstFilter'];
-        $this->lazyFilters['last'] = fn() => [$this, 'lastFilter'];
-
-        // Translation filters (only if translator is available)
         if ($this->translator !== null) {
-            $this->lazyFilters['t'] = fn() => [$this, 'translateFilter'];
-            $this->lazyFilters['translate'] = fn() => [$this, 'translateFilter'];
-            $this->lazyFilters['tp'] = fn() => [$this, 'translatePluralFilter'];
-            $this->lazyFilters['translate_plural'] = fn() => [$this, 'translatePluralFilter'];
+            $this->registerTranslationFilters();
         }
     }
 
     /**
-     * Apply filter to value
+     * Registriert Text-Filter
+     */
+    private function registerTextFilters(): void
+    {
+        $this->registry->registerLazy('upper', fn() => [TextFilters::class, 'upper']);
+        $this->registry->registerLazy('lower', fn() => [TextFilters::class, 'lower']);
+        $this->registry->registerLazy('capitalize', fn() => [TextFilters::class, 'capitalize']);
+        $this->registry->registerLazy('truncate', fn() => [TextFilters::class, 'truncate']);
+        $this->registry->registerLazy('slug', fn() => [TextFilters::class, 'slug']);
+        $this->registry->registerLazy('nl2br', fn() => [TextFilters::class, 'nl2br']);
+        $this->registry->registerLazy('strip_tags', fn() => [TextFilters::class, 'stripTags']);
+        $this->registry->registerLazy('raw', fn() => [TextFilters::class, 'raw']);
+        $this->registry->registerLazy('default', fn() => [TextFilters::class, 'default']);
+        $this->registry->registerLazy('trim', fn() => [TextFilters::class, 'trim']);
+        $this->registry->registerLazy('replace', fn() => [TextFilters::class, 'replace']);
+        $this->registry->registerLazy('repeat', fn() => [TextFilters::class, 'repeat']);
+        $this->registry->registerLazy('reverse', fn() => [TextFilters::class, 'reverse']);
+    }
+
+    /**
+     * Registriert Number-Filter
+     */
+    private function registerNumberFilters(): void
+    {
+        $this->registry->registerLazy('number_format', fn() => [NumberFilters::class, 'numberFormat']);
+        $this->registry->registerLazy('currency', fn() => [NumberFilters::class, 'currency']);
+        $this->registry->registerLazy('percent', fn() => [NumberFilters::class, 'percent']);
+        $this->registry->registerLazy('round', fn() => [NumberFilters::class, 'round']);
+        $this->registry->registerLazy('ceil', fn() => [NumberFilters::class, 'ceil']);
+        $this->registry->registerLazy('floor', fn() => [NumberFilters::class, 'floor']);
+        $this->registry->registerLazy('abs', fn() => [NumberFilters::class, 'abs']);
+        $this->registry->registerLazy('file_size', fn() => [NumberFilters::class, 'fileSize']);
+        $this->registry->registerLazy('ordinal', fn() => [NumberFilters::class, 'ordinal']);
+    }
+
+    /**
+     * Registriert Date-Filter
+     */
+    private function registerDateFilters(): void
+    {
+        $this->registry->registerLazy('date', fn() => [DateFilters::class, 'date']);
+        $this->registry->registerLazy('date_german', fn() => [DateFilters::class, 'dateGerman']);
+        $this->registry->registerLazy('datetime', fn() => [DateFilters::class, 'datetime']);
+        $this->registry->registerLazy('datetime_german', fn() => [DateFilters::class, 'datetimeGerman']);
+        $this->registry->registerLazy('time', fn() => [DateFilters::class, 'time']);
+        $this->registry->registerLazy('time_ago', fn() => [DateFilters::class, 'timeAgo']);
+        $this->registry->registerLazy('day_of_week', fn() => [DateFilters::class, 'dayOfWeek']);
+        $this->registry->registerLazy('month_name', fn() => [DateFilters::class, 'monthName']);
+        $this->registry->registerLazy('timestamp', fn() => [DateFilters::class, 'timestamp']);
+    }
+
+    /**
+     * Registriert Utility-Filter
+     */
+    private function registerUtilityFilters(): void
+    {
+        $this->registry->registerLazy('length', fn() => [UtilityFilters::class, 'length']);
+        $this->registry->registerLazy('count', fn() => [UtilityFilters::class, 'count']);
+        $this->registry->registerLazy('first', fn() => [UtilityFilters::class, 'first']);
+        $this->registry->registerLazy('last', fn() => [UtilityFilters::class, 'last']);
+        $this->registry->registerLazy('json', fn() => [UtilityFilters::class, 'json']);
+        $this->registry->registerLazy('is_empty', fn() => [UtilityFilters::class, 'isEmpty']);
+        $this->registry->registerLazy('is_not_empty', fn() => [UtilityFilters::class, 'isNotEmpty']);
+        $this->registry->registerLazy('type', fn() => [UtilityFilters::class, 'type']);
+        $this->registry->registerLazy('plural', fn() => [UtilityFilters::class, 'plural']);
+        $this->registry->registerLazy('sort', fn() => [UtilityFilters::class, 'sort']);
+        $this->registry->registerLazy('random', fn() => [UtilityFilters::class, 'random']);
+        $this->registry->registerLazy('join', fn() => [UtilityFilters::class, 'join']);
+        $this->registry->registerLazy('split', fn() => [UtilityFilters::class, 'split']);
+        $this->registry->registerLazy('unique', fn() => [UtilityFilters::class, 'unique']);
+    }
+
+    /**
+     * Registriert Translation-Filter
+     */
+    private function registerTranslationFilters(): void
+    {
+        $translationFilters = new TranslationFilters($this->translator);
+
+        $this->registry->register('t', [$translationFilters, 'translate']);
+        $this->registry->register('translate', [$translationFilters, 'translate']);
+        $this->registry->register('tp', [$translationFilters, 'translatePlural']);
+        $this->registry->register('translate_plural', [$translationFilters, 'translatePlural']);
+        $this->registry->register('has_translation', [$translationFilters, 'hasTranslation']);
+        $this->registry->register('locale', [$translationFilters, 'locale']);
+        $this->registry->register('translate_in', [$translationFilters, 'translateIn']);
+    }
+
+    /**
+     * Führt Filter aus (Hauptschnittstelle)
      */
     public function apply(string $filterName, mixed $value, array $parameters = []): mixed
     {
-        // Load filter if not already loaded
-        if (!isset($this->filters[$filterName])) {
-            $this->loadFilter($filterName);
-        }
-
-        if (!isset($this->filters[$filterName])) {
-            throw new RuntimeException("Filter '{$filterName}' not found");
-        }
-
-        $filter = $this->filters[$filterName];
-
-        // Apply filter
-        return $filter($value, ...$parameters);
+        return $this->executor->execute($filterName, $value, $parameters);
     }
 
     /**
-     * Load filter lazily
-     */
-    private function loadFilter(string $filterName): void
-    {
-        if (!isset($this->lazyFilters[$filterName])) {
-            return;
-        }
-
-        $factory = $this->lazyFilters[$filterName];
-        $this->filters[$filterName] = $factory();
-    }
-
-    /**
-     * Check if filter exists
+     * Prüft ob Filter existiert
      */
     public function has(string $filterName): bool
     {
-        return isset($this->filters[$filterName]) || isset($this->lazyFilters[$filterName]);
+        return $this->executor->hasFilter($filterName);
     }
 
     /**
-     * Register custom filter
+     * Registriert Custom Filter
      */
     public function register(string $name, callable $filter): void
     {
-        $this->filters[$name] = $filter;
+        $this->registry->register($name, $filter);
     }
 
     /**
-     * Get all available filter names
+     * Gibt alle verfügbaren Filter zurück
      */
     public function getFilterNames(): array
     {
-        return array_unique(array_merge(
-            array_keys($this->filters),
-            array_keys($this->lazyFilters)
-        ));
-    }
-
-    // Filter Implementations - ALLE NULL-SAFE
-
-    private function truncateFilter(mixed $value, int $length = 100, string $suffix = '...'): string
-    {
-        if ($value === null) {
-            return '';
-        }
-
-        $stringValue = (string)$value;
-
-        if (mb_strlen($stringValue) <= $length) {
-            return $stringValue;
-        }
-
-        return mb_substr($stringValue, 0, $length) . $suffix;
-    }
-
-    private function defaultFilter(mixed $value, mixed $default = ''): mixed
-    {
-        return $value ?? $default;
-    }
-
-    private function rawFilter(mixed $value): mixed
-    {
-        return $value;
-    }
-
-    private function currencyFilter(mixed $value, string $currency = 'EUR', string $locale = 'de_DE'): string
-    {
-        if ($value === null) {
-            return '0 ' . $currency;
-        }
-
-        $numericValue = is_numeric($value) ? (float)$value : 0.0;
-        return $this->numberFormatFilter($numericValue, 2) . ' ' . $currency;
-    }
-
-    private function numberFormatFilter(mixed $value, int|string $decimals = 2, string $decimalPoint = ',', string $thousandsSeparator = '.'): string
-    {
-        if ($value === null) {
-            return '0';
-        }
-
-        // Convert to float if possible, otherwise use 0
-        $numericValue = is_numeric($value) ? (float)$value : 0.0;
-
-        // Convert string to int for decimals parameter
-        $decimals = is_string($decimals) ? (int)$decimals : $decimals;
-
-        return number_format($numericValue, $decimals, $decimalPoint, $thousandsSeparator);
-    }
-
-    private function dateFilter(mixed $value, string $format = 'Y-m-d H:i:s'): string
-    {
-        if ($value === null) {
-            return '';
-        }
-
-        if ($value instanceof \DateTimeInterface) {
-            return $value->format($format);
-        }
-
-        if (is_string($value)) {
-            $timestamp = strtotime($value);
-            return $timestamp !== false ? date($format, $timestamp) : '';
-        }
-
-        if (is_int($value)) {
-            return date($format, $value);
-        }
-
-        return (string)$value;
-    }
-
-    private function lengthFilter(mixed $value): int
-    {
-        if ($value === null) {
-            return 0;
-        }
-
-        if (is_string($value)) {
-            return mb_strlen($value);
-        }
-
-        if (is_array($value) || is_countable($value)) {
-            return count($value);
-        }
-
-        return 0;
-    }
-
-    private function pluralFilter(int $count, string $singular, string $plural): string
-    {
-        return $count === 1 ? $singular : $plural;
-    }
-
-    private function slugFilter(mixed $value): string
-    {
-        if ($value === null) {
-            return '';
-        }
-
-        $stringValue = (string)$value;
-        $stringValue = strtolower($stringValue);
-        $stringValue = preg_replace('/[^a-z0-9]+/', '-', $stringValue);
-        return trim($stringValue, '-');
-    }
-
-    private function nl2brFilter(mixed $value): string
-    {
-        if ($value === null) {
-            return '';
-        }
-
-        return nl2br((string)$value);
-    }
-
-    private function stripTagsFilter(mixed $value, string $allowedTags = ''): string
-    {
-        if ($value === null) {
-            return '';
-        }
-
-        return strip_tags((string)$value, $allowedTags);
-    }
-
-    private function jsonFilter(mixed $value): string
-    {
-        return json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-    }
-
-    private function firstFilter(mixed $value): mixed
-    {
-        if ($value === null) {
-            return null;
-        }
-
-        if (is_array($value)) {
-            return reset($value);
-        }
-
-        if (is_string($value)) {
-            return $value[0] ?? null;
-        }
-
-        return null;
-    }
-
-    private function lastFilter(mixed $value): mixed
-    {
-        if ($value === null) {
-            return null;
-        }
-
-        if (is_array($value)) {
-            return end($value);
-        }
-
-        if (is_string($value)) {
-            return $value[strlen($value) - 1] ?? null;
-        }
-
-        return null;
+        return $this->executor->getAvailableFilters();
     }
 
     /**
-     * Translation Filter - Uses injected translator
+     * Führt mehrere Filter nacheinander aus
      */
-    private function translateFilter(mixed $key, mixed ...$args): string
+    public function applyPipeline(mixed $value, array $filterPipeline): mixed
     {
-        if ($this->translator === null || $key === null) {
-            return (string)$key;
-        }
-
-        $parameters = [];
-        if (!empty($args) && is_array($args[0])) {
-            $parameters = $args[0];
-        }
-
-        return $this->translator->translate((string)$key, $parameters);
+        return $this->executor->executePipeline($value, $filterPipeline);
     }
 
     /**
-     * Translation Plural Filter - Uses injected translator
+     * Entfernt einen Filter
      */
-    private function translatePluralFilter(mixed $key, int $count, array $parameters = []): string
+    public function remove(string $name): void
     {
-        if ($this->translator === null || $key === null) {
-            return (string)$key;
-        }
+        $this->registry->remove($name);
+    }
 
-        return $this->translator->translatePlural((string)$key, $count, $parameters);
+    /**
+     * Gibt Registry zurück (für erweiterte Nutzung)
+     */
+    public function getRegistry(): FilterRegistry
+    {
+        return $this->registry;
+    }
+
+    /**
+     * Gibt Executor zurück (für erweiterte Nutzung)
+     */
+    public function getExecutor(): FilterExecutor
+    {
+        return $this->executor;
     }
 }

@@ -8,11 +8,13 @@ use Framework\Core\AbstractServiceProvider;
 use Framework\Core\ConfigValidation;
 use Framework\Localization\Translator;
 use Framework\Security\Csrf;
+use Framework\Templating\Filters\FilterRegistry;
+use Framework\Templating\Filters\FilterExecutor;
 
 /**
  * Templating Service Provider - Registriert Template Services im Framework
  *
- * BEREINIGT: Verwendet ConfigValidation Trait, eliminiert Code-Duplikation
+ * UPDATED: Angepasst für neue FilterManager-Architektur mit SRP-konformer Struktur
  */
 class TemplatingServiceProvider extends AbstractServiceProvider
 {
@@ -23,7 +25,7 @@ class TemplatingServiceProvider extends AbstractServiceProvider
      */
     protected function validateDependencies(): void
     {
-        // Config-Validierung (eliminiert die vorherige Duplikation)
+        // Config-Validierung
         $this->ensureConfigExists('templating');
 
         // Template-spezifische Validierungen
@@ -37,7 +39,7 @@ class TemplatingServiceProvider extends AbstractServiceProvider
     protected function registerServices(): void
     {
         $this->registerTemplateCache();
-        $this->registerFilterManager();
+        $this->registerFilterServices();
         $this->registerTemplateEngine();
         $this->registerViewRenderer();
     }
@@ -59,12 +61,23 @@ class TemplatingServiceProvider extends AbstractServiceProvider
     }
 
     /**
-     * Registriert Filter Manager als Singleton
+     * Registriert Filter-Services (neue Architektur)
      */
-    private function registerFilterManager(): void
+    private function registerFilterServices(): void
     {
+        // FilterRegistry als Singleton
+        $this->singleton(FilterRegistry::class, function () {
+            return new FilterRegistry();
+        });
+
+        // FilterExecutor als Singleton
+        $this->singleton(FilterExecutor::class, function () {
+            return new FilterExecutor($this->get(FilterRegistry::class));
+        });
+
+        // FilterManager als Singleton (Facade)
         $this->singleton(FilterManager::class, function () {
-            // Try to get Translator, but don't fail if not available
+            // Try to get Translator gracefully
             $translator = null;
             try {
                 $translator = $this->get(Translator::class);
@@ -95,16 +108,18 @@ class TemplatingServiceProvider extends AbstractServiceProvider
                 $templatePaths[] = $this->basePath(ltrim($path, '/'));
             }
 
+            // TemplateEngine mit FilterManager-Dependency
             return new TemplateEngine(
                 templatePaths: $templatePaths,
                 cache: $cache,
-                autoEscape: $config['options']['auto_escape'] ?? true
+                autoEscape: $config['options']['auto_escape'] ?? true,
+                filterManager: $this->get(FilterManager::class)
             );
         });
     }
 
     /**
-     * Registriert ViewRenderer als Singleton mit proper DI
+     * Registriert ViewRenderer als Singleton
      */
     private function registerViewRenderer(): void
     {
@@ -134,16 +149,54 @@ class TemplatingServiceProvider extends AbstractServiceProvider
     }
 
     /**
-     * Bindet Templating-Interfaces
+     * Bindet Templating-Interfaces (erweitert für neue Architektur)
      */
     protected function bindInterfaces(): void
     {
         // Hier könnten Template-Interfaces gebunden werden
         // $this->bind(TemplateEngineInterface::class, TemplateEngine::class);
+        // $this->bind(FilterManagerInterface::class, FilterManager::class);
     }
 
     /**
-     * Validiert Template-Verzeichnisse (Templating-spezifisch)
+     * Registriert Custom Filter aus Config
+     */
+    private function registerCustomFilters(): void
+    {
+        $config = $this->loadAndValidateConfig('templating');
+
+        if (!isset($config['filters']['custom_filter_classes'])) {
+            return;
+        }
+
+        $filterManager = $this->get(FilterManager::class);
+
+        foreach ($config['filters']['custom_filter_classes'] as $filterName => $filterClass) {
+            if (!class_exists($filterClass)) {
+                continue;
+            }
+
+            // Registriere Custom Filter Klasse
+            $filterManager->register($filterName, function (mixed $value, ...$parameters) use ($filterClass) {
+                return $filterClass::handle($value, ...$parameters);
+            });
+        }
+    }
+
+    /**
+     * Überschreibt register() um Custom Filter zu registrieren
+     */
+    final public function register(): void
+    {
+        // Standard-Registrierung
+        parent::register();
+
+        // Custom Filter registrieren (nach Standard-Services)
+        $this->registerCustomFilters();
+    }
+
+    /**
+     * Validiert Template-Verzeichnisse
      */
     private function validateTemplateDirectories(): void
     {
@@ -158,7 +211,7 @@ class TemplatingServiceProvider extends AbstractServiceProvider
     }
 
     /**
-     * Validiert Cache-Verzeichnis (Templating-spezifisch)
+     * Validiert Cache-Verzeichnis
      */
     private function validateCacheDirectory(): void
     {

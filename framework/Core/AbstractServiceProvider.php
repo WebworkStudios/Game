@@ -23,7 +23,7 @@ abstract class AbstractServiceProvider
     /**
      * Template Method - definiert den festen Ablauf der Service-Registrierung
      */
-    final public function register(): void
+    public function register(): void
     {
         $this->validateDependencies();
         $this->registerServices();

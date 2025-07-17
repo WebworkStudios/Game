@@ -23,15 +23,17 @@ class TemplateEngine
     private bool $autoEscape = true;
 
     public function __construct(
-        array          $templatePaths = [],
+        array $templatePaths = [],
         ?TemplateCache $cache = null,
-        bool           $autoEscape = true
+        bool $autoEscape = true,
+        ?FilterManager $filterManager = null
     )
     {
         $this->paths = $templatePaths;
-        $this->filterManager = new FilterManager();
+        $this->filterManager = $filterManager ?? new FilterManager();
         $this->cache = $cache ?? new TemplateCache(sys_get_temp_dir() . '/template_cache', false);
         $this->autoEscape = $autoEscape;
+
     }
 
     /**
