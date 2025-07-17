@@ -1,414 +1,232 @@
-{% extends 'layouts/base' %}
+<!-- app/Views/pages/home.html -->
+{% extends "layouts/base.html" %}
 
-{% block title %}{{ welcome_message }} - {{ app_name }}{% endblock %}
-
+{% block title %}{{ app_name }} - Dashboard{% endblock %}
 
 {% block content %}
-<div class="dashboard">
-    <!-- Welcome Section -->
-    <div class="welcome-section">
-        <h1 class="welcome-title">⚽ {{ welcome_message }}</h1>
-        <p class="welcome-subtitle">Verwalte deinen Verein und führe ihn zum Erfolg</p>
-
-        {% if user %}
+<div class="dashboard-container">
+    <!-- Header Section -->
+    <header class="dashboard-header">
+        <h1>{{ welcome_message }}</h1>
         <div class="user-info">
-            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;">
-                <div>
-                    <strong>{{ user.name }}</strong> • {{ user.email }}
-                    {% if user.is_admin %}
-                    <span style="background: rgba(255, 255, 255, 0.2); padding: 4px 8px; border-radius: 12px; font-size: 0.8rem; margin-left: 10px;">
-                        👑 Admin
-                    </span>
-                    {% endif %}
+            <span class="user-name">{{ user.name }}</span>
+            {% if user.is_admin %}
+            <span class="badge badge-admin">Admin</span>
+            {% endif %}
+            {% if user.is_premium %}
+            <span class="badge badge-premium">Premium</span>
+            {% endif %}
+        </div>
+    </header>
+
+    <!-- Quick Stats Grid -->
+    <div class="stats-grid">
+        <div class="stat-card">
+            <h3>League Position</h3>
+            <div class="stat-value">{{ user.team.position }}</div>
+            <div class="stat-label">{{ user.team.league }}</div>
+        </div>
+
+        <div class="stat-card">
+            <h3>Points</h3>
+            <div class="stat-value">{{ user.team.points }}</div>
+            <div class="stat-label">{{ season_stats.current_matchday }}/{{ season_stats.total_matchdays }} games</div>
+        </div>
+
+        <div class="stat-card">
+            <h3>Goals</h3>
+            <div class="stat-value">{{ team_performance.goals_scored }}</div>
+            <div class="stat-label">{{ team_performance.goals_conceded }} conceded</div>
+        </div>
+
+        <div class="stat-card">
+            <h3>Coins</h3>
+            <div class="stat-value">{{ user.profile.coins|number_format }}</div>
+            <div class="stat-label">{{ user.profile.gems }} gems</div>
+        </div>
+    </div>
+
+    <!-- Next Match Section -->
+    <div class="next-match-section">
+        <h2>Next Match</h2>
+        {% if season_stats.next_match %}
+        <div class="match-card match-{{ season_stats.next_match.importance }}">
+            <div class="match-teams">
+                <div class="team home">
+                    <span class="team-name">{{ user.team.name }}</span>
                 </div>
-                {% if user.team %}
-                <div class="team-badge">
-                    🏆 {{ user.team.name }} • {{ user.team.league }}
-                    <br>
-                    <small>Platz {{ user.team.position }} • {{ user.team.points }} Punkte</small>
+                <div class="match-vs">VS</div>
+                <div class="team away">
+                    <span class="team-name">{{ season_stats.next_match.opponent }}</span>
                 </div>
-                {% endif %}
+            </div>
+
+            <div class="match-details">
+                <div class="match-date">{{ season_stats.next_match.date }}</div>
+                <div class="match-time">{{ season_stats.next_match.time }}</div>
+                <div class="match-venue">{{ season_stats.next_match.venue }}</div>
+            </div>
+
+            <div class="match-prediction">
+                <div class="prediction-bar">
+                    <div class="prediction-segment home" style="width: {{ season_stats.next_match.prediction.home_win }}%">
+                        {{ season_stats.next_match.prediction.home_win }}%
+                    </div>
+                    <div class="prediction-segment draw" style="width: {{ season_stats.next_match.prediction.draw }}%">
+                        {{ season_stats.next_match.prediction.draw }}%
+                    </div>
+                    <div class="prediction-segment away" style="width: {{ season_stats.next_match.prediction.away_win }}%">
+                        {{ season_stats.next_match.prediction.away_win }}%
+                    </div>
+                </div>
             </div>
         </div>
+        {% else %}
+        <p>No upcoming matches scheduled.</p>
         {% endif %}
     </div>
 
-    <!-- Main Dashboard Grid -->
-    <div class="dashboard-grid">
-        <!-- Main Content -->
-        <div class="main-content">
-            <!-- Season Statistics -->
-            <div class="section">
-                <h2 class="section-title">
-                    📊 Saison-Übersicht
-                </h2>
+    <!-- League Table Section -->
+    <div class="league-table-section">
+        <h2>League Table (Top 5)</h2>
+        <table class="league-table">
+            <thead>
+            <tr>
+                <th>Pos</th>
+                <th>Team</th>
+                <th>P</th>
+                <th>W</th>
+                <th>D</th>
+                <th>L</th>
+                <th>GD</th>
+                <th>Pts</th>
+            </tr>
+            </thead>
+            <tbody>
+            {% for league_table as team %}
+            <tr class="{% if team.team == user.team.name %}current-team{% endif %}">
+                <td>{{ team.position }}</td>
+                <td>{{ team.team }}</td>
+                <td>{{ team.played }}</td>
+                <td>{{ team.wins }}</td>
+                <td>{{ team.draws }}</td>
+                <td>{{ team.losses }}</td>
+                <td>{{ team.goal_difference }}</td>
+                <td><strong>{{ team.points }}</strong></td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
 
-                <div class="season-stats">
-                    <div class="stats-row">
-                        <div class="stat-item">
-                            <span class="stat-value">{{ season_stats.current_matchday }}</span>
-                            <span class="stat-label">Aktueller Spieltag</span>
-                        </div>
-                        <div class="stat-item">
-                            <span class="stat-value">{{ season_stats.total_matchdays }}</span>
-                            <span class="stat-label">Spieltage Gesamt</span>
-                        </div>
-                    </div>
-
-                    {% if season_stats.next_match %}
-                    <div class="next-match">
-                        <div class="match-opponent">vs {{ season_stats.next_match.opponent }}</div>
-                        <div class="match-details">
-                            📅 {{ season_stats.next_match.date }} • 🕘 {{ season_stats.next_match.time }}
-                            <br>
-                            🏟️ {{ season_stats.next_match.venue }}
-                        </div>
-                    </div>
-                    {% endif %}
-
-                    {% if season_stats.last_result %}
-                    <div style="text-align: center; margin-top: 15px; padding: 10px; background: rgba(255, 255, 255, 0.5); border-radius: 6px;">
-                        <strong>Letztes Spiel:</strong> {{ season_stats.last_result.result }} vs {{ season_stats.last_result.opponent }}
-                        <small style="opacity: 0.8;">({{ season_stats.last_result.date }})</small>
-                    </div>
+    <!-- Recent Results -->
+    <div class="recent-results-section">
+        <h2>Recent Results</h2>
+        {% if season_stats.last_results %}
+        <div class="results-grid">
+            {% for season_stats.last_results as result %}
+            <div class="result-card">
+                <div class="result-opponent">
+                    vs {{ result.opponent }}
+                    {% if result.is_home %}
+                    <span class="venue-indicator">(H)</span>
+                    {% else %}
+                    <span class="venue-indicator">(A)</span>
                     {% endif %}
                 </div>
-            </div>
-
-            <!-- Quick Actions -->
-            <div class="section">
-                <h2 class="section-title">
-                    🚀 Schnellzugriff
-                </h2>
-
-                <div class="quick-actions">
-                    {% for action in quick_actions %}
-                    <a href="{{ action.url }}" class="quick-action">
-                        <span class="action-icon">{{ action.icon }}</span>
-                        <div class="action-title">{{ action.title }}</div>
-                        <div class="action-description">{{ action.description }}</div>
-                    </a>
+                <div class="result-score">{{ result.result }}</div>
+                <div class="result-date">{{ result.date }}</div>
+                {% if result.scorers %}
+                <div class="result-scorers">
+                    {% for result.scorers as scorer %}
+                    <span class="scorer">{{ scorer }}</span>{% if not loop.last %}, {% endif %}
                     {% endfor %}
                 </div>
+                {% endif %}
             </div>
-
-            <!-- Framework Features -->
-            <div class="section">
-                <h2 class="section-title">
-                    🛠️ Framework Features
-                </h2>
-
-                <div class="framework-features">
-                    {% for feature in framework_features %}
-                    <div class="feature-card {{ feature.color }}">
-                        <span class="feature-icon">{{ feature.icon }}</span>
-                        <div class="feature-title">{{ feature.title }}</div>
-                        <div class="feature-description">{{ feature.description }}</div>
-                        {% if feature.status == 'active' %}
-                        <small style="color: #28a745; font-weight: 600; margin-top: 8px; display: block;">✅ Aktiv</small>
-                        {% endif %}
-                    </div>
-                    {% endfor %}
-                </div>
-            </div>
+            {% endfor %}
         </div>
+        {% else %}
+        <p>No recent results available.</p>
+        {% endif %}
+    </div>
 
-        <!-- Sidebar -->
-        <div class="sidebar">
-            <!-- Recent Activities -->
-            <div class="section">
-                <h3 class="section-title">
-                    📰 Neueste Aktivitäten
-                </h3>
+    <!-- Team Performance -->
+    <div class="team-performance-section">
+        <h2>Team Performance</h2>
+        <div class="performance-grid">
+            <div class="performance-card">
+                <h3>Top Scorer</h3>
+                <div class="player-info">
+                    <span class="player-name">{{ team_performance.top_scorer.name }}</span>
+                    <span class="player-stats">{{ team_performance.top_scorer.goals }} goals, {{ team_performance.top_scorer.assists }} assists</span>
+                </div>
+            </div>
 
-                <div class="recent-activities">
-                    {% for activity in recent_activities %}
-                    <div class="activity-item">
-                        <span class="activity-icon">{{ activity.icon }}</span>
-                        <div class="activity-content">
-                            <div class="activity-message">{{ activity.message }}</div>
-                            <div class="activity-time">{{ activity.timestamp }}</div>
-                        </div>
+            <div class="performance-card">
+                <h3>Best Player</h3>
+                <div class="player-info">
+                    <span class="player-name">{{ team_performance.best_player.name }}</span>
+                    <span class="player-stats">{{ team_performance.best_player.rating }} rating ({{ team_performance.best_player.appearances }} apps)</span>
+                </div>
+            </div>
+
+            <div class="performance-card">
+                <h3>Injuries</h3>
+                {% if team_performance.injuries %}
+                <div class="injury-list">
+                    {% for team_performance.injuries as injury %}
+                    <div class="injury-item">
+                        <span class="player-name">{{ injury.player }}</span>
+                        <span class="injury-type">{{ injury.injury }}</span>
+                        <span class="return-date">Back: {{ injury.return_date }}</span>
                     </div>
                     {% endfor %}
                 </div>
+                {% else %}
+                <p>No current injuries 🎉</p>
+                {% endif %}
             </div>
         </div>
     </div>
+
+    <!-- Notifications -->
+    <div class="notifications-section">
+        <h2>Notifications</h2>
+        {% if notifications %}
+        <div class="notifications-list">
+            {% for notifications as notification %}
+            <div class="notification notification-{{ notification.type }} priority-{{ notification.priority }}">
+                <div class="notification-icon">{{ notification.icon }}</div>
+                <div class="notification-content">
+                    <div class="notification-message">{{ notification.message }}</div>
+                    <div class="notification-time">{{ notification.time }}</div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p>No notifications.</p>
+        {% endif %}
+    </div>
+
+    <!-- Framework Features Demo -->
+    <div class="framework-features-section">
+        <h2>Framework Features</h2>
+        <div class="features-grid">
+            {% for framework_features as feature %}
+            <div class="feature-card feature-{{ feature.status }}">
+                <div class="feature-icon">{{ feature.icon }}</div>
+                <div class="feature-content">
+                    <h3>{{ feature.title }}</h3>
+                    <p>{{ feature.description }}</p>
+                    {% if feature.performance_gain %}
+                    <div class="performance-gain">+{{ feature.performance_gain }}% faster</div>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
 </div>
-
-<style>
-    .dashboard {
-        max-width: 1200px;
-        margin: 0 auto;
-    }
-
-    .welcome-section {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-        padding: 30px;
-        border-radius: 12px;
-        margin-bottom: 30px;
-        text-align: center;
-    }
-
-    .welcome-title {
-        font-size: 2.5rem;
-        margin-bottom: 10px;
-        font-weight: 700;
-    }
-
-    .welcome-subtitle {
-        font-size: 1.2rem;
-        opacity: 0.9;
-    }
-
-    .user-info {
-        background: rgba(255, 255, 255, 0.1);
-        padding: 20px;
-        border-radius: 8px;
-        margin-top: 20px;
-        text-align: left;
-    }
-
-    .team-badge {
-        display: inline-block;
-        background: rgba(255, 255, 255, 0.2);
-        padding: 8px 16px;
-        border-radius: 20px;
-        font-weight: 600;
-    }
-
-    .dashboard-grid {
-        display: grid;
-        grid-template-columns: 2fr 1fr;
-        gap: 30px;
-        margin-bottom: 30px;
-    }
-
-    .main-content {
-        display: flex;
-        flex-direction: column;
-        gap: 30px;
-    }
-
-    .sidebar {
-        display: flex;
-        flex-direction: column;
-        gap: 20px;
-    }
-
-    .section {
-        background: white;
-        border-radius: 12px;
-        padding: 25px;
-        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
-        border: 1px solid #e2e8f0;
-    }
-
-    .section-title {
-        color: #1a365d;
-        margin-bottom: 20px;
-        font-size: 1.4rem;
-        font-weight: 600;
-        display: flex;
-        align-items: center;
-        gap: 10px;
-    }
-
-    .season-stats {
-        background: #f8f9fa;
-        padding: 20px;
-        border-radius: 8px;
-        border-left: 4px solid #667eea;
-    }
-
-    .stats-row {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-        gap: 15px;
-        margin-bottom: 15px;
-    }
-
-    .stat-item {
-        text-align: center;
-    }
-
-    .stat-value {
-        font-size: 1.8rem;
-        font-weight: bold;
-        color: #2d3748;
-        display: block;
-    }
-
-    .stat-label {
-        font-size: 0.9rem;
-        color: #718096;
-        margin-top: 4px;
-    }
-
-    .next-match {
-        background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
-        color: white;
-        padding: 20px;
-        border-radius: 8px;
-        text-align: center;
-    }
-
-    .match-opponent {
-        font-size: 1.5rem;
-        font-weight: bold;
-        margin-bottom: 8px;
-    }
-
-    .match-details {
-        opacity: 0.9;
-    }
-
-    .quick-actions {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-        gap: 15px;
-    }
-
-    .quick-action {
-        background: white;
-        border: 2px solid #e2e8f0;
-        border-radius: 8px;
-        padding: 20px;
-        text-decoration: none;
-        color: inherit;
-        transition: all 0.2s;
-        display: block;
-    }
-
-    .quick-action:hover {
-        border-color: #667eea;
-        transform: translateY(-2px);
-        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);
-    }
-
-    .action-icon {
-        font-size: 2rem;
-        margin-bottom: 10px;
-        display: block;
-    }
-
-    .action-title {
-        font-weight: 600;
-        margin-bottom: 8px;
-        color: #2d3748;
-    }
-
-    .action-description {
-        font-size: 0.9rem;
-        color: #718096;
-    }
-
-    .framework-features {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-        gap: 20px;
-    }
-
-    .feature-card {
-        padding: 20px;
-        border-radius: 8px;
-        border-left: 4px solid;
-        transition: transform 0.2s;
-    }
-
-    .feature-card:hover {
-        transform: translateY(-2px);
-    }
-
-    .feature-card.success {
-        background: #f0f8f0;
-        border-color: #28a745;
-    }
-    .feature-card.primary {
-        background: #f0f4ff;
-        border-color: #667eea;
-    }
-    .feature-card.info {
-        background: #f0f9ff;
-        border-color: #17a2b8;
-    }
-    .feature-card.warning {
-        background: #fffbf0;
-        border-color: #ffc107;
-    }
-
-    .feature-icon {
-        font-size: 2rem;
-        margin-bottom: 10px;
-        display: block;
-    }
-
-    .feature-title {
-        font-weight: 600;
-        margin-bottom: 8px;
-        color: #2d3748;
-    }
-
-    .feature-description {
-        font-size: 0.9rem;
-        color: #718096;
-        line-height: 1.4;
-    }
-
-    .recent-activities {
-        max-height: 400px;
-        overflow-y: auto;
-    }
-
-    .activity-item {
-        display: flex;
-        align-items: center;
-        gap: 15px;
-        padding: 15px;
-        border-bottom: 1px solid #e2e8f0;
-        last-of-type: border-bottom: none;
-    }
-
-    .activity-icon {
-        font-size: 1.5rem;
-        width: 40px;
-        text-align: center;
-    }
-
-    .activity-content {
-        flex: 1;
-    }
-
-    .activity-message {
-        font-weight: 500;
-        color: #2d3748;
-        margin-bottom: 4px;
-    }
-
-    .activity-time {
-        font-size: 0.8rem;
-        color: #718096;
-    }
-
-    @media (max-width: 768px) {
-        .dashboard-grid {
-            grid-template-columns: 1fr;
-            gap: 20px;
-        }
-
-        .stats-row {
-            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-        }
-
-        .quick-actions {
-            grid-template-columns: 1fr;
-        }
-
-        .framework-features {
-            grid-template-columns: 1fr;
-        }
-    }
-</style>
 {% endblock %}

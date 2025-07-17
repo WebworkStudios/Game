@@ -1,10 +1,12 @@
 <!-- app/Views/layouts/base.html -->
 <!DOCTYPE html>
-<html lang="en">
+<html lang="de">
 <head>
     <meta charset="UTF-8">
-    <meta content="width=device-width, initial-scale=1.0" name="viewport">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}{{ app_name }}{% endblock %}</title>
+
+    <!-- CSS Styles -->
     <style>
         * {
             margin: 0;
@@ -13,48 +15,412 @@
         }
 
         body {
-            font-family: Arial, sans-serif;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             line-height: 1.6;
             color: #333;
-            background: #f8f9fa;
+            background-color: #f5f5f5;
         }
 
         .container {
             max-width: 1200px;
             margin: 0 auto;
-            padding: 20px;
+            padding: 0 20px;
         }
 
+        /* Header */
         .header {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
-            padding: 20px 0;
-            margin-bottom: 30px;
+            padding: 1rem 0;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
         }
 
-        .content {
+        .header h1 {
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .nav {
+            display: flex;
+            gap: 2rem;
+            margin-top: 1rem;
+        }
+
+        .nav a {
+            color: white;
+            text-decoration: none;
+            padding: 0.5rem 1rem;
+            border-radius: 5px;
+            transition: background-color 0.3s;
+        }
+
+        .nav a:hover {
+            background-color: rgba(255,255,255,0.2);
+        }
+
+        /* Main Content */
+        .main {
+            padding: 2rem 0;
+            min-height: 80vh;
+        }
+
+        /* Dashboard Styles */
+        .dashboard-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+            padding: 1rem;
             background: white;
-            padding: 30px;
             border-radius: 10px;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
         }
 
-        .footer {
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .stat-card {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
             text-align: center;
-            margin-top: 30px;
+        }
+
+        .stat-value {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #667eea;
+            margin: 0.5rem 0;
+        }
+
+        .stat-label {
+            color: #666;
+            font-size: 0.9rem;
+        }
+
+        .badge {
+            padding: 0.25rem 0.5rem;
+            border-radius: 15px;
+            font-size: 0.8rem;
+            font-weight: bold;
+            margin-left: 0.5rem;
+        }
+
+        .badge-admin {
+            background-color: #ff6b6b;
+            color: white;
+        }
+
+        .badge-premium {
+            background-color: #ffd93d;
+            color: #333;
+        }
+
+        /* Match Card */
+        .match-card {
+            background: white;
+            padding: 2rem;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 2rem;
+        }
+
+        .match-teams {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+
+        .team-name {
+            font-size: 1.5rem;
+            font-weight: bold;
+        }
+
+        .match-vs {
+            font-size: 1.2rem;
             color: #666;
         }
 
-        {
-        %
-        block
-        styles
-        %
+        .match-details {
+            display: flex;
+            gap: 2rem;
+            margin-bottom: 1rem;
+            color: #666;
         }
-        {
-        %
-        endblock
-        %
+
+        .prediction-bar {
+            display: flex;
+            height: 30px;
+            border-radius: 15px;
+            overflow: hidden;
+            background: #f0f0f0;
+        }
+
+        .prediction-segment {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            font-size: 0.9rem;
+        }
+
+        .prediction-segment.home {
+            background: #4CAF50;
+        }
+
+        .prediction-segment.draw {
+            background: #FFC107;
+        }
+
+        .prediction-segment.away {
+            background: #FF5722;
+        }
+
+        /* League Table */
+        .league-table {
+            width: 100%;
+            background: white;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .league-table th,
+        .league-table td {
+            padding: 1rem;
+            text-align: left;
+            border-bottom: 1px solid #eee;
+        }
+
+        .league-table th {
+            background: #f8f9fa;
+            font-weight: bold;
+        }
+
+        .current-team {
+            background: #e3f2fd;
+            font-weight: bold;
+        }
+
+        /* Results Grid */
+        .results-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .result-card {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .result-score {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #667eea;
+            margin: 0.5rem 0;
+        }
+
+        .venue-indicator {
+            font-size: 0.8rem;
+            color: #666;
+        }
+
+        .result-scorers {
+            margin-top: 0.5rem;
+            color: #666;
+            font-size: 0.9rem;
+        }
+
+        /* Performance Grid */
+        .performance-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .performance-card {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .player-info {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .player-name {
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .player-stats {
+            color: #666;
+            font-size: 0.9rem;
+        }
+
+        .injury-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .injury-item {
+            padding: 0.5rem;
+            background: #fff3cd;
+            border-radius: 5px;
+            border-left: 4px solid #ffc107;
+        }
+
+        /* Notifications */
+        .notifications-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .notification {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            padding: 1rem;
+            border-radius: 8px;
+            background: white;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+
+        .notification-icon {
+            font-size: 1.5rem;
+            flex-shrink: 0;
+        }
+
+        .notification-content {
+            flex: 1;
+        }
+
+        .notification-message {
+            margin-bottom: 0.25rem;
+        }
+
+        .notification-time {
+            color: #666;
+            font-size: 0.8rem;
+        }
+
+        .priority-high {
+            border-left: 4px solid #ff4757;
+        }
+
+        .priority-medium {
+            border-left: 4px solid #ffa502;
+        }
+
+        .priority-low {
+            border-left: 4px solid #3742fa;
+        }
+
+        /* Features Grid */
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .feature-card {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            display: flex;
+            align-items: flex-start;
+            gap: 1rem;
+        }
+
+        .feature-icon {
+            font-size: 2rem;
+            flex-shrink: 0;
+        }
+
+        .feature-content h3 {
+            margin-bottom: 0.5rem;
+            color: #333;
+        }
+
+        .feature-content p {
+            color: #666;
+            margin-bottom: 0.5rem;
+        }
+
+        .performance-gain {
+            color: #4CAF50;
+            font-weight: bold;
+            font-size: 0.9rem;
+        }
+
+        .feature-active {
+            border-left: 4px solid #4CAF50;
+        }
+
+        /* Footer */
+        .footer {
+            background: #333;
+            color: white;
+            text-align: center;
+            padding: 2rem 0;
+            margin-top: 2rem;
+        }
+
+        .footer a {
+            color: #667eea;
+            text-decoration: none;
+        }
+
+        .footer a:hover {
+            text-decoration: underline;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .dashboard-header {
+                flex-direction: column;
+                gap: 1rem;
+                text-align: center;
+            }
+
+            .match-teams {
+                flex-direction: column;
+                gap: 1rem;
+            }
+
+            .match-details {
+                flex-direction: column;
+                gap: 0.5rem;
+            }
+
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .nav {
+                flex-direction: column;
+                gap: 1rem;
+            }
         }
     </style>
 </head>
@@ -62,20 +428,30 @@
 <header class="header">
     <div class="container">
         <h1>{{ app_name }}</h1>
+        <nav class="nav">
+            <a href="/">Dashboard</a>
+            <a href="/team">Team</a>
+            <a href="/matches">Matches</a>
+            <a href="/transfers">Transfers</a>
+            <a href="/league">League</a>
+            <a href="/test/templates">Template Demo</a>
+        </nav>
     </div>
 </header>
 
-<main class="container">
-    <div class="content">
-        {% block content %}
-        <p>No content defined</p>
-        {% endblock %}
+<main class="main">
+    <div class="container">
+        {% block content %}{% endblock %}
     </div>
 </main>
 
 <footer class="footer">
     <div class="container">
-        <p>&copy; 2024 {{ app_name }} - Version {{ app_version }}</p>
+        <p>&copy; 2024 {{ app_name }} - Powered by Custom PHP Framework</p>
+        <p>
+            <a href="/test/templates">Template Engine Demo</a> |
+            <a href="/test/filters">Filter Demo</a>
+        </p>
     </div>
 </footer>
 </body>
