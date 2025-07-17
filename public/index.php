@@ -43,9 +43,10 @@ require_once __DIR__ . '/../vendor/autoload.php';
 // Framework Bootstrap
 // ===================================================================
 
-use Framework\Core\ApplicationKernel;  // ← GEÄNDERT: ApplicationKernel statt Application
+use Framework\Core\ApplicationKernel;
 use Framework\Http\Request;
-use Framework\Http\HttpStatus;
+
+// ← GEÄNDERT: ApplicationKernel statt Application
 
 try {
     // Initialize Application Kernel

@@ -136,20 +136,20 @@ enum HttpStatus: int
     }
 
     /**
+     * Alias für isSuccess() - für Kompatibilität mit Response.php
+     */
+    public function isSuccessful(): bool
+    {
+        return $this->isSuccess();
+    }
+
+    /**
      * Prüft ob Status Code erfolgreiche Antwort ist (2xx)
      * KORRIGIERT: Sowohl isSuccess() als auch isSuccessful() verfügbar
      */
     public function isSuccess(): bool
     {
         return $this->value >= 200 && $this->value < 300;
-    }
-
-    /**
-     * Alias für isSuccess() - für Kompatibilität mit Response.php
-     */
-    public function isSuccessful(): bool
-    {
-        return $this->isSuccess();
     }
 
     /**

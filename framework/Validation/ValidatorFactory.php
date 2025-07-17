@@ -19,11 +19,12 @@ readonly class ValidatorFactory
      * Create validator instance with custom messages support
      */
     public function make(
-        array $data,
-        array $rules,
-        array $customMessages = [],
+        array   $data,
+        array   $rules,
+        array   $customMessages = [],
         ?string $connectionName = null
-    ): Validator {
+    ): Validator
+    {
         return Validator::make($data, $rules, $customMessages, $this->connectionManager);
     }
 }

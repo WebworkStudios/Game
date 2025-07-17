@@ -18,6 +18,25 @@ class PDOFactory
     private const int RETRY_DELAY_MS = 100;
 
     /**
+     * Testet MySQL-Datenbankverbindung
+     */
+    public static function testConnection(DatabaseConfig $config): bool
+    {
+        try {
+            $pdo = self::create($config);
+
+            // MySQL-spezifische Test-Query
+            $result = $pdo->query('SELECT 1 as test');
+            $data = $result->fetch(PDO::FETCH_ASSOC);
+
+            return $data['test'] === 1;
+
+        } catch (\Exception) {
+            return false;
+        }
+    }
+
+    /**
      * Erstellt MySQL PDO-Verbindung aus Konfiguration
      */
     public static function create(DatabaseConfig $config): PDO
@@ -58,25 +77,6 @@ class PDOFactory
     }
 
     /**
-     * Testet MySQL-Datenbankverbindung
-     */
-    public static function testConnection(DatabaseConfig $config): bool
-    {
-        try {
-            $pdo = self::create($config);
-
-            // MySQL-spezifische Test-Query
-            $result = $pdo->query('SELECT 1 as test');
-            $data = $result->fetch(PDO::FETCH_ASSOC);
-
-            return $data['test'] === 1;
-
-        } catch (\Exception) {
-            return false;
-        }
-    }
-
-    /**
      * MySQL-spezifische Konfiguration nach Connection
      */
     private static function configureMysql(PDO $pdo, DatabaseConfig $config): void
@@ -101,22 +101,6 @@ class PDOFactory
 
         // Autocommit sicherstellen (Standard, aber explizit)
         $pdo->exec("SET autocommit = 1");
-    }
-
-    /**
-     * Holt MySQL-Version
-     */
-    public static function getMySQLVersion(PDO $pdo): string
-    {
-        try {
-            $stmt = $pdo->query('SELECT VERSION() as version');
-            $result = $stmt->fetch(PDO::FETCH_ASSOC);
-
-            return $result['version'] ?? 'Unknown';
-
-        } catch (\Exception) {
-            return 'Unknown';
-        }
     }
 
     /**
@@ -168,6 +152,22 @@ class PDOFactory
         }
 
         return $capabilities;
+    }
+
+    /**
+     * Holt MySQL-Version
+     */
+    public static function getMySQLVersion(PDO $pdo): string
+    {
+        try {
+            $stmt = $pdo->query('SELECT VERSION() as version');
+            $result = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            return $result['version'] ?? 'Unknown';
+
+        } catch (\Exception) {
+            return 'Unknown';
+        }
     }
 
     /**

@@ -29,11 +29,12 @@ class Validator
      * Factory method to create validator instance with custom messages
      */
     public static function make(
-        array $data,
-        array $rules = [],
-        array $customMessages = [],
+        array              $data,
+        array              $rules = [],
+        array              $customMessages = [],
         ?ConnectionManager $connectionManager = null
-    ): self {
+    ): self
+    {
         $validator = new self($connectionManager);
         $validator->data = $data;
         $validator->rules = $rules;
@@ -207,31 +208,6 @@ class Validator
     }
 
     /**
-     * Interpolate placeholders in custom messages
-     */
-    private function interpolateMessage(string $message, string $field, mixed $value, array $parameters): string
-    {
-        // Replace :field placeholder
-        $message = str_replace(':field', $field, $message);
-
-        // Replace :value placeholder
-        $message = str_replace(':value', (string) $value, $message);
-
-        // Replace parameter placeholders like :min, :max, etc.
-        foreach ($parameters as $index => $parameter) {
-            $message = str_replace(":{$index}", $parameter, $message);
-
-            // Common parameter names
-            $paramNames = ['min', 'max', 'size', 'table', 'column', 'confirmed'];
-            if (isset($paramNames[$index])) {
-                $message = str_replace(":{$paramNames[$index]}", $parameter, $message);
-            }
-        }
-
-        return $message;
-    }
-
-    /**
      * Get rule class name
      */
     private function getRuleClass(string $ruleName): string
@@ -250,6 +226,31 @@ class Validator
         }
 
         return $this->errors->isEmpty();
+    }
+
+    /**
+     * Interpolate placeholders in custom messages
+     */
+    private function interpolateMessage(string $message, string $field, mixed $value, array $parameters): string
+    {
+        // Replace :field placeholder
+        $message = str_replace(':field', $field, $message);
+
+        // Replace :value placeholder
+        $message = str_replace(':value', (string)$value, $message);
+
+        // Replace parameter placeholders like :min, :max, etc.
+        foreach ($parameters as $index => $parameter) {
+            $message = str_replace(":{$index}", $parameter, $message);
+
+            // Common parameter names
+            $paramNames = ['min', 'max', 'size', 'table', 'column', 'confirmed'];
+            if (isset($paramNames[$index])) {
+                $message = str_replace(":{$paramNames[$index]}", $parameter, $message);
+            }
+        }
+
+        return $message;
     }
 
     /**

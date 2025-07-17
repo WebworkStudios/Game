@@ -1,7 +1,7 @@
 <?php
+
 namespace Framework\Templating\Parsing;
 
-use Framework\Templating\Tokens\{TemplateToken, TokenFactory, ControlToken, TextToken, VariableToken};
 /**
  * TemplatePathResolver - Löst Template-Namen zu Dateipfaden auf
  */
@@ -9,7 +9,9 @@ class TemplatePathResolver
 {
     public function __construct(
         private readonly array $paths = []
-    ) {}
+    )
+    {
+    }
 
     public function resolve(string $template): string
     {

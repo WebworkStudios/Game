@@ -12,21 +12,6 @@ namespace Framework\Templating\Filters;
 class NumberFilters
 {
     /**
-     * Formatiert Zahlen mit Tausender-Trennzeichen
-     */
-    public static function numberFormat(mixed $value, mixed $decimals = 0, string $decimalSeparator = ',', string $thousandsSeparator = '.'): string
-    {
-        if ($value === null) {
-            return '0';
-        }
-
-        $numericValue = is_numeric($value) ? (float)$value : 0.0;
-        $decimalsInt = is_numeric($decimals) ? (int)$decimals : 0;
-
-        return number_format($numericValue, $decimalsInt, $decimalSeparator, $thousandsSeparator);
-    }
-
-    /**
      * Formatiert als Währung
      */
     public static function currency(mixed $value, string $currency = 'EUR', string $locale = 'de_DE'): string
@@ -39,6 +24,21 @@ class NumberFilters
         $formatted = self::numberFormat($numericValue, 2);
 
         return $formatted . ' ' . $currency;
+    }
+
+    /**
+     * Formatiert Zahlen mit Tausender-Trennzeichen
+     */
+    public static function numberFormat(mixed $value, mixed $decimals = 0, string $decimalSeparator = ',', string $thousandsSeparator = '.'): string
+    {
+        if ($value === null) {
+            return '0';
+        }
+
+        $numericValue = is_numeric($value) ? (float)$value : 0.0;
+        $decimalsInt = is_numeric($decimals) ? (int)$decimals : 0;
+
+        return number_format($numericValue, $decimalsInt, $decimalSeparator, $thousandsSeparator);
     }
 
     /**

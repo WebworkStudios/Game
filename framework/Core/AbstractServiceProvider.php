@@ -31,6 +31,14 @@ abstract class AbstractServiceProvider
     }
 
     /**
+     * Validiert benötigte Abhängigkeiten
+     */
+    protected function validateDependencies(): void
+    {
+        // Default: Keine Validierung
+    }
+
+    /**
      * Registriert alle Services des Providers
      */
     abstract protected function registerServices(): void;
@@ -41,14 +49,6 @@ abstract class AbstractServiceProvider
     protected function bindInterfaces(): void
     {
         // Default: Keine Interface-Bindings
-    }
-
-    /**
-     * Validiert benötigte Abhängigkeiten
-     */
-    protected function validateDependencies(): void
-    {
-        // Default: Keine Validierung
     }
 
     // ===================================================================
@@ -75,24 +75,19 @@ abstract class AbstractServiceProvider
         $this->container->bind($interface, $implementation);
     }
 
-    protected function get(string $abstract): mixed
-    {
-        return $this->container->get($abstract);
-    }
-
     protected function has(string $abstract): bool
     {
         return $this->container->has($abstract);
     }
 
-    // ===================================================================
-    // Path & Config Methods (unverändert)
-    // ===================================================================
-
     protected function basePath(string $path = ''): string
     {
         return $this->app->getBasePath() . ($path ? '/' . ltrim($path, '/') : '');
     }
+
+    // ===================================================================
+    // Path & Config Methods (unverändert)
+    // ===================================================================
 
     /**
      * Lädt Konfiguration über ConfigManager
@@ -101,6 +96,11 @@ abstract class AbstractServiceProvider
     {
         $configManager = $this->get(ConfigManager::class);
         return $configManager->get($configPath, $defaultProvider, $requiredKeys);
+    }
+
+    protected function get(string $abstract): mixed
+    {
+        return $this->container->get($abstract);
     }
 
     /**

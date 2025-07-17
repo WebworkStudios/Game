@@ -40,33 +40,6 @@ readonly class RouterCache
     }
 
     /**
-     * Einfache put() Methode für Cache-Speicherung
-     */
-    public function put(array $data): void
-    {
-        $routes = $data['routes'] ?? [];
-        $this->saveToCache($routes);
-    }
-
-    /**
-     * Lädt RouteEntry-Objekte (Hauptmethode für Router)
-     */
-    public function loadRouteEntries(): array
-    {
-        if (!$this->shouldRebuildCache()) {
-            $cached = $this->loadFromCache();
-            if (!empty($cached)) {
-                return $cached;
-            }
-        }
-
-        $routes = $this->buildRoutes();
-        $this->saveToCache($routes);
-
-        return $routes;
-    }
-
-    /**
      * Bestimmt ob Cache neu erstellt werden soll
      */
     private function shouldRebuildCache(): bool
@@ -122,6 +95,31 @@ readonly class RouterCache
     }
 
     /**
+     * Erstellt Named Routes Array aus RouteEntry-Array
+     */
+    private function buildNamedRoutesArray(array $routes): array
+    {
+        $namedRoutes = [];
+
+        foreach ($routes as $route) {
+            if ($route->name !== null) {
+                $namedRoutes[$route->name] = $route;
+            }
+        }
+
+        return $namedRoutes;
+    }
+
+    /**
+     * Einfache put() Methode für Cache-Speicherung
+     */
+    public function put(array $data): void
+    {
+        $routes = $data['routes'] ?? [];
+        $this->saveToCache($routes);
+    }
+
+    /**
      * Speichert Routes in Cache-Datei
      */
     private function saveToCache(array $routes): void
@@ -151,6 +149,75 @@ readonly class RouterCache
             "return " . var_export($cacheData, true) . ";\n";
 
         file_put_contents($this->cacheFile, $cacheContent, LOCK_EX);
+    }
+
+    /**
+     * Löscht Cache-Datei
+     */
+    public function clear(): bool
+    {
+        if (file_exists($this->cacheFile)) {
+            return unlink($this->cacheFile);
+        }
+
+        return true;
+    }
+
+    /**
+     * Holt Cache-Datei-Pfad
+     */
+    public function getCacheFile(): string
+    {
+        return $this->cacheFile;
+    }
+
+    /**
+     * Holt Actions-Pfad
+     */
+    public function getActionsPath(): string
+    {
+        return $this->actionsPath;
+    }
+
+    /**
+     * Debug-Ausgabe der Cache-Informationen
+     */
+    public function debug(): array
+    {
+        $routes = $this->loadRouteEntries();
+
+        return [
+            'cache_file' => $this->cacheFile,
+            'cache_exists' => $this->exists(),
+            'cache_time' => $this->exists() ? date('Y-m-d H:i:s', filemtime($this->cacheFile)) : null,
+            'actions_path' => $this->actionsPath,
+            'routes_count' => count($routes),
+            'named_routes_count' => count(array_filter($routes, fn($r) => $r->name !== null)),
+            'routes' => array_map(fn(RouteEntry $r) => [
+                'pattern' => $r->pattern,
+                'methods' => array_map(fn($m) => $m->value, $r->methods),
+                'action' => $r->action,
+                'name' => $r->name,
+            ], $routes),
+        ];
+    }
+
+    /**
+     * Lädt RouteEntry-Objekte (Hauptmethode für Router)
+     */
+    public function loadRouteEntries(): array
+    {
+        if (!$this->shouldRebuildCache()) {
+            $cached = $this->loadFromCache();
+            if (!empty($cached)) {
+                return $cached;
+            }
+        }
+
+        $routes = $this->buildRoutes();
+        $this->saveToCache($routes);
+
+        return $routes;
     }
 
     /**
@@ -328,77 +395,10 @@ readonly class RouterCache
     }
 
     /**
-     * Erstellt Named Routes Array aus RouteEntry-Array
-     */
-    private function buildNamedRoutesArray(array $routes): array
-    {
-        $namedRoutes = [];
-
-        foreach ($routes as $route) {
-            if ($route->name !== null) {
-                $namedRoutes[$route->name] = $route;
-            }
-        }
-
-        return $namedRoutes;
-    }
-
-    /**
-     * Löscht Cache-Datei
-     */
-    public function clear(): bool
-    {
-        if (file_exists($this->cacheFile)) {
-            return unlink($this->cacheFile);
-        }
-
-        return true;
-    }
-
-    /**
      * Prüft ob Cache existiert
      */
     public function exists(): bool
     {
         return file_exists($this->cacheFile);
-    }
-
-    /**
-     * Holt Cache-Datei-Pfad
-     */
-    public function getCacheFile(): string
-    {
-        return $this->cacheFile;
-    }
-
-    /**
-     * Holt Actions-Pfad
-     */
-    public function getActionsPath(): string
-    {
-        return $this->actionsPath;
-    }
-
-    /**
-     * Debug-Ausgabe der Cache-Informationen
-     */
-    public function debug(): array
-    {
-        $routes = $this->loadRouteEntries();
-
-        return [
-            'cache_file' => $this->cacheFile,
-            'cache_exists' => $this->exists(),
-            'cache_time' => $this->exists() ? date('Y-m-d H:i:s', filemtime($this->cacheFile)) : null,
-            'actions_path' => $this->actionsPath,
-            'routes_count' => count($routes),
-            'named_routes_count' => count(array_filter($routes, fn($r) => $r->name !== null)),
-            'routes' => array_map(fn(RouteEntry $r) => [
-                'pattern' => $r->pattern,
-                'methods' => array_map(fn($m) => $m->value, $r->methods),
-                'action' => $r->action,
-                'name' => $r->name,
-            ], $routes),
-        ];
     }
 }

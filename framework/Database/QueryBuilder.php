@@ -58,31 +58,6 @@ class QueryBuilder
     }
 
     /**
-     * Fügt WHERE Condition hinzu
-     */
-    public function where(string $column, mixed $operator, mixed $value = null): self
-    {
-        // where($column, $value) syntax - nur 2 Parameter
-        if ($value === null && func_num_args() === 2) {
-            $value = $operator;
-            $operator = '=';
-        }
-
-        $binding = $this->createBinding($column);
-
-        $this->wheres[] = [
-            'type' => 'basic',
-            'column' => $column,
-            'operator' => (string)$operator,
-            'binding' => $binding,
-        ];
-
-        $this->bindings[$binding] = $value;
-
-        return $this;
-    }
-
-    /**
      * WHERE IN Condition
      */
     public function whereIn(string $column, array $values): self
@@ -106,6 +81,30 @@ class QueryBuilder
         ];
 
         return $this;
+    }
+
+    /**
+     * Raw WHERE Condition
+     */
+    public function whereRaw(string $sql, array $bindings = []): self
+    {
+        $this->wheres[] = [
+            'type' => 'raw',
+            'sql' => $sql,
+        ];
+
+        $this->bindings = array_merge($this->bindings, $bindings);
+
+        return $this;
+    }
+
+    /**
+     * Erstellt eindeutigen Binding-Namen
+     */
+    private function createBinding(string $column): string
+    {
+        $base = preg_replace('/[^a-zA-Z0-9_]/', '_', $column);
+        return $base . '_' . ++$this->bindingCounter;
     }
 
     /**
@@ -171,6 +170,31 @@ class QueryBuilder
     }
 
     /**
+     * Fügt WHERE Condition hinzu
+     */
+    public function where(string $column, mixed $operator, mixed $value = null): self
+    {
+        // where($column, $value) syntax - nur 2 Parameter
+        if ($value === null && func_num_args() === 2) {
+            $value = $operator;
+            $operator = '=';
+        }
+
+        $binding = $this->createBinding($column);
+
+        $this->wheres[] = [
+            'type' => 'basic',
+            'column' => $column,
+            'operator' => (string)$operator,
+            'binding' => $binding,
+        ];
+
+        $this->bindings[$binding] = $value;
+
+        return $this;
+    }
+
+    /**
      * WHERE BETWEEN Condition
      */
     public function whereBetween(string $column, mixed $min, mixed $max): self
@@ -192,26 +216,27 @@ class QueryBuilder
     }
 
     /**
-     * Raw WHERE Condition
-     */
-    public function whereRaw(string $sql, array $bindings = []): self
-    {
-        $this->wheres[] = [
-            'type' => 'raw',
-            'sql' => $sql,
-        ];
-
-        $this->bindings = array_merge($this->bindings, $bindings);
-
-        return $this;
-    }
-
-    /**
      * INNER JOIN
      */
     public function join(string $table, string $first, string $operator, string $second): self
     {
         return $this->addJoin(JoinType::INNER, $table, $first, $operator, $second);
+    }
+
+    /**
+     * Fügt JOIN hinzu
+     */
+    private function addJoin(JoinType $type, string $table, string $first, string $operator, string $second): self
+    {
+        $this->joins[] = [
+            'type' => $type,
+            'table' => $table,
+            'first' => $first,
+            'operator' => $operator,
+            'second' => $second,
+        ];
+
+        return $this;
     }
 
     /**
@@ -236,22 +261,6 @@ class QueryBuilder
     public function fullJoin(string $table, string $first, string $operator, string $second): self
     {
         return $this->addJoin(JoinType::FULL, $table, $first, $operator, $second);
-    }
-
-    /**
-     * Fügt JOIN hinzu
-     */
-    private function addJoin(JoinType $type, string $table, string $first, string $operator, string $second): self
-    {
-        $this->joins[] = [
-            'type' => $type,
-            'table' => $table,
-            'first' => $first,
-            'operator' => $operator,
-            'second' => $second,
-        ];
-
-        return $this;
     }
 
     /**
@@ -282,6 +291,14 @@ class QueryBuilder
     }
 
     /**
+     * ORDER BY DESC
+     */
+    public function orderByDesc(string $column): self
+    {
+        return $this->orderBy($column, OrderDirection::DESC);
+    }
+
+    /**
      * ORDER BY ASC
      */
     public function orderBy(string $column, OrderDirection $direction = OrderDirection::ASC): self
@@ -291,23 +308,6 @@ class QueryBuilder
             'direction' => $direction,
         ];
 
-        return $this;
-    }
-
-    /**
-     * ORDER BY DESC
-     */
-    public function orderByDesc(string $column): self
-    {
-        return $this->orderBy($column, OrderDirection::DESC);
-    }
-
-    /**
-     * LIMIT
-     */
-    public function limit(int $limit): self
-    {
-        $this->limit = $limit;
         return $this;
     }
 
@@ -331,6 +331,14 @@ class QueryBuilder
     }
 
     /**
+     * Holt erste Zeile oder Exception
+     */
+    public function firstOrFail(): array
+    {
+        return $this->limit(1)->get()->firstOrFail();
+    }
+
+    /**
      * Führt SELECT Query aus
      */
     public function get(): QueryResult
@@ -350,144 +358,6 @@ class QueryBuilder
         $sql = $this->grammar->compileSelect($components);
 
         return $this->executeQuery($sql, ConnectionType::READ);
-    }
-
-    /**
-     * Holt erste Zeile
-     */
-    public function first(): ?array
-    {
-        return $this->limit(1)->get()->first();
-    }
-
-    /**
-     * Holt erste Zeile oder Exception
-     */
-    public function firstOrFail(): array
-    {
-        return $this->limit(1)->get()->firstOrFail();
-    }
-
-    /**
-     * Zählt Ergebnisse
-     */
-    public function count(): int
-    {
-        $original = $this->select;
-        $this->select = ['COUNT(*) as count'];
-
-        $result = $this->get()->first();
-        $this->select = $original;
-
-        return (int)($result['count'] ?? 0);
-    }
-
-    /**
-     * Prüft ob Ergebnisse existieren
-     */
-    public function exists(): bool
-    {
-        return $this->count() > 0;
-    }
-
-    /**
-     * INSERT Query
-     */
-    public function insert(array $values): bool
-    {
-        if (empty($values)) {
-            throw new InvalidArgumentException('Insert values cannot be empty');
-        }
-
-        $sql = $this->grammar->compileInsert($this->table, $values);
-        $bindings = $this->prepareInsertBindings($values);
-
-        $result = $this->executeQuery($sql, ConnectionType::WRITE, $bindings);
-
-        return $result->getAffectedRows() > 0;
-    }
-
-    /**
-     * INSERT und holt letzte ID
-     */
-    public function insertGetId(array $values): int
-    {
-        if ($this->insert($values)) {
-            $connection = $this->connectionManager->getWriteConnection($this->connectionName);
-            return (int)$connection->lastInsertId();
-        }
-
-        throw new RuntimeException('Failed to insert record');
-    }
-
-    /**
-     * UPDATE Query
-     */
-    public function update(array $values): int
-    {
-        if (empty($values)) {
-            throw new InvalidArgumentException('Update values cannot be empty');
-        }
-
-        $sql = $this->grammar->compileUpdate($this->table, $values, $this->wheres);
-        $bindings = array_merge($values, $this->bindings);
-
-        $result = $this->executeQuery($sql, ConnectionType::WRITE, $bindings);
-
-        return $result->getAffectedRows();
-    }
-
-    /**
-     * DELETE Query
-     */
-    public function delete(): int
-    {
-        $sql = $this->grammar->compileDelete($this->table, $this->wheres);
-
-        $result = $this->executeQuery($sql, ConnectionType::WRITE, $this->bindings);
-
-        return $result->getAffectedRows();
-    }
-
-    /**
-     * TRUNCATE Table
-     */
-    public function truncate(): bool
-    {
-        $sql = "TRUNCATE TABLE " . $this->grammar->wrapTable($this->table);
-
-        $result = $this->executeQuery($sql, ConnectionType::WRITE, []);
-
-        return $result->getAffectedRows() >= 0;
-    }
-
-    /**
-     * Erstellt eindeutigen Binding-Namen
-     */
-    private function createBinding(string $column): string
-    {
-        $base = preg_replace('/[^a-zA-Z0-9_]/', '_', $column);
-        return $base . '_' . ++$this->bindingCounter;
-    }
-
-    /**
-     * Bereitet Insert-Bindings vor
-     */
-    private function prepareInsertBindings(array $values): array
-    {
-        // Multiple rows
-        if (isset($values[0]) && is_array($values[0])) {
-            $bindings = [];
-            foreach ($values as $index => $row) {
-                foreach ($row as $column => $value) {
-                    $bindings["{$column}_{$index}"] = $value;
-                }
-            }
-            return $bindings;
-        }
-
-        // Single row
-        return $values;
     }
 
     /**
@@ -545,6 +415,136 @@ class QueryBuilder
         }
 
         echo "========================\n\n";
+    }
+
+    /**
+     * LIMIT
+     */
+    public function limit(int $limit): self
+    {
+        $this->limit = $limit;
+        return $this;
+    }
+
+    /**
+     * Prüft ob Ergebnisse existieren
+     */
+    public function exists(): bool
+    {
+        return $this->count() > 0;
+    }
+
+    /**
+     * Zählt Ergebnisse
+     */
+    public function count(): int
+    {
+        $original = $this->select;
+        $this->select = ['COUNT(*) as count'];
+
+        $result = $this->get()->first();
+        $this->select = $original;
+
+        return (int)($result['count'] ?? 0);
+    }
+
+    /**
+     * Holt erste Zeile
+     */
+    public function first(): ?array
+    {
+        return $this->limit(1)->get()->first();
+    }
+
+    /**
+     * INSERT und holt letzte ID
+     */
+    public function insertGetId(array $values): int
+    {
+        if ($this->insert($values)) {
+            $connection = $this->connectionManager->getWriteConnection($this->connectionName);
+            return (int)$connection->lastInsertId();
+        }
+
+        throw new RuntimeException('Failed to insert record');
+    }
+
+    /**
+     * INSERT Query
+     */
+    public function insert(array $values): bool
+    {
+        if (empty($values)) {
+            throw new InvalidArgumentException('Insert values cannot be empty');
+        }
+
+        $sql = $this->grammar->compileInsert($this->table, $values);
+        $bindings = $this->prepareInsertBindings($values);
+
+        $result = $this->executeQuery($sql, ConnectionType::WRITE, $bindings);
+
+        return $result->getAffectedRows() > 0;
+    }
+
+    /**
+     * Bereitet Insert-Bindings vor
+     */
+    private function prepareInsertBindings(array $values): array
+    {
+        // Multiple rows
+        if (isset($values[0]) && is_array($values[0])) {
+            $bindings = [];
+            foreach ($values as $index => $row) {
+                foreach ($row as $column => $value) {
+                    $bindings["{$column}_{$index}"] = $value;
+                }
+            }
+            return $bindings;
+        }
+
+        // Single row
+        return $values;
+    }
+
+    /**
+     * UPDATE Query
+     */
+    public function update(array $values): int
+    {
+        if (empty($values)) {
+            throw new InvalidArgumentException('Update values cannot be empty');
+        }
+
+        $sql = $this->grammar->compileUpdate($this->table, $values, $this->wheres);
+        $bindings = array_merge($values, $this->bindings);
+
+        $result = $this->executeQuery($sql, ConnectionType::WRITE, $bindings);
+
+        return $result->getAffectedRows();
+    }
+
+    /**
+     * DELETE Query
+     */
+    public function delete(): int
+    {
+        $sql = $this->grammar->compileDelete($this->table, $this->wheres);
+
+        $result = $this->executeQuery($sql, ConnectionType::WRITE, $this->bindings);
+
+        return $result->getAffectedRows();
+    }
+
+    /**
+     * TRUNCATE Table
+     */
+    public function truncate(): bool
+    {
+        $sql = "TRUNCATE TABLE " . $this->grammar->wrapTable($this->table);
+
+        $result = $this->executeQuery($sql, ConnectionType::WRITE, []);
+
+        return $result->getAffectedRows() >= 0;
     }
 
     /**

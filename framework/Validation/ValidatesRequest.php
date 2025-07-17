@@ -18,22 +18,6 @@ use Framework\Http\ResponseFactory;
 trait ValidatesRequest
 {
     /**
-     * Validate request data or fail with exception
-     */
-    protected function validateOrFail(Request $request, array $rules, ?string $connectionName = null): array
-    {
-        $data = $request->all();
-        $customMessages = $this->messages();
-
-        if (property_exists($this, 'app') && $this->app instanceof Application) {
-            // KORRIGIERT: Korrekte Parameterreihenfolge für Application::validateOrFail
-            return $this->app->validateOrFail($data, $rules, $customMessages, $connectionName);
-        }
-
-        throw new \RuntimeException('Application instance not found. Ensure $app property exists in Action.');
-    }
-
-    /**
      * Validate request and return Response on failure
      */
     protected function validateWithResponse(Request $request, array $rules, ?string $connectionName = null): Validator|Response
@@ -61,6 +45,14 @@ trait ValidatesRequest
         }
 
         throw new \RuntimeException('Application instance not found. Ensure $app property exists in Action.');
+    }
+
+    /**
+     * Override this method to provide custom validation messages
+     */
+    protected function messages(): array
+    {
+        return [];
     }
 
     /**
@@ -108,14 +100,6 @@ trait ValidatesRequest
     }
 
     /**
-     * Override this method to provide custom validation messages
-     */
-    protected function messages(): array
-    {
-        return [];
-    }
-
-    /**
      * Validate specific fields from request
      */
     protected function validateFields(Request $request, array $fields, array $rules, ?string $connectionName = null): array
@@ -131,21 +115,16 @@ trait ValidatesRequest
     }
 
     /**
-     * KORRIGIERT: Validate file uploads - verwendet getFiles() statt files()
+     * Validate request data or fail with exception
      */
-    protected function validateFile(Request $request, string $field, array $rules): array
+    protected function validateOrFail(Request $request, array $rules, ?string $connectionName = null): array
     {
-        $files = $request->getFiles();
-
-        if (!isset($files[$field])) {
-            throw new \InvalidArgumentException("File field '{$field}' not found in request");
-        }
-
-        $fileData = [$field => $files[$field]];
+        $data = $request->all();
         $customMessages = $this->messages();
 
         if (property_exists($this, 'app') && $this->app instanceof Application) {
-            return $this->app->validateOrFail($fileData, $rules, $customMessages);
+            // KORRIGIERT: Korrekte Parameterreihenfolge für Application::validateOrFail
+            return $this->app->validateOrFail($data, $rules, $customMessages, $connectionName);
         }
 
         throw new \RuntimeException('Application instance not found. Ensure $app property exists in Action.');
@@ -197,6 +176,27 @@ trait ValidatesRequest
         }
 
         return $this->validateFile($request, $field, [$field => $rules]);
+    }
+
+    /**
+     * KORRIGIERT: Validate file uploads - verwendet getFiles() statt files()
+     */
+    protected function validateFile(Request $request, string $field, array $rules): array
+    {
+        $files = $request->getFiles();
+
+        if (!isset($files[$field])) {
+            throw new \InvalidArgumentException("File field '{$field}' not found in request");
+        }
+
+        $fileData = [$field => $files[$field]];
+        $customMessages = $this->messages();
+
+        if (property_exists($this, 'app') && $this->app instanceof Application) {
+            return $this->app->validateOrFail($fileData, $rules, $customMessages);
+        }
+
+        throw new \RuntimeException('Application instance not found. Ensure $app property exists in Action.');
     }
 
     /**

@@ -1,17 +1,21 @@
 <?php
+
 namespace Framework\Templating\Parsing;
 
-use Framework\Templating\Tokens\{TemplateToken, TokenFactory, ControlToken, TextToken, VariableToken};
+use Framework\Templating\Tokens\{ControlToken};
+
 /**
  * TemplateParser - Koordiniert das Parsing und erstellt ParsedTemplate
  */
 class TemplateParser
 {
     public function __construct(
-        private readonly TemplateTokenizer $tokenizer,
-        private readonly ControlFlowParser $controlFlowParser,
+        private readonly TemplateTokenizer    $tokenizer,
+        private readonly ControlFlowParser    $controlFlowParser,
         private readonly TemplatePathResolver $pathResolver
-    ) {}
+    )
+    {
+    }
 
     public function parse(string $content, string $templatePath): ParsedTemplate
     {

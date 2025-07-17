@@ -11,10 +11,56 @@ class ControlToken implements TemplateToken
     public function __construct(
         private readonly string $command,
         private readonly string $expression = '',
-        private readonly array $children = [],
-        private readonly array $elseChildren = [],
-        private readonly array $metadata = []
-    ) {}
+        private readonly array  $children = [],
+        private readonly array  $elseChildren = [],
+        private readonly array  $metadata = []
+    )
+    {
+    }
+
+    public static function fromArray(array $data): self
+    {
+        return new self(
+            $data['command'],
+            $data['expression'] ?? '',
+            array_map(fn($child) => TokenFactory::fromArray($child), $data['children'] ?? []),
+            array_map(fn($child) => TokenFactory::fromArray($child), $data['else_children'] ?? []),
+            $data['metadata'] ?? []
+        );
+    }
+
+    public static function parse(string $expression): self
+    {
+        $parts = explode(' ', $expression, 2);
+        $command = $parts[0];
+        $args = $parts[1] ?? '';
+
+        $metadata = [];
+
+        // Parse spezifische Commands
+        switch ($command) {
+            case 'if':
+                $metadata['condition'] = $args;
+                break;
+            case 'for':
+                if (preg_match('/^(.+?)\s+in\s+(.+)$/', $args, $matches)) {
+                    $metadata['variable'] = trim($matches[1]);
+                    $metadata['iterable'] = trim($matches[2]);
+                }
+                break;
+            case 'block':
+                $metadata['block_name'] = trim($args);
+                break;
+            case 'extends':
+                $metadata['parent_template'] = trim($args, '\'"');
+                break;
+            case 'include':
+                $metadata['template'] = trim($args, '\'"');
+                break;
+        }
+
+        return new self($command, $args, [], [], $metadata);
+    }
 
     public function getType(): string
     {
@@ -71,49 +117,5 @@ class ControlToken implements TemplateToken
             'else_children' => array_map(fn($child) => $child->toArray(), $this->elseChildren),
             'metadata' => $this->metadata
         ];
-    }
-
-    public static function fromArray(array $data): self
-    {
-        return new self(
-            $data['command'],
-            $data['expression'] ?? '',
-            array_map(fn($child) => TokenFactory::fromArray($child), $data['children'] ?? []),
-            array_map(fn($child) => TokenFactory::fromArray($child), $data['else_children'] ?? []),
-            $data['metadata'] ?? []
-        );
-    }
-
-    public static function parse(string $expression): self
-    {
-        $parts = explode(' ', $expression, 2);
-        $command = $parts[0];
-        $args = $parts[1] ?? '';
-
-        $metadata = [];
-
-        // Parse spezifische Commands
-        switch ($command) {
-            case 'if':
-                $metadata['condition'] = $args;
-                break;
-            case 'for':
-                if (preg_match('/^(.+?)\s+in\s+(.+)$/', $args, $matches)) {
-                    $metadata['variable'] = trim($matches[1]);
-                    $metadata['iterable'] = trim($matches[2]);
-                }
-                break;
-            case 'block':
-                $metadata['block_name'] = trim($args);
-                break;
-            case 'extends':
-                $metadata['parent_template'] = trim($args, '\'"');
-                break;
-            case 'include':
-                $metadata['template'] = trim($args, '\'"');
-                break;
-        }
-
-        return new self($command, $args, [], [], $metadata);
     }
 }

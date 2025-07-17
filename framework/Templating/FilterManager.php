@@ -4,14 +4,14 @@ declare(strict_types=1);
 
 namespace Framework\Templating;
 
-use Framework\Templating\Filters\FilterRegistry;
-use Framework\Templating\Filters\FilterExecutor;
-use Framework\Templating\Filters\TextFilters;
-use Framework\Templating\Filters\NumberFilters;
-use Framework\Templating\Filters\DateFilters;
-use Framework\Templating\Filters\UtilityFilters;
-use Framework\Templating\Filters\TranslationFilters;
 use Framework\Localization\Translator;
+use Framework\Templating\Filters\DateFilters;
+use Framework\Templating\Filters\FilterExecutor;
+use Framework\Templating\Filters\FilterRegistry;
+use Framework\Templating\Filters\NumberFilters;
+use Framework\Templating\Filters\TextFilters;
+use Framework\Templating\Filters\TranslationFilters;
+use Framework\Templating\Filters\UtilityFilters;
 
 /**
  * FilterManager - Schlanke Facade für Filter-System
@@ -31,7 +31,8 @@ class FilterManager
 
     public function __construct(
         private readonly ?Translator $translator = null
-    ) {
+    )
+    {
         $this->registry = new FilterRegistry();
         $this->executor = new FilterExecutor($this->registry);
 
@@ -147,6 +148,14 @@ class FilterManager
     }
 
     /**
+     * Registriert Custom Filter
+     */
+    public function register(string $name, callable $filter): void
+    {
+        $this->registry->register($name, $filter);
+    }
+
+    /**
      * Führt Filter aus (Hauptschnittstelle)
      */
     public function apply(string $filterName, mixed $value, array $parameters = []): mixed
@@ -160,14 +169,6 @@ class FilterManager
     public function has(string $filterName): bool
     {
         return $this->executor->hasFilter($filterName);
-    }
-
-    /**
-     * Registriert Custom Filter
-     */
-    public function register(string $name, callable $filter): void
-    {
-        $this->registry->register($name, $filter);
     }
 
     /**

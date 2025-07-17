@@ -226,11 +226,6 @@ readonly class Request
         return $this->uri;
     }
 
-    public function getPath(): string
-    {
-        return parse_url($this->uri, PHP_URL_PATH) ?? '/';
-    }
-
     public function getQuery(): array
     {
         return $this->query;
@@ -242,19 +237,19 @@ readonly class Request
     }
 
     /**
-     * Holt Files-Daten
-     */
-    public function getFiles(): array
-    {
-        return $this->files;
-    }
-
-    /**
      * Alias für getFiles() für bessere API-Konsistenz
      */
     public function files(): array
     {
         return $this->getFiles();
+    }
+
+    /**
+     * Holt Files-Daten
+     */
+    public function getFiles(): array
+    {
+        return $this->files;
     }
 
     /**
@@ -316,11 +311,6 @@ readonly class Request
         return $this->pathParameters[$name] ?? $default;
     }
 
-    public function getHeader(string $name): ?string
-    {
-        return $this->headers[strtolower($name)] ?? null;
-    }
-
     public function hasHeader(string $name): bool
     {
         return isset($this->headers[strtolower($name)]);
@@ -331,35 +321,15 @@ readonly class Request
         return $this->getHeader('user-agent');
     }
 
-    public function getContentType(): ?string
+    public function getHeader(string $name): ?string
     {
-        return $this->getHeader('content-type');
+        return $this->headers[strtolower($name)] ?? null;
     }
 
     public function getContentLength(): ?int
     {
         $length = $this->getHeader('content-length');
-        return $length !== null ? (int) $length : null;
-    }
-
-    // ===================================================================
-    // Request Data Access Methods
-    // ===================================================================
-
-    /**
-     * Holt Input-Wert aus Query oder Post
-     */
-    public function input(string $key, mixed $default = null): mixed
-    {
-        return $this->query[$key] ?? $this->post[$key] ?? $this->pathParameters[$key] ?? $default;
-    }
-
-    /**
-     * Holt alle Input-Daten
-     */
-    public function all(): array
-    {
-        return array_merge($this->query, $this->post, $this->pathParameters);
+        return $length !== null ? (int)$length : null;
     }
 
     /**
@@ -372,12 +342,32 @@ readonly class Request
     }
 
     /**
+     * Holt alle Input-Daten
+     */
+    public function all(): array
+    {
+        return array_merge($this->query, $this->post, $this->pathParameters);
+    }
+
+    // ===================================================================
+    // Request Data Access Methods
+    // ===================================================================
+
+    /**
      * Holt alle Input-Daten außer spezifischen
      */
     public function except(array $keys): array
     {
         $data = $this->all();
         return array_diff_key($data, array_flip($keys));
+    }
+
+    /**
+     * Prüft ob Input-Feld existiert und nicht leer ist
+     */
+    public function filled(string $key): bool
+    {
+        return $this->has($key) && !empty($this->input($key));
     }
 
     /**
@@ -389,16 +379,12 @@ readonly class Request
     }
 
     /**
-     * Prüft ob Input-Feld existiert und nicht leer ist
+     * Holt Input-Wert aus Query oder Post
      */
-    public function filled(string $key): bool
+    public function input(string $key, mixed $default = null): mixed
     {
-        return $this->has($key) && !empty($this->input($key));
+        return $this->query[$key] ?? $this->post[$key] ?? $this->pathParameters[$key] ?? $default;
     }
-
-    // ===================================================================
-    // Request Type Detection
-    // ===================================================================
 
     /**
      * Prüft ob Request JSON erwartet
@@ -417,6 +403,10 @@ readonly class Request
         return $accept && str_contains($accept, 'application/json');
     }
 
+    // ===================================================================
+    // Request Type Detection
+    // ===================================================================
+
     /**
      * Prüft ob Request JSON ist
      */
@@ -424,6 +414,11 @@ readonly class Request
     {
         $contentType = $this->getContentType();
         return $contentType && str_contains($contentType, 'application/json');
+    }
+
+    public function getContentType(): ?string
+    {
+        return $this->getHeader('content-type');
     }
 
     /**
@@ -458,6 +453,15 @@ readonly class Request
         return $this->method === HttpMethod::GET;
     }
 
+    /**
+     * Holt JSON-Feld
+     */
+    public function jsonField(string $key, mixed $default = null): mixed
+    {
+        $json = $this->json();
+        return $json[$key] ?? $default;
+    }
+
     // ===================================================================
     // JSON/Body Parsing
     // ===================================================================
@@ -479,19 +483,6 @@ readonly class Request
     }
 
     /**
-     * Holt JSON-Feld
-     */
-    public function jsonField(string $key, mixed $default = null): mixed
-    {
-        $json = $this->json();
-        return $json[$key] ?? $default;
-    }
-
-    // ===================================================================
-    // Debug Methods
-    // ===================================================================
-
-    /**
      * Debug-Ausgabe der Request-Daten
      */
     public function dump(): self
@@ -508,5 +499,14 @@ readonly class Request
         echo "========================\n\n";
 
         return $this;
+    }
+
+    // ===================================================================
+    // Debug Methods
+    // ===================================================================
+
+    public function getPath(): string
+    {
+        return parse_url($this->uri, PHP_URL_PATH) ?? '/';
     }
 }

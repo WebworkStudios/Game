@@ -16,11 +16,10 @@ use Framework\Security\SecurityServiceProvider;
 use Framework\Templating\TemplateEngine;
 use Framework\Templating\TemplatingServiceProvider;
 use Framework\Templating\ViewRenderer;
+use Framework\Validation\ValidationFailedException;
 use Framework\Validation\ValidationServiceProvider;
 use Framework\Validation\Validator;
 use Framework\Validation\ValidatorFactory;
-use Framework\Validation\ValidationFailedException;
-use Framework\Validation\MessageBag;
 use RuntimeException;
 use Throwable;
 
@@ -170,6 +169,32 @@ class Application
     }
 
     /**
+     * Register Instance
+     */
+    public function instance(string $abstract, mixed $instance): self
+    {
+        $this->container->instance($abstract, $instance);
+        return $this;
+    }
+
+    /**
+     * Register Singleton Service
+     */
+    public function singleton(string $abstract, callable|string|null $concrete = null): self
+    {
+        $this->container->singleton($abstract, $concrete);
+        return $this;
+    }
+
+    /**
+     * Generic Service Access
+     */
+    public function get(string $abstract): mixed
+    {
+        return $this->container->get($abstract);
+    }
+
+    /**
      * Registriert Security Services
      */
     private function registerSecurityServices(): void
@@ -226,56 +251,6 @@ class Application
     }
 
     /**
-     * Handles eingehende HTTP-Requests
-     */
-    public function handleRequest(Request $request): Response
-    {
-        try {
-            return $this->router->handle($request);
-        } catch (Throwable $e) {
-            return $this->handleException($e, $request);
-        }
-    }
-
-    /**
-     * Exception-Handler
-     */
-    private function handleException(Throwable $e, Request $request): Response
-    {
-        if ($this->errorHandler) {
-            $handler = $this->errorHandler;
-            $customResponse = $handler($e, $request);
-
-            if ($customResponse instanceof Response) {
-                return $customResponse;
-            }
-        }
-
-        // Default Error Response
-        $message = $this->debug ? $e->getMessage() : 'Internal Server Error';
-
-        return new Response(HttpStatus::INTERNAL_SERVER_ERROR, [], $message);
-    }
-
-    /**
-     * Register Instance
-     */
-    public function instance(string $abstract, mixed $instance): self
-    {
-        $this->container->instance($abstract, $instance);
-        return $this;
-    }
-
-    /**
-     * Register Singleton Service
-     */
-    public function singleton(string $abstract, callable|string|null $concrete = null): self
-    {
-        $this->container->singleton($abstract, $concrete);
-        return $this;
-    }
-
-    /**
      * Register Transient Service
      */
     public function transient(string $abstract, callable|string|null $concrete = null): self
@@ -291,14 +266,6 @@ class Application
     {
         $this->container->bind($interface, $implementation);
         return $this;
-    }
-
-    /**
-     * Generic Service Access
-     */
-    public function get(string $abstract): mixed
-    {
-        return $this->container->get($abstract);
     }
 
     /**
@@ -334,20 +301,20 @@ class Application
     }
 
     /**
+     * Get debug mode
+     */
+    public function isDebug(): bool
+    {
+        return $this->debug;
+    }
+
+    /**
      * Set debug mode
      */
     public function setDebug(bool $debug): self
     {
         $this->debug = $debug;
         return $this;
-    }
-
-    /**
-     * Get debug mode
-     */
-    public function isDebug(): bool
-    {
-        return $this->debug;
     }
 
     /**
@@ -381,15 +348,6 @@ class Application
     }
 
     /**
-     * Validate data with custom messages support
-     */
-    public function validate(array $data, array $rules, array $customMessages = [], ?string $connectionName = null): Validator
-    {
-        $validatorFactory = $this->container->get(ValidatorFactory::class);
-        return $validatorFactory->make($data, $rules, $customMessages, $connectionName);
-    }
-
-    /**
      * Validate data and throw exception on failure with custom messages
      */
     public function validateOrFail(array $data, array $rules, array $customMessages = [], ?string $connectionName = null): array
@@ -401,6 +359,15 @@ class Application
         }
 
         return $validator->validated();
+    }
+
+    /**
+     * Validate data with custom messages support
+     */
+    public function validate(array $data, array $rules, array $customMessages = [], ?string $connectionName = null): Validator
+    {
+        $validatorFactory = $this->container->get(ValidatorFactory::class);
+        return $validatorFactory->make($data, $rules, $customMessages, $connectionName);
     }
 
     /**
@@ -424,5 +391,37 @@ class Application
         $request = Request::fromGlobals();
         $response = $this->handleRequest($request);
         $response->send();
+    }
+
+    /**
+     * Handles eingehende HTTP-Requests
+     */
+    public function handleRequest(Request $request): Response
+    {
+        try {
+            return $this->router->handle($request);
+        } catch (Throwable $e) {
+            return $this->handleException($e, $request);
+        }
+    }
+
+    /**
+     * Exception-Handler
+     */
+    private function handleException(Throwable $e, Request $request): Response
+    {
+        if ($this->errorHandler) {
+            $handler = $this->errorHandler;
+            $customResponse = $handler($e, $request);
+
+            if ($customResponse instanceof Response) {
+                return $customResponse;
+            }
+        }
+
+        // Default Error Response
+        $message = $this->debug ? $e->getMessage() : 'Internal Server Error';
+
+        return new Response(HttpStatus::INTERNAL_SERVER_ERROR, [], $message);
     }
 }

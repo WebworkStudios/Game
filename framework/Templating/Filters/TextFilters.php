@@ -107,6 +107,14 @@ class TextFilters
     }
 
     /**
+     * Alias für escape mit html-Strategie
+     */
+    public static function e(mixed $value): string
+    {
+        return self::escape($value, 'html');
+    }
+
+    /**
      * Explizites HTML-Escaping mit verschiedenen Strategien
      *
      * Verfügbare Strategien: html, attr, js, css, url
@@ -142,14 +150,6 @@ class TextFilters
                 true
             ),
         };
-    }
-
-    /**
-     * Alias für escape mit html-Strategie
-     */
-    public static function e(mixed $value): string
-    {
-        return self::escape($value, 'html');
     }
 
     /**

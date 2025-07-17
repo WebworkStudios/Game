@@ -75,6 +75,18 @@ class Session
     // PUBLIC API - Session Lifecycle
     // =============================================================================
 
+    public function regenerate(bool $deleteOldSession = true): bool
+    {
+        $this->start();
+
+        if (!session_regenerate_id($deleteOldSession)) {
+            return false;
+        }
+
+        $this->sessionId = session_id();
+        return true;
+    }
+
     public function start(): bool
     {
         if ($this->started) {
@@ -92,18 +104,6 @@ class Session
         }
 
         $this->started = true;
-        $this->sessionId = session_id();
-        return true;
-    }
-
-    public function regenerate(bool $deleteOldSession = true): bool
-    {
-        $this->start();
-
-        if (!session_regenerate_id($deleteOldSession)) {
-            return false;
-        }
-
         $this->sessionId = session_id();
         return true;
     }
@@ -179,10 +179,22 @@ class Session
     // PUBLIC API - Framework Internal Data
     // =============================================================================
 
+    public function flash(string $key, mixed $value): void
+    {
+        $this->setFramework(self::FLASH_NAMESPACE . '.' . $key, $value);
+    }
+
     public function setFramework(string $key, mixed $value): void
     {
         $this->start();
         $_SESSION[self::FRAMEWORK_NAMESPACE][$key] = $value;
+    }
+
+    public function getFlash(string $key, mixed $default = null): mixed
+    {
+        $value = $this->getFramework(self::FLASH_NAMESPACE . '.' . $key, $default);
+        $this->removeFramework(self::FLASH_NAMESPACE . '.' . $key);
+        return $value;
     }
 
     public function getFramework(string $key, mixed $default = null): mixed
@@ -191,32 +203,14 @@ class Session
         return $_SESSION[self::FRAMEWORK_NAMESPACE][$key] ?? $default;
     }
 
-    public function hasFramework(string $key): bool
-    {
-        $this->start();
-        return isset($_SESSION[self::FRAMEWORK_NAMESPACE][$key]);
-    }
+    // =============================================================================
+    // PUBLIC API - Flash Messages
+    // =============================================================================
 
     public function removeFramework(string $key): void
     {
         $this->start();
         unset($_SESSION[self::FRAMEWORK_NAMESPACE][$key]);
-    }
-
-    // =============================================================================
-    // PUBLIC API - Flash Messages
-    // =============================================================================
-
-    public function flash(string $key, mixed $value): void
-    {
-        $this->setFramework(self::FLASH_NAMESPACE . '.' . $key, $value);
-    }
-
-    public function getFlash(string $key, mixed $default = null): mixed
-    {
-        $value = $this->getFramework(self::FLASH_NAMESPACE . '.' . $key, $default);
-        $this->removeFramework(self::FLASH_NAMESPACE . '.' . $key);
-        return $value;
     }
 
     public function getFlashBag(): array
@@ -229,6 +223,12 @@ class Session
     public function hasFlash(string $key): bool
     {
         return $this->hasFramework(self::FLASH_NAMESPACE . '.' . $key);
+    }
+
+    public function hasFramework(string $key): bool
+    {
+        $this->start();
+        return isset($_SESSION[self::FRAMEWORK_NAMESPACE][$key]);
     }
 
     // =============================================================================

@@ -35,14 +35,6 @@ class QueryResult implements Iterator, Countable
     }
 
     /**
-     * Holt erste Zeile oder null
-     */
-    public function first(): ?array
-    {
-        return $this->data[0] ?? null;
-    }
-
-    /**
      * Holt erste Zeile oder wirft Exception
      */
     public function firstOrFail(): array
@@ -57,19 +49,19 @@ class QueryResult implements Iterator, Countable
     }
 
     /**
+     * Holt erste Zeile oder null
+     */
+    public function first(): ?array
+    {
+        return $this->data[0] ?? null;
+    }
+
+    /**
      * Holt letzte Zeile oder null
      */
     public function last(): ?array
     {
         return empty($this->data) ? null : end($this->data);
-    }
-
-    /**
-     * Holt Anzahl betroffener Zeilen (für INSERT/UPDATE/DELETE)
-     */
-    public function getAffectedRows(): int
-    {
-        return $this->statement->rowCount();
     }
 
     /**
@@ -166,19 +158,19 @@ class QueryResult implements Iterator, Countable
     }
 
     /**
-     * Prüft ob Ergebnisse leer sind
-     */
-    public function isEmpty(): bool
-    {
-        return empty($this->data);
-    }
-
-    /**
      * Prüft ob Ergebnisse nicht leer sind
      */
     public function isNotEmpty(): bool
     {
         return !$this->isEmpty();
+    }
+
+    /**
+     * Prüft ob Ergebnisse leer sind
+     */
+    public function isEmpty(): bool
+    {
+        return empty($this->data);
     }
 
     /**
@@ -196,6 +188,14 @@ class QueryResult implements Iterator, Countable
         echo "==============================\n\n";
 
         return $this;
+    }
+
+    /**
+     * Holt Anzahl betroffener Zeilen (für INSERT/UPDATE/DELETE)
+     */
+    public function getAffectedRows(): int
+    {
+        return $this->statement->rowCount();
     }
 
     /**

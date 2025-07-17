@@ -52,12 +52,6 @@ class Response
         return $this;
     }
 
-    public function withHeader(string $name, string $value): self
-    {
-        $this->headers[$name] = $value;
-        return $this;
-    }
-
     public function withoutHeader(string $name): self
     {
         unset($this->headers[$name]);
@@ -73,6 +67,17 @@ class Response
     public function withContentType(string $contentType): self
     {
         return $this->withHeader('Content-Type', $contentType);
+    }
+
+    public function withHeader(string $name, string $value): self
+    {
+        $this->headers[$name] = $value;
+        return $this;
+    }
+
+    public function withCookieDeleted(string $name, string $path = '/', string $domain = ''): self
+    {
+        return $this->withCookie($name, '', time() - 3600, $path, $domain);
     }
 
     public function withCookie(
@@ -100,11 +105,6 @@ class Response
         ]);
 
         return $this;
-    }
-
-    public function withCookieDeleted(string $name, string $path = '/', string $domain = ''): self
-    {
-        return $this->withCookie($name, '', time() - 3600, $path, $domain);
     }
 
     // ===================================================================

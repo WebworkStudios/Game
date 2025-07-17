@@ -416,7 +416,7 @@ class Router
 
         // Ersetze Parameter im Pfad
         foreach ($parameters as $key => $value) {
-            $path = str_replace('{' . $key . '}', (string) $value, $path);
+            $path = str_replace('{' . $key . '}', (string)$value, $path);
         }
 
         return $path;

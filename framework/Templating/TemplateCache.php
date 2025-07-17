@@ -1,4 +1,5 @@
 <?php
+
 namespace Framework\Templating;
 
 /**
@@ -11,9 +12,26 @@ class TemplateCache
 
     public function __construct(
         private readonly string $cacheDir,
-        private readonly bool $enabled = true
-    ) {
+        private readonly bool   $enabled = true
+    )
+    {
         $this->ensureCacheDirectory();
+    }
+
+    private function ensureCacheDirectory(): void
+    {
+        if (!is_dir($this->cacheDir)) {
+            mkdir($this->cacheDir, 0755, true);
+        }
+
+        // Subdirectories
+        $subdirs = ['templates', 'fragments'];
+        foreach ($subdirs as $subdir) {
+            $path = $this->cacheDir . '/' . $subdir;
+            if (!is_dir($path)) {
+                mkdir($path, 0755, true);
+            }
+        }
     }
 
     /**
@@ -56,6 +74,12 @@ class TemplateCache
         } catch (\Throwable) {
             return false;
         }
+    }
+
+    private function getCacheFile(string $template): string
+    {
+        $hash = md5($template);
+        return $this->cacheDir . '/templates/' . $hash . self::CACHE_EXTENSION;
     }
 
     /**
@@ -147,6 +171,12 @@ class TemplateCache
         }
     }
 
+    private function getFragmentFile(string $key): string
+    {
+        $hash = md5($key);
+        return $this->cacheDir . '/fragments/' . $hash . self::CACHE_EXTENSION;
+    }
+
     /**
      * Speichert Fragment-Cache
      */
@@ -180,34 +210,6 @@ class TemplateCache
     {
         $this->clearDirectory($this->cacheDir . '/templates');
         $this->clearDirectory($this->cacheDir . '/fragments');
-    }
-
-    private function ensureCacheDirectory(): void
-    {
-        if (!is_dir($this->cacheDir)) {
-            mkdir($this->cacheDir, 0755, true);
-        }
-
-        // Subdirectories
-        $subdirs = ['templates', 'fragments'];
-        foreach ($subdirs as $subdir) {
-            $path = $this->cacheDir . '/' . $subdir;
-            if (!is_dir($path)) {
-                mkdir($path, 0755, true);
-            }
-        }
-    }
-
-    private function getCacheFile(string $template): string
-    {
-        $hash = md5($template);
-        return $this->cacheDir . '/templates/' . $hash . self::CACHE_EXTENSION;
-    }
-
-    private function getFragmentFile(string $key): string
-    {
-        $hash = md5($key);
-        return $this->cacheDir . '/fragments/' . $hash . self::CACHE_EXTENSION;
     }
 
     private function clearDirectory(string $dir): void

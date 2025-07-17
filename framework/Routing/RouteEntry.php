@@ -33,14 +33,6 @@ readonly class RouteEntry
     }
 
     /**
-     * Prüft ob HTTP-Methode unterstützt wird
-     */
-    public function supportsMethod(HttpMethod $method): bool
-    {
-        return in_array($method, $this->methods, true);
-    }
-
-    /**
      * Matched Request-Pfad gegen Route-Pattern
      */
     public function matches(string $path): array|false
@@ -64,7 +56,7 @@ readonly class RouteEntry
         // Parameter einsetzen
         $url = $urlTemplate;
         foreach ($parameters as $key => $value) {
-            $url = str_replace('{' . $key . '}', (string) $value, $url);
+            $url = str_replace('{' . $key . '}', (string)$value, $url);
         }
 
         // Prüfe ob alle Parameter ersetzt wurden
@@ -146,6 +138,14 @@ readonly class RouteEntry
     }
 
     /**
+     * Prüft ob HTTP-Methode unterstützt wird
+     */
+    public function supportsMethod(HttpMethod $method): bool
+    {
+        return in_array($method, $this->methods, true);
+    }
+
+    /**
      * Prüft ob Route POST-Methode unterstützt
      */
     public function supportsPost(): bool
@@ -167,14 +167,6 @@ readonly class RouteEntry
     public function supportsDelete(): bool
     {
         return $this->supportsMethod(HttpMethod::DELETE);
-    }
-
-    /**
-     * Holt alle unterstützten HTTP-Methoden als Strings
-     */
-    public function getMethodStrings(): array
-    {
-        return array_map(fn(HttpMethod $method) => $method->value, $this->methods);
     }
 
     /**
@@ -228,6 +220,14 @@ readonly class RouteEntry
         $methods = implode('|', $this->getMethodStrings());
         $name = $this->name ? " ({$this->name})" : '';
         return "[{$methods}] {$this->pattern} -> {$this->action}{$name}";
+    }
+
+    /**
+     * Holt alle unterstützten HTTP-Methoden als Strings
+     */
+    public function getMethodStrings(): array
+    {
+        return array_map(fn(HttpMethod $method) => $method->value, $this->methods);
     }
 
     /**

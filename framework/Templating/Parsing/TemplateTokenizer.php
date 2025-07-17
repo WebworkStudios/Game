@@ -1,7 +1,8 @@
 <?php
+
 namespace Framework\Templating\Parsing;
 
-use Framework\Templating\Tokens\{TemplateToken, TokenFactory, ControlToken, TextToken, VariableToken};
+use Framework\Templating\Tokens\{TemplateToken, TokenFactory};
 
 /**
  * TemplateTokenizer - Konvertiert Template-String zu Token-Array

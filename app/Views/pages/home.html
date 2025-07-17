@@ -69,13 +69,15 @@
 
             <div class="match-prediction">
                 <div class="prediction-bar">
-                    <div class="prediction-segment home" style="width: {{ season_stats.next_match.prediction.home_win }}%">
+                    <div class="prediction-segment home"
+                         style="width: {{ season_stats.next_match.prediction.home_win }}%">
                         {{ season_stats.next_match.prediction.home_win }}%
                     </div>
                     <div class="prediction-segment draw" style="width: {{ season_stats.next_match.prediction.draw }}%">
                         {{ season_stats.next_match.prediction.draw }}%
                     </div>
-                    <div class="prediction-segment away" style="width: {{ season_stats.next_match.prediction.away_win }}%">
+                    <div class="prediction-segment away"
+                         style="width: {{ season_stats.next_match.prediction.away_win }}%">
                         {{ season_stats.next_match.prediction.away_win }}%
                     </div>
                 </div>
@@ -103,7 +105,7 @@
             </tr>
             </thead>
             <tbody>
-            {% for league_table as team %}
+            {% for team in league_table %}
             <tr class="{% if team.team == user.team.name %}current-team{% endif %}">
                 <td>{{ team.position }}</td>
                 <td>{{ team.team }}</td>
@@ -124,7 +126,7 @@
         <h2>Recent Results</h2>
         {% if season_stats.last_results %}
         <div class="results-grid">
-            {% for season_stats.last_results as result %}
+            {% for result in season_stats.last_results %}
             <div class="result-card">
                 <div class="result-opponent">
                     vs {{ result.opponent }}
@@ -138,7 +140,7 @@
                 <div class="result-date">{{ result.date }}</div>
                 {% if result.scorers %}
                 <div class="result-scorers">
-                    {% for result.scorers as scorer %}
+                    {% for scorer in result.scorers %}
                     <span class="scorer">{{ scorer }}</span>{% if not loop.last %}, {% endif %}
                     {% endfor %}
                 </div>
@@ -158,34 +160,33 @@
             <div class="performance-card">
                 <h3>Top Scorer</h3>
                 <div class="player-info">
-                    <span class="player-name">{{ team_performance.top_scorer.name }}</span>
-                    <span class="player-stats">{{ team_performance.top_scorer.goals }} goals, {{ team_performance.top_scorer.assists }} assists</span>
+                    <span class="player-name">Lionel Messi</span>
+                    <span class="player-stats">12 goals, 8 assists</span>
                 </div>
             </div>
 
             <div class="performance-card">
                 <h3>Best Player</h3>
                 <div class="player-info">
-                    <span class="player-name">{{ team_performance.best_player.name }}</span>
-                    <span class="player-stats">{{ team_performance.best_player.rating }} rating ({{ team_performance.best_player.appearances }} apps)</span>
+                    <span class="player-name">Pedri</span>
+                    <span class="player-stats">8.2 rating (18 apps)</span>
                 </div>
             </div>
 
             <div class="performance-card">
                 <h3>Injuries</h3>
-                {% if team_performance.injuries %}
                 <div class="injury-list">
-                    {% for team_performance.injuries as injury %}
                     <div class="injury-item">
-                        <span class="player-name">{{ injury.player }}</span>
-                        <span class="injury-type">{{ injury.injury }}</span>
-                        <span class="return-date">Back: {{ injury.return_date }}</span>
+                        <span class="player-name">Ansu Fati</span>
+                        <span class="injury-type">Hamstring</span>
+                        <span class="return-date">Back: 2025-07-25</span>
                     </div>
-                    {% endfor %}
+                    <div class="injury-item">
+                        <span class="player-name">Ousmane Dembélé</span>
+                        <span class="injury-type">Ankle</span>
+                        <span class="return-date">Back: 2025-07-22</span>
+                    </div>
                 </div>
-                {% else %}
-                <p>No current injuries 🎉</p>
-                {% endif %}
             </div>
         </div>
     </div>
@@ -193,39 +194,50 @@
     <!-- Notifications -->
     <div class="notifications-section">
         <h2>Notifications</h2>
-        {% if notifications %}
         <div class="notifications-list">
-            {% for notifications as notification %}
-            <div class="notification notification-{{ notification.type }} priority-{{ notification.priority }}">
-                <div class="notification-icon">{{ notification.icon }}</div>
+            <div class="notification priority-high">
+                <div class="notification-icon">⚠️</div>
                 <div class="notification-content">
-                    <div class="notification-message">{{ notification.message }}</div>
-                    <div class="notification-time">{{ notification.time }}</div>
+                    <div class="notification-message">Contract of Sergio Busquets expires in 6 months</div>
+                    <div class="notification-time">2 hours ago</div>
                 </div>
             </div>
-            {% endfor %}
+            <div class="notification priority-medium">
+                <div class="notification-icon">💰</div>
+                <div class="notification-content">
+                    <div class="notification-message">New transfer offer for Pedri: €80M from Manchester City</div>
+                    <div class="notification-time">1 day ago</div>
+                </div>
+            </div>
         </div>
-        {% else %}
-        <p>No notifications.</p>
-        {% endif %}
     </div>
 
-    <!-- Framework Features Demo -->
+    <!-- Framework Features -->
     <div class="framework-features-section">
         <h2>Framework Features</h2>
         <div class="features-grid">
-            {% for framework_features as feature %}
-            <div class="feature-card feature-{{ feature.status }}">
-                <div class="feature-icon">{{ feature.icon }}</div>
+            <div class="feature-card feature-active">
+                <div class="feature-icon">🚀</div>
                 <div class="feature-content">
-                    <h3>{{ feature.title }}</h3>
-                    <p>{{ feature.description }}</p>
-                    {% if feature.performance_gain %}
-                    <div class="performance-gain">+{{ feature.performance_gain }}% faster</div>
-                    {% endif %}
+                    <h3>High Performance</h3>
+                    <p>Optimized routing and caching system</p>
+                    <div class="performance-gain">+300% faster than Laravel</div>
                 </div>
             </div>
-            {% endfor %}
+            <div class="feature-card">
+                <div class="feature-icon">🎯</div>
+                <div class="feature-content">
+                    <h3>Attribute Routing</h3>
+                    <p>Clean, modern PHP 8.4 attributes</p>
+                </div>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">🎨</div>
+                <div class="feature-content">
+                    <h3>Custom Template Engine</h3>
+                    <p>Twig-like syntax with powerful filters</p>
+                </div>
+            </div>
         </div>
     </div>
 </div>

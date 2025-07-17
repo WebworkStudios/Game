@@ -1,9 +1,11 @@
 <?php
+
 namespace Framework\Templating\Rendering;
 
-use Framework\Templating\Tokens\{TemplateToken, TextToken, VariableToken, ControlToken};
-use Framework\Templating\Parsing\{ParsedTemplate, TemplateParser, TemplatePathResolver};
 use Framework\Templating\FilterManager;
+use Framework\Templating\Parsing\{ParsedTemplate, TemplateParser, TemplatePathResolver};
+use Framework\Templating\Tokens\{ControlToken, TemplateToken, VariableToken};
+
 /**
  * TemplateRenderer - Konvertiert ParsedTemplate zu String
  */
@@ -11,9 +13,11 @@ class TemplateRenderer
 {
     public function __construct(
         private readonly TemplateVariableResolver $variableResolver,
-        private readonly FilterManager $filterManager,
-        private readonly TemplatePathResolver $pathResolver
-    ) {}
+        private readonly FilterManager            $filterManager,
+        private readonly TemplatePathResolver     $pathResolver
+    )
+    {
+    }
 
     public function render(ParsedTemplate $template, array $data): string
     {
@@ -25,6 +29,32 @@ class TemplateRenderer
         }
 
         return $this->renderTokens($template->getTokens());
+    }
+
+    private function renderWithInheritance(ParsedTemplate $template, array $data): string
+    {
+        $parentTemplateName = $template->getParentTemplate();
+        if (!$parentTemplateName) {
+            return $this->renderTokens($template->getTokens());
+        }
+
+        // Load parent template
+        $parentPath = $this->pathResolver->resolve($parentTemplateName);
+        $parentContent = file_get_contents($parentPath);
+
+        $tokenizer = new \Framework\Templating\Parsing\TemplateTokenizer();
+        $controlFlowParser = new \Framework\Templating\Parsing\ControlFlowParser();
+        $parser = new TemplateParser($tokenizer, $controlFlowParser, $this->pathResolver);
+
+        $parentTemplate = $parser->parse($parentContent, $parentPath);
+
+        // Merge child blocks into parent
+        $mergedBlocks = array_merge($parentTemplate->getBlocks(), $template->getBlocks());
+
+        // Replace block tokens in parent with child blocks
+        $parentTokens = $this->replaceBlockTokens($parentTemplate->getTokens(), $mergedBlocks);
+
+        return $this->renderTokens($parentTokens);
     }
 
     private function renderTokens(array $tokens): string
@@ -47,7 +77,6 @@ class TemplateRenderer
             default => ''
         };
     }
-
 
     private function renderVariable(VariableToken $token): string
     {
@@ -100,18 +129,47 @@ class TemplateRenderer
         $variable = $metadata['variable'] ?? '';
         $iterable = $metadata['iterable'] ?? '';
 
+        // DEBUG: Log For-Loop-Verarbeitung
+        error_log("=== FOR LOOP DEBUG ===");
+        error_log("Variable: " . $variable);
+        error_log("Iterable: " . $iterable);
+        error_log("Metadata: " . json_encode($metadata));
+
         $items = $this->variableResolver->resolve($iterable);
+
+        error_log("Items resolved: " . (is_array($items) ? count($items) : 'not array'));
+        error_log("Items type: " . gettype($items));
+
         $output = '';
 
         if (is_iterable($items) && !empty($items)) {
+            $itemIndex = 0;
             foreach ($items as $item) {
+                error_log("Processing item {$itemIndex}: " . json_encode($item));
+
                 $this->variableResolver->pushLoopContext($variable, $item);
-                $output .= $this->renderTokens($token->getChildren());
+
+                // DEBUG: Test variable resolution
+                $testResolution = $this->variableResolver->resolve($variable);
+                error_log("Variable '{$variable}' resolves to: " . json_encode($testResolution));
+
+                $childOutput = $this->renderTokens($token->getChildren());
+                error_log("Child output: " . $childOutput);
+
+                $output .= $childOutput;
                 $this->variableResolver->popLoopContext();
+
+                $itemIndex++;
             }
         } elseif ($token->hasElse()) {
+            error_log("Using else branch");
             $output = $this->renderTokens($token->getElseChildren());
+        } else {
+            error_log("No items and no else branch");
         }
+
+        error_log("Final output: " . $output);
+        error_log("=== END FOR LOOP DEBUG ===");
 
         return $output;
     }
@@ -144,32 +202,6 @@ class TemplateRenderer
         } catch (\Throwable $e) {
             return "<!-- Include error: {$templateName} - {$e->getMessage()} -->";
         }
-    }
-
-    private function renderWithInheritance(ParsedTemplate $template, array $data): string
-    {
-        $parentTemplateName = $template->getParentTemplate();
-        if (!$parentTemplateName) {
-            return $this->renderTokens($template->getTokens());
-        }
-
-        // Load parent template
-        $parentPath = $this->pathResolver->resolve($parentTemplateName);
-        $parentContent = file_get_contents($parentPath);
-
-        $tokenizer = new \Framework\Templating\Parsing\TemplateTokenizer();
-        $controlFlowParser = new \Framework\Templating\Parsing\ControlFlowParser();
-        $parser = new TemplateParser($tokenizer, $controlFlowParser, $this->pathResolver);
-
-        $parentTemplate = $parser->parse($parentContent, $parentPath);
-
-        // Merge child blocks into parent
-        $mergedBlocks = array_merge($parentTemplate->getBlocks(), $template->getBlocks());
-
-        // Replace block tokens in parent with child blocks
-        $parentTokens = $this->replaceBlockTokens($parentTemplate->getTokens(), $mergedBlocks);
-
-        return $this->renderTokens($parentTokens);
     }
 
     private function replaceBlockTokens(array $tokens, array $blocks): array

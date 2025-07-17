@@ -16,8 +16,9 @@ class ConfigNotFoundException extends RuntimeException
     public function __construct(
         private readonly string $configPath,
         private readonly string $configName,
-        ?\Throwable $previous = null
-    ) {
+        ?\Throwable             $previous = null
+    )
+    {
         $message = $this->buildErrorMessage();
         parent::__construct($message, 0, $previous);
     }

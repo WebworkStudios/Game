@@ -24,10 +24,11 @@ class SessionMiddleware implements MiddlewareInterface
     private array $config;
 
     public function __construct(
-        private readonly Session $session,
+        private readonly Session         $session,
         private readonly SessionSecurity $sessionSecurity,
         private readonly ResponseFactory $responseFactory
-    ) {
+    )
+    {
         $this->config = $this->getDefaultConfig();
     }
 
@@ -50,14 +51,14 @@ class SessionMiddleware implements MiddlewareInterface
         ];
     }
 
-    public function setConfig(array $config): void
-    {
-        $this->config = array_merge($this->config, $config);
-    }
-
     public function getConfig(): array
     {
         return $this->config;
+    }
+
+    public function setConfig(array $config): void
+    {
+        $this->config = array_merge($this->config, $config);
     }
 
     public function handle(Request $request, callable $next): Response
@@ -100,30 +101,6 @@ class SessionMiddleware implements MiddlewareInterface
 
     // =============================================================================
     // PUBLIC API - Manual Operations
-    // =============================================================================
-
-    public function forceSessionStart(Request $request): void
-    {
-        $this->startSession($request);
-    }
-
-    public function forceSecurityValidation(Request $request): array
-    {
-        return $this->sessionSecurity->validateSession($request);
-    }
-
-    public function forceRegeneration(Request $request, string $reason = 'manual'): bool
-    {
-        try {
-            return $this->sessionSecurity->regenerateSession($reason);
-        } catch (\Throwable $e) {
-            $this->logError('Force regeneration failed', $e);
-            return false;
-        }
-    }
-
-    // =============================================================================
-    // PRIVATE METHODS - Orchestration Logic
     // =============================================================================
 
     private function shouldSkipSession(Request $request): bool
@@ -181,14 +158,25 @@ class SessionMiddleware implements MiddlewareInterface
         }
     }
 
-    private function handleSecurityActions(array $actions): void
+    // =============================================================================
+    // PRIVATE METHODS - Orchestration Logic
+    // =============================================================================
+
+    private function logSessionEvent(string $event, Request $request): void
     {
-        foreach ($actions as $action) {
-            match ($action) {
-                'regenerate_session' => $this->sessionSecurity->regenerateSession('security_interval'),
-                default => null,
-            };
-        }
+        $logData = [
+            'type' => 'session_event',
+            'event' => $event,
+            'request' => [
+                'method' => $request->getMethod()->value,
+                'path' => $request->getPath(),
+                'ip' => $request->ip(),
+            ],
+            'session_id' => $this->session->getId(),
+            'timestamp' => time(),
+        ];
+
+        error_log('SessionMiddleware: ' . json_encode($logData));
     }
 
     private function handleSecurityViolation(Request $request, array $validation): Response
@@ -206,6 +194,24 @@ class SessionMiddleware implements MiddlewareInterface
             'locked_out' => $this->handleSessionLocked($request),
             default => $this->handleGeneralSecurityViolation($request, $violation),
         };
+    }
+
+    private function logSecurityViolation(Request $request, array $violations): void
+    {
+        $logData = [
+            'type' => 'security_violation',
+            'violations' => $violations,
+            'request' => [
+                'method' => $request->getMethod()->value,
+                'path' => $request->getPath(),
+                'ip' => $request->ip(),
+                'user_agent' => $request->getHeader('User-Agent'),
+            ],
+            'session_id' => $this->session->getId(),
+            'timestamp' => time(),
+        ];
+
+        error_log('SessionMiddleware: ' . json_encode($logData));
     }
 
     private function handleSessionExpired(Request $request): Response
@@ -264,6 +270,16 @@ class SessionMiddleware implements MiddlewareInterface
         return $this->responseFactory->redirect('/auth/login?reason=security');
     }
 
+    private function handleSecurityActions(array $actions): void
+    {
+        foreach ($actions as $action) {
+            match ($action) {
+                'regenerate_session' => $this->sessionSecurity->regenerateSession('security_interval'),
+                default => null,
+            };
+        }
+    }
+
     private function cleanup(): void
     {
         // Optional cleanup logic
@@ -277,45 +293,6 @@ class SessionMiddleware implements MiddlewareInterface
                 $this->logError('Session garbage collection failed', $e);
             }
         }
-    }
-
-    // =============================================================================
-    // PRIVATE METHODS - Logging
-    // =============================================================================
-
-    private function logSecurityViolation(Request $request, array $violations): void
-    {
-        $logData = [
-            'type' => 'security_violation',
-            'violations' => $violations,
-            'request' => [
-                'method' => $request->getMethod()->value,
-                'path' => $request->getPath(),
-                'ip' => $request->ip(),
-                'user_agent' => $request->getHeader('User-Agent'),
-            ],
-            'session_id' => $this->session->getId(),
-            'timestamp' => time(),
-        ];
-
-        error_log('SessionMiddleware: ' . json_encode($logData));
-    }
-
-    private function logSessionEvent(string $event, Request $request): void
-    {
-        $logData = [
-            'type' => 'session_event',
-            'event' => $event,
-            'request' => [
-                'method' => $request->getMethod()->value,
-                'path' => $request->getPath(),
-                'ip' => $request->ip(),
-            ],
-            'session_id' => $this->session->getId(),
-            'timestamp' => time(),
-        ];
-
-        error_log('SessionMiddleware: ' . json_encode($logData));
     }
 
     private function logError(string $message, \Throwable $e): void
@@ -333,5 +310,29 @@ class SessionMiddleware implements MiddlewareInterface
         ];
 
         error_log('SessionMiddleware: ' . json_encode($logData));
+    }
+
+    // =============================================================================
+    // PRIVATE METHODS - Logging
+    // =============================================================================
+
+    public function forceSessionStart(Request $request): void
+    {
+        $this->startSession($request);
+    }
+
+    public function forceSecurityValidation(Request $request): array
+    {
+        return $this->sessionSecurity->validateSession($request);
+    }
+
+    public function forceRegeneration(Request $request, string $reason = 'manual'): bool
+    {
+        try {
+            return $this->sessionSecurity->regenerateSession($reason);
+        } catch (\Throwable $e) {
+            $this->logError('Force regeneration failed', $e);
+            return false;
+        }
     }
 }

@@ -22,7 +22,9 @@ class TeamOverviewAction
 {
     public function __construct(
         private readonly ResponseFactory $responseFactory
-    ) {}
+    )
+    {
+    }
 
     public function __invoke(Request $request): Response
     {

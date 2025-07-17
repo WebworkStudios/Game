@@ -12,6 +12,14 @@ namespace Framework\Templating\Filters;
 class UtilityFilters
 {
     /**
+     * Alias für length
+     */
+    public static function count(mixed $value): int
+    {
+        return self::length($value);
+    }
+
+    /**
      * Gibt die Länge von String oder Array zurück
      */
     public static function length(mixed $value): int
@@ -25,14 +33,6 @@ class UtilityFilters
         }
 
         return mb_strlen((string)$value);
-    }
-
-    /**
-     * Alias für length
-     */
-    public static function count(mixed $value): int
-    {
-        return self::length($value);
     }
 
     /**

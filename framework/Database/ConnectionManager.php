@@ -58,11 +58,29 @@ class ConnectionManager
     }
 
     /**
-     * Holt Read-Connection (Load Balancing aware)
+     * Führt Callback in MySQL-Transaktion aus
      */
-    public function getReadConnection(string $name = self::DEFAULT_CONNECTION): PDO
+    public function transaction(callable $callback, string $name = self::DEFAULT_CONNECTION): mixed
     {
-        return $this->getConnection($name, ConnectionType::READ);
+        $this->beginTransaction($name);
+
+        try {
+            $result = $callback($this);
+            $this->commit($name);
+            return $result;
+        } catch (\Exception $e) {
+            $this->rollback($name);
+            throw $e;
+        }
+    }
+
+    /**
+     * Startet Transaktion auf Write-Connection
+     */
+    public function beginTransaction(string $name = self::DEFAULT_CONNECTION): bool
+    {
+        $connection = $this->getWriteConnection($name);
+        return $connection->beginTransaction();
     }
 
     /**
@@ -104,40 +122,6 @@ class ConnectionManager
         }
 
         return $pdo;
-    }
-
-    /**
-     * Erstellt optimierte MySQL-Verbindung mit Game-spezifischen Einstellungen
-     */
-    private function createOptimizedMySQLConnection(DatabaseConfig $config): PDO
-    {
-        try {
-            // MySQL PDO erstellen
-            $pdo = PDOFactory::create($config);
-
-            // Game-spezifische Optimierungen aktivieren
-            if ($this->gameOptimizationsEnabled) {
-                PDOFactory::optimizeForGameWorkload($pdo);
-            }
-
-            // Performance Monitoring aktivieren (optional)
-            if ($this->performanceMonitoringEnabled) {
-                PDOFactory::enablePerformanceMonitoring($pdo);
-            }
-
-            if ($this->debugMode) {
-                $capabilities = PDOFactory::checkMySQLCapabilities($pdo);
-                error_log("MySQL capabilities: " . json_encode($capabilities));
-            }
-
-            return $pdo;
-
-        } catch (\Exception $e) {
-            throw new RuntimeException(
-                "Failed to create optimized MySQL connection to {$config->host}:{$config->port}: " . $e->getMessage(),
-                previous: $e
-            );
-        }
     }
 
     /**
@@ -188,29 +172,37 @@ class ConnectionManager
     }
 
     /**
-     * Führt Callback in MySQL-Transaktion aus
+     * Erstellt optimierte MySQL-Verbindung mit Game-spezifischen Einstellungen
      */
-    public function transaction(callable $callback, string $name = self::DEFAULT_CONNECTION): mixed
+    private function createOptimizedMySQLConnection(DatabaseConfig $config): PDO
     {
-        $this->beginTransaction($name);
-
         try {
-            $result = $callback($this);
-            $this->commit($name);
-            return $result;
-        } catch (\Exception $e) {
-            $this->rollback($name);
-            throw $e;
-        }
-    }
+            // MySQL PDO erstellen
+            $pdo = PDOFactory::create($config);
 
-    /**
-     * Startet Transaktion auf Write-Connection
-     */
-    public function beginTransaction(string $name = self::DEFAULT_CONNECTION): bool
-    {
-        $connection = $this->getWriteConnection($name);
-        return $connection->beginTransaction();
+            // Game-spezifische Optimierungen aktivieren
+            if ($this->gameOptimizationsEnabled) {
+                PDOFactory::optimizeForGameWorkload($pdo);
+            }
+
+            // Performance Monitoring aktivieren (optional)
+            if ($this->performanceMonitoringEnabled) {
+                PDOFactory::enablePerformanceMonitoring($pdo);
+            }
+
+            if ($this->debugMode) {
+                $capabilities = PDOFactory::checkMySQLCapabilities($pdo);
+                error_log("MySQL capabilities: " . json_encode($capabilities));
+            }
+
+            return $pdo;
+
+        } catch (\Exception $e) {
+            throw new RuntimeException(
+                "Failed to create optimized MySQL connection to {$config->host}:{$config->port}: " . $e->getMessage(),
+                previous: $e
+            );
+        }
     }
 
     /**
@@ -405,6 +397,14 @@ class ConnectionManager
         }
 
         return $info;
+    }
+
+    /**
+     * Holt Read-Connection (Load Balancing aware)
+     */
+    public function getReadConnection(string $name = self::DEFAULT_CONNECTION): PDO
+    {
+        return $this->getConnection($name, ConnectionType::READ);
     }
 
     /**

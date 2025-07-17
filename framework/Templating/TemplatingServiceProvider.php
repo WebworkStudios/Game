@@ -8,12 +8,12 @@ use Framework\Core\AbstractServiceProvider;
 use Framework\Core\ConfigValidation;
 use Framework\Localization\Translator;
 use Framework\Security\Csrf;
-use Framework\Templating\Filters\FilterRegistry;
 use Framework\Templating\Filters\FilterExecutor;
-use Framework\Templating\Parsing\TemplateParser;
-use Framework\Templating\Parsing\TemplateTokenizer;
+use Framework\Templating\Filters\FilterRegistry;
 use Framework\Templating\Parsing\ControlFlowParser;
+use Framework\Templating\Parsing\TemplateParser;
 use Framework\Templating\Parsing\TemplatePathResolver;
+use Framework\Templating\Parsing\TemplateTokenizer;
 use Framework\Templating\Rendering\TemplateRenderer;
 use Framework\Templating\Rendering\TemplateVariableResolver;
 
@@ -40,6 +40,38 @@ class TemplatingServiceProvider extends AbstractServiceProvider
         $this->ensureConfigExists('templating');
         $this->validateTemplateDirectories();
         $this->validateCacheDirectory();
+    }
+
+    /**
+     * Validiert Template-Verzeichnisse
+     */
+    private function validateTemplateDirectories(): void
+    {
+        $config = $this->loadAndValidateConfig('templating');
+
+        foreach ($config['paths'] ?? ['app/Views'] as $path) {
+            $fullPath = $this->basePath($path);
+            if (!is_dir($fullPath)) {
+                if (!mkdir($fullPath, 0755, true)) {
+                    throw new \RuntimeException("Cannot create template directory: {$fullPath}");
+                }
+            }
+        }
+    }
+
+    /**
+     * Validiert Cache-Verzeichnis
+     */
+    private function validateCacheDirectory(): void
+    {
+        $config = $this->loadAndValidateConfig('templating');
+
+        $cachePath = $this->basePath($config['cache']['path'] ?? 'storage/cache/views');
+        if (!is_dir($cachePath)) {
+            if (!mkdir($cachePath, 0755, true)) {
+                throw new \RuntimeException("Cannot create cache directory: {$cachePath}");
+            }
+        }
     }
 
     /**
@@ -313,37 +345,5 @@ class TemplatingServiceProvider extends AbstractServiceProvider
 
         // Custom Filter registrieren (nach Standard-Services)
         $this->registerCustomFilters();
-    }
-
-    /**
-     * Validiert Template-Verzeichnisse
-     */
-    private function validateTemplateDirectories(): void
-    {
-        $config = $this->loadAndValidateConfig('templating');
-
-        foreach ($config['paths'] ?? ['app/Views'] as $path) {
-            $fullPath = $this->basePath($path);
-            if (!is_dir($fullPath)) {
-                if (!mkdir($fullPath, 0755, true)) {
-                    throw new \RuntimeException("Cannot create template directory: {$fullPath}");
-                }
-            }
-        }
-    }
-
-    /**
-     * Validiert Cache-Verzeichnis
-     */
-    private function validateCacheDirectory(): void
-    {
-        $config = $this->loadAndValidateConfig('templating');
-
-        $cachePath = $this->basePath($config['cache']['path'] ?? 'storage/cache/views');
-        if (!is_dir($cachePath)) {
-            if (!mkdir($cachePath, 0755, true)) {
-                throw new \RuntimeException("Cannot create cache directory: {$cachePath}");
-            }
-        }
     }
 }

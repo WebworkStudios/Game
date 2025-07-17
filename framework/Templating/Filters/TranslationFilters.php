@@ -15,7 +15,17 @@ class TranslationFilters
 {
     public function __construct(
         private readonly Translator $translator
-    ) {}
+    )
+    {
+    }
+
+    /**
+     * Alias für translate
+     */
+    public function t(mixed $value, array $parameters = []): string
+    {
+        return $this->translate($value, $parameters);
+    }
 
     /**
      * Übersetzt einen Schlüssel
@@ -48,11 +58,11 @@ class TranslationFilters
     }
 
     /**
-     * Alias für translate
+     * Alias für translatePlural
      */
-    public function t(mixed $value, array $parameters = []): string
+    public function tp(mixed $value, int $count, array $parameters = []): string
     {
-        return $this->translate($value, $parameters);
+        return $this->translatePlural($value, $count, $parameters);
     }
 
     /**
@@ -81,14 +91,6 @@ class TranslationFilters
         }
 
         return $this->translator->translatePlural($key, $count, $replacements);
-    }
-
-    /**
-     * Alias für translatePlural
-     */
-    public function tp(mixed $value, int $count, array $parameters = []): string
-    {
-        return $this->translatePlural($value, $count, $parameters);
     }
 
     /**

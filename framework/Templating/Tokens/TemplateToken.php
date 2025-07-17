@@ -8,7 +8,9 @@ namespace Framework\Templating\Tokens;
  */
 interface TemplateToken
 {
-    public function getType(): string;
-    public function toArray(): array;
     public static function fromArray(array $data): self;
+
+    public function getType(): string;
+
+    public function toArray(): array;
 }

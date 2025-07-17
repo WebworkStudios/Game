@@ -1,19 +1,34 @@
 <?php
+
 namespace Framework\Templating\Parsing;
 
-use Framework\Templating\Tokens\{TemplateToken, TokenFactory, ControlToken, TextToken, VariableToken};
+use Framework\Templating\Tokens\{TokenFactory};
+
 /**
  * ParsedTemplate - Value Object für geparste Templates
  */
 class ParsedTemplate
 {
     public function __construct(
-        private readonly array $tokens,
-        private readonly string $templatePath,
+        private readonly array   $tokens,
+        private readonly string  $templatePath,
         private readonly ?string $parentTemplate = null,
-        private readonly array $blocks = [],
-        private readonly array $dependencies = []
-    ) {}
+        private readonly array   $blocks = [],
+        private readonly array   $dependencies = []
+    )
+    {
+    }
+
+    public static function fromArray(array $data): self
+    {
+        return new self(
+            tokens: array_map(fn($token) => TokenFactory::fromArray($token), $data['tokens'] ?? []),
+            templatePath: $data['template_path'] ?? '',
+            parentTemplate: $data['parent_template'] ?? null,
+            blocks: array_map(fn($block) => array_map(fn($token) => TokenFactory::fromArray($token), $block), $data['blocks'] ?? []),
+            dependencies: $data['dependencies'] ?? []
+        );
+    }
 
     public function getTokens(): array
     {
@@ -54,16 +69,5 @@ class ParsedTemplate
             'blocks' => array_map(fn($block) => array_map(fn($token) => $token->toArray(), $block), $this->blocks),
             'dependencies' => $this->dependencies
         ];
-    }
-
-    public static function fromArray(array $data): self
-    {
-        return new self(
-            tokens: array_map(fn($token) => TokenFactory::fromArray($token), $data['tokens'] ?? []),
-            templatePath: $data['template_path'] ?? '',
-            parentTemplate: $data['parent_template'] ?? null,
-            blocks: array_map(fn($block) => array_map(fn($token) => TokenFactory::fromArray($token), $block), $data['blocks'] ?? []),
-            dependencies: $data['dependencies'] ?? []
-        );
     }
 }

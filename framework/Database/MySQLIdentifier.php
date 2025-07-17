@@ -59,22 +59,6 @@ class MySQLIdentifier
     }
 
     /**
-     * Wraps multiple columns in einem Zug
-     */
-    public static function wrapColumns(array $columns): array
-    {
-        return array_map([self::class, 'wrapColumn'], $columns);
-    }
-
-    /**
-     * Wraps multiple tables in einem Zug
-     */
-    public static function wrapTables(array $tables): array
-    {
-        return array_map([self::class, 'wrapTable'], $tables);
-    }
-
-    /**
      * Prüft ob Column ein spezieller Ausdruck ist
      */
     private static function isSpecialColumn(string $column): bool
@@ -141,6 +125,22 @@ class MySQLIdentifier
         }
 
         return self::wrapColumn($column);
+    }
+
+    /**
+     * Wraps multiple columns in einem Zug
+     */
+    public static function wrapColumns(array $columns): array
+    {
+        return array_map([self::class, 'wrapColumn'], $columns);
+    }
+
+    /**
+     * Wraps multiple tables in einem Zug
+     */
+    public static function wrapTables(array $tables): array
+    {
+        return array_map([self::class, 'wrapTable'], $tables);
     }
 
     /**

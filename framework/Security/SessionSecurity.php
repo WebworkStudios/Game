@@ -28,7 +28,8 @@ class SessionSecurity
 
     public function __construct(
         private readonly Session $session
-    ) {
+    )
+    {
         $this->config = $this->getDefaultConfig();
     }
 
@@ -52,14 +53,14 @@ class SessionSecurity
         ];
     }
 
-    public function setConfig(array $config): void
-    {
-        $this->config = array_merge($this->config, $config);
-    }
-
     public function getConfig(): array
     {
         return $this->config;
+    }
+
+    public function setConfig(array $config): void
+    {
+        $this->config = array_merge($this->config, $config);
     }
 
     // =============================================================================
@@ -119,6 +120,122 @@ class SessionSecurity
         return $result;
     }
 
+    private function isSessionExpired(): bool
+    {
+        $lastActivity = $this->session->getFramework(self::LAST_ACTIVITY);
+        if (!$lastActivity) {
+            return true;
+        }
+
+        return (time() - $lastActivity) > $this->config['session_lifetime'];
+    }
+
+    private function validateFingerprint(Request $request): bool
+    {
+        $storedFingerprint = $this->session->getFramework(self::FINGERPRINT_KEY);
+        if (!$storedFingerprint) {
+            // No fingerprint stored - initialize it
+            $fingerprint = $this->generateFingerprint($request);
+            $this->session->setFramework(self::FINGERPRINT_KEY, $fingerprint);
+            return true;
+        }
+
+        $currentFingerprint = $this->generateFingerprint($request);
+        $isValid = $storedFingerprint === $currentFingerprint;
+
+        if (!$isValid) {
+            $this->logSecurityEvent('fingerprint_mismatch', [
+                'stored' => $storedFingerprint,
+                'current' => $currentFingerprint,
+                'ip' => $request->ip(),
+                'user_agent' => $request->getHeader('User-Agent'),
+            ]);
+        }
+
+        return $isValid;
+    }
+
+    // =============================================================================
+    // PUBLIC API - Login Attempts Management
+    // =============================================================================
+
+    private function generateFingerprint(Request $request): string
+    {
+        $components = [];
+
+        if ($this->config['fingerprint_components']['user_agent']) {
+            $components[] = $request->getHeader('User-Agent') ?? '';
+        }
+
+        if ($this->config['fingerprint_components']['accept_language']) {
+            $components[] = $request->getHeader('Accept-Language') ?? '';
+        }
+
+        if ($this->config['fingerprint_components']['ip_address']) {
+            $components[] = $request->ip();
+        }
+
+        return hash('sha256', implode('|', $components));
+    }
+
+    private function logSecurityEvent(string $event, array $data = []): void
+    {
+        $logData = [
+            'type' => 'security_event',
+            'event' => $event,
+            'data' => $data,
+            'session_id' => $this->session->getId(),
+            'timestamp' => time(),
+        ];
+
+        error_log('SessionSecurity: ' . json_encode($logData));
+    }
+
+    private function recordSecurityViolation(): void
+    {
+        $violations = $this->session->getFramework(self::SECURITY_VIOLATIONS, []);
+        $violations[] = time();
+        $this->session->setFramework(self::SECURITY_VIOLATIONS, $violations);
+
+        $this->logSecurityEvent('security_violation_recorded', [
+            'violations_count' => count($violations),
+        ]);
+    }
+
+    private function isLockedOutDueToViolations(): bool
+    {
+        $violations = $this->session->getFramework(self::SECURITY_VIOLATIONS, []);
+
+        // Clean old violations
+        $cutoff = time() - $this->config['violation_lockout_time'];
+        $violations = array_filter($violations, fn($time) => $time > $cutoff);
+
+        // Update cleaned violations
+        $this->session->setFramework(self::SECURITY_VIOLATIONS, $violations);
+
+        return count($violations) >= $this->config['max_security_violations'];
+    }
+
+    // =============================================================================
+    // PUBLIC API - Security Information
+    // =============================================================================
+
+    private function shouldRegenerateSession(): bool
+    {
+        $lastRegeneration = $this->session->getFramework(self::LAST_REGENERATION, 0);
+        $interval = $this->config['min_regeneration_interval'];
+        return (time() - $lastRegeneration) > $interval;
+    }
+
+    private function updateActivity(): void
+    {
+        $this->session->setFramework(self::LAST_ACTIVITY, time());
+    }
+
+    // =============================================================================
+    // PRIVATE METHODS - Security Logic
+    // =============================================================================
+
     public function initializeSession(Request $request): void
     {
         $now = time();
@@ -143,6 +260,24 @@ class SessionSecurity
         ]);
     }
 
+    private function clearSecurityViolations(): void
+    {
+        $this->session->removeFramework(self::SECURITY_VIOLATIONS);
+    }
+
+    private function clearAllLoginAttempts(): void
+    {
+        // Get all framework data and remove login attempt keys
+        $frameworkData = $this->session->getFramework('', []);
+        if (is_array($frameworkData)) {
+            foreach (array_keys($frameworkData) as $key) {
+                if (str_starts_with($key, self::LOGIN_ATTEMPTS_KEY)) {
+                    $this->session->removeFramework($key);
+                }
+            }
+        }
+    }
+
     public function regenerateSession(string $reason = 'security'): bool
     {
         if (!$this->session->regenerate()) {
@@ -158,10 +293,6 @@ class SessionSecurity
 
         return true;
     }
-
-    // =============================================================================
-    // PUBLIC API - Login Attempts Management
-    // =============================================================================
 
     public function recordLoginAttempt(string $identifier): int
     {
@@ -185,18 +316,6 @@ class SessionSecurity
         return count($attempts);
     }
 
-    public function isLoginBlocked(string $identifier): bool
-    {
-        $key = self::LOGIN_ATTEMPTS_KEY . '.' . $identifier;
-        $attempts = $this->session->getFramework($key, []);
-
-        $window = $this->config['login_attempt_window'];
-        $cutoff = time() - $window;
-        $attempts = array_filter($attempts, fn($time) => $time > $cutoff);
-
-        return count($attempts) >= $this->config['max_login_attempts'];
-    }
-
     public function clearLoginAttempts(string $identifier): void
     {
         $key = self::LOGIN_ATTEMPTS_KEY . '.' . $identifier;
@@ -206,26 +325,6 @@ class SessionSecurity
             'identifier' => $identifier,
         ]);
     }
-
-    public function getRemainingLoginAttempts(string $identifier): int
-    {
-        if ($this->isLoginBlocked($identifier)) {
-            return 0;
-        }
-
-        $key = self::LOGIN_ATTEMPTS_KEY . '.' . $identifier;
-        $attempts = $this->session->getFramework($key, []);
-
-        $window = $this->config['login_attempt_window'];
-        $cutoff = time() - $window;
-        $attempts = array_filter($attempts, fn($time) => $time > $cutoff);
-
-        return max(0, $this->config['max_login_attempts'] - count($attempts));
-    }
-
-    // =============================================================================
-    // PUBLIC API - Security Information
-    // =============================================================================
 
     public function getSecurityStats(): array
     {
@@ -259,129 +358,31 @@ class SessionSecurity
         ];
     }
 
-    // =============================================================================
-    // PRIVATE METHODS - Security Logic
-    // =============================================================================
-
-    private function isSessionExpired(): bool
+    public function getRemainingLoginAttempts(string $identifier): int
     {
-        $lastActivity = $this->session->getFramework(self::LAST_ACTIVITY);
-        if (!$lastActivity) {
-            return true;
+        if ($this->isLoginBlocked($identifier)) {
+            return 0;
         }
 
-        return (time() - $lastActivity) > $this->config['session_lifetime'];
+        $key = self::LOGIN_ATTEMPTS_KEY . '.' . $identifier;
+        $attempts = $this->session->getFramework($key, []);
+
+        $window = $this->config['login_attempt_window'];
+        $cutoff = time() - $window;
+        $attempts = array_filter($attempts, fn($time) => $time > $cutoff);
+
+        return max(0, $this->config['max_login_attempts'] - count($attempts));
     }
 
-    private function shouldRegenerateSession(): bool
+    public function isLoginBlocked(string $identifier): bool
     {
-        $lastRegeneration = $this->session->getFramework(self::LAST_REGENERATION, 0);
-        $interval = $this->config['min_regeneration_interval'];
-        return (time() - $lastRegeneration) > $interval;
-    }
+        $key = self::LOGIN_ATTEMPTS_KEY . '.' . $identifier;
+        $attempts = $this->session->getFramework($key, []);
 
-    private function validateFingerprint(Request $request): bool
-    {
-        $storedFingerprint = $this->session->getFramework(self::FINGERPRINT_KEY);
-        if (!$storedFingerprint) {
-            // No fingerprint stored - initialize it
-            $fingerprint = $this->generateFingerprint($request);
-            $this->session->setFramework(self::FINGERPRINT_KEY, $fingerprint);
-            return true;
-        }
+        $window = $this->config['login_attempt_window'];
+        $cutoff = time() - $window;
+        $attempts = array_filter($attempts, fn($time) => $time > $cutoff);
 
-        $currentFingerprint = $this->generateFingerprint($request);
-        $isValid = $storedFingerprint === $currentFingerprint;
-
-        if (!$isValid) {
-            $this->logSecurityEvent('fingerprint_mismatch', [
-                'stored' => $storedFingerprint,
-                'current' => $currentFingerprint,
-                'ip' => $request->ip(),
-                'user_agent' => $request->getHeader('User-Agent'),
-            ]);
-        }
-
-        return $isValid;
-    }
-
-    private function generateFingerprint(Request $request): string
-    {
-        $components = [];
-
-        if ($this->config['fingerprint_components']['user_agent']) {
-            $components[] = $request->getHeader('User-Agent') ?? '';
-        }
-
-        if ($this->config['fingerprint_components']['accept_language']) {
-            $components[] = $request->getHeader('Accept-Language') ?? '';
-        }
-
-        if ($this->config['fingerprint_components']['ip_address']) {
-            $components[] = $request->ip();
-        }
-
-        return hash('sha256', implode('|', $components));
-    }
-
-    private function isLockedOutDueToViolations(): bool
-    {
-        $violations = $this->session->getFramework(self::SECURITY_VIOLATIONS, []);
-
-        // Clean old violations
-        $cutoff = time() - $this->config['violation_lockout_time'];
-        $violations = array_filter($violations, fn($time) => $time > $cutoff);
-
-        // Update cleaned violations
-        $this->session->setFramework(self::SECURITY_VIOLATIONS, $violations);
-
-        return count($violations) >= $this->config['max_security_violations'];
-    }
-
-    private function recordSecurityViolation(): void
-    {
-        $violations = $this->session->getFramework(self::SECURITY_VIOLATIONS, []);
-        $violations[] = time();
-        $this->session->setFramework(self::SECURITY_VIOLATIONS, $violations);
-
-        $this->logSecurityEvent('security_violation_recorded', [
-            'violations_count' => count($violations),
-        ]);
-    }
-
-    private function updateActivity(): void
-    {
-        $this->session->setFramework(self::LAST_ACTIVITY, time());
-    }
-
-    private function clearSecurityViolations(): void
-    {
-        $this->session->removeFramework(self::SECURITY_VIOLATIONS);
-    }
-
-    private function clearAllLoginAttempts(): void
-    {
-        // Get all framework data and remove login attempt keys
-        $frameworkData = $this->session->getFramework('', []);
-        if (is_array($frameworkData)) {
-            foreach (array_keys($frameworkData) as $key) {
-                if (str_starts_with($key, self::LOGIN_ATTEMPTS_KEY)) {
-                    $this->session->removeFramework($key);
-                }
-            }
-        }
-    }
-
-    private function logSecurityEvent(string $event, array $data = []): void
-    {
-        $logData = [
-            'type' => 'security_event',
-            'event' => $event,
-            'data' => $data,
-            'session_id' => $this->session->getId(),
-            'timestamp' => time(),
-        ];
-
-        error_log('SessionSecurity: ' . json_encode($logData));
+        return count($attempts) >= $this->config['max_login_attempts'];
     }
 }

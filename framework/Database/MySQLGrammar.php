@@ -62,6 +62,14 @@ class MySQLGrammar
     }
 
     /**
+     * DEPRECATED: Backwards compatibility - use MySQLIdentifier directly
+     */
+    public function wrapTable(string $table): string
+    {
+        return MySQLIdentifier::wrapTable($table);
+    }
+
+    /**
      * Kompiliert JOINs
      */
     private function compileJoins(array $joins): string
@@ -80,6 +88,14 @@ class MySQLGrammar
         }
 
         return $sql;
+    }
+
+    /**
+     * DEPRECATED: Backwards compatibility - use MySQLIdentifier directly
+     */
+    public function wrapColumn(string $column): string
+    {
+        return MySQLIdentifier::wrapColumn($column);
     }
 
     /**
@@ -303,21 +319,5 @@ class MySQLGrammar
         }
 
         return $definition;
-    }
-
-    /**
-     * DEPRECATED: Backwards compatibility - use MySQLIdentifier directly
-     */
-    public function wrapTable(string $table): string
-    {
-        return MySQLIdentifier::wrapTable($table);
-    }
-
-    /**
-     * DEPRECATED: Backwards compatibility - use MySQLIdentifier directly
-     */
-    public function wrapColumn(string $column): string
-    {
-        return MySQLIdentifier::wrapColumn($column);
     }
 }

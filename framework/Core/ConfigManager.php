@@ -26,83 +26,32 @@ class ConfigManager
 
     public function __construct(
         private readonly string $basePath
-    ) {}
-
-    /**
-     * Lädt Konfiguration mit Lazy Loading und Auto-Publishing
-     *
-     * @param string $configPath Relativer Pfad zur Config-Datei (z.B. 'app/Config/database.php')
-     * @param callable|null $defaultProvider Optional: Factory für Default-Config
-     * @param array $requiredKeys Optional: Validation der erforderlichen Keys
-     * @return array Geladene Konfiguration
-     *
-     * @throws InvalidArgumentException Bei fehlenden Required Keys
-     * @throws RuntimeException Bei File-System Fehlern
-     */
-    public function get(string $configPath, ?callable $defaultProvider = null, array $requiredKeys = []): array
+    )
     {
-        // 1. Cache prüfen (Lazy Loading)
-        if (isset(self::$cache[$configPath])) {
-            return self::$cache[$configPath];
-        }
-
-        $fullPath = $this->buildFullPath($configPath);
-
-        // 2. Config-Datei laden falls vorhanden
-        if (file_exists($fullPath)) {
-            $config = $this->loadConfigFile($fullPath);
-        }
-        // 3. Default-Config erstellen falls Provider vorhanden
-        elseif ($defaultProvider !== null) {
-            $config = $this->createDefaultConfig($configPath, $defaultProvider);
-        }
-        // 4. Fehler falls keine Config und kein Default Provider
-        else {
-            throw new RuntimeException("Config file not found and no default provider given: {$configPath}");
-        }
-
-        // 5. Required Keys validieren
-        $this->validateRequiredKeys($config, $requiredKeys, $configPath);
-
-        // 6. Cache speichern
-        self::$cache[$configPath] = $config;
-
-        return $config;
     }
 
     /**
-     * Publiziert eine Default-Konfiguration
-     *
-     * @param string $configPath Relativer Pfad zur Config-Datei
-     * @param callable $contentProvider Factory die den Config-Inhalt als String zurückgibt
-     * @return bool True bei Erfolg, false bei Fehler
+     * Leert den gesamten Config-Cache
      */
-    public function publish(string $configPath, callable $contentProvider): bool
+    public static function clearCache(): void
     {
-        $fullPath = $this->buildFullPath($configPath);
-        $configDir = dirname($fullPath);
+        self::$cache = [];
+    }
 
-        // Verzeichnisstruktur erstellen
-        if (!is_dir($configDir) && !mkdir($configDir, 0755, true)) {
-            return false;
-        }
+    /**
+     * Leert Cache für spezifische Config
+     */
+    public static function clearCacheFor(string $configPath): void
+    {
+        unset(self::$cache[$configPath]);
+    }
 
-        // Config-Content generieren
-        $content = $contentProvider();
-
-        if (!is_string($content)) {
-            throw new InvalidArgumentException('Content provider must return string');
-        }
-
-        // Datei schreiben
-        $success = file_put_contents($fullPath, $content) !== false;
-
-        // Cache invalidieren bei erfolgreichem Schreiben
-        if ($success && isset(self::$cache[$configPath])) {
-            unset(self::$cache[$configPath]);
-        }
-
-        return $success;
+    /**
+     * Holt alle gecachten Config-Pfade (für Debugging)
+     */
+    public static function getCachedPaths(): array
+    {
+        return array_keys(self::$cache);
     }
 
     /**
@@ -132,35 +81,43 @@ class ConfigManager
     }
 
     /**
-     * Leert den gesamten Config-Cache
+     * Lädt Konfiguration mit Lazy Loading und Auto-Publishing
+     *
+     * @param string $configPath Relativer Pfad zur Config-Datei (z.B. 'app/Config/database.php')
+     * @param callable|null $defaultProvider Optional: Factory für Default-Config
+     * @param array $requiredKeys Optional: Validation der erforderlichen Keys
+     * @return array Geladene Konfiguration
+     *
+     * @throws InvalidArgumentException Bei fehlenden Required Keys
+     * @throws RuntimeException Bei File-System Fehlern
      */
-    public static function clearCache(): void
+    public function get(string $configPath, ?callable $defaultProvider = null, array $requiredKeys = []): array
     {
-        self::$cache = [];
-    }
+        // 1. Cache prüfen (Lazy Loading)
+        if (isset(self::$cache[$configPath])) {
+            return self::$cache[$configPath];
+        }
 
-    /**
-     * Leert Cache für spezifische Config
-     */
-    public static function clearCacheFor(string $configPath): void
-    {
-        unset(self::$cache[$configPath]);
-    }
+        $fullPath = $this->buildFullPath($configPath);
 
-    /**
-     * Holt alle gecachten Config-Pfade (für Debugging)
-     */
-    public static function getCachedPaths(): array
-    {
-        return array_keys(self::$cache);
-    }
+        // 2. Config-Datei laden falls vorhanden
+        if (file_exists($fullPath)) {
+            $config = $this->loadConfigFile($fullPath);
+        } // 3. Default-Config erstellen falls Provider vorhanden
+        elseif ($defaultProvider !== null) {
+            $config = $this->createDefaultConfig($configPath, $defaultProvider);
+        } // 4. Fehler falls keine Config und kein Default Provider
+        else {
+            throw new RuntimeException("Config file not found and no default provider given: {$configPath}");
+        }
 
-    /**
-     * Baut vollständigen Dateipfad
-     */
-    private function buildFullPath(string $configPath): string
-    {
-        return $this->basePath . '/' . ltrim($configPath, '/');
+        // 5. Required Keys validieren
+        $this->validateRequiredKeys($config, $requiredKeys, $configPath);
+
+        // 6. Cache speichern
+        self::$cache[$configPath] = $config;
+
+        return $config;
     }
 
     /**
@@ -227,6 +184,49 @@ declare(strict_types=1);
 
 return {$exportedConfig};
 PHP;
+    }
+
+    /**
+     * Publiziert eine Default-Konfiguration
+     *
+     * @param string $configPath Relativer Pfad zur Config-Datei
+     * @param callable $contentProvider Factory die den Config-Inhalt als String zurückgibt
+     * @return bool True bei Erfolg, false bei Fehler
+     */
+    public function publish(string $configPath, callable $contentProvider): bool
+    {
+        $fullPath = $this->buildFullPath($configPath);
+        $configDir = dirname($fullPath);
+
+        // Verzeichnisstruktur erstellen
+        if (!is_dir($configDir) && !mkdir($configDir, 0755, true)) {
+            return false;
+        }
+
+        // Config-Content generieren
+        $content = $contentProvider();
+
+        if (!is_string($content)) {
+            throw new InvalidArgumentException('Content provider must return string');
+        }
+
+        // Datei schreiben
+        $success = file_put_contents($fullPath, $content) !== false;
+
+        // Cache invalidieren bei erfolgreichem Schreiben
+        if ($success && isset(self::$cache[$configPath])) {
+            unset(self::$cache[$configPath]);
+        }
+
+        return $success;
+    }
+
+    /**
+     * Baut vollständigen Dateipfad
+     */
+    private function buildFullPath(string $configPath): string
+    {
+        return $this->basePath . '/' . ltrim($configPath, '/');
     }
 
     /**

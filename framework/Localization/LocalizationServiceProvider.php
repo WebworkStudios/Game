@@ -37,6 +37,25 @@ class LocalizationServiceProvider extends AbstractServiceProvider
     }
 
     /**
+     * Stellt sicher, dass Language-Verzeichnisse existieren
+     */
+    private function ensureLanguageDirectories(array $config): void
+    {
+        $languagesPath = $this->basePath($config['languages_path']);
+
+        if (!is_dir($languagesPath) && !mkdir($languagesPath, 0755, true)) {
+            throw new \RuntimeException("Cannot create languages directory: {$languagesPath}");
+        }
+
+        foreach (array_keys($config['supported_locales']) as $locale) {
+            $localePath = $languagesPath . '/' . $locale;
+            if (!is_dir($localePath) && !mkdir($localePath, 0755, true)) {
+                throw new \RuntimeException("Cannot create locale directory: {$localePath}");
+            }
+        }
+    }
+
+    /**
      * Registriert alle Localization Services
      */
     protected function registerServices(): void
@@ -63,63 +82,6 @@ class LocalizationServiceProvider extends AbstractServiceProvider
 
             return $translator;
         });
-    }
-
-    /**
-     * Registriert Language Detector als Singleton
-     */
-    private function registerLanguageDetector(): void
-    {
-        $this->singleton(LanguageDetector::class, function () {
-            $config = $this->loadAndValidateConfig('localization', self::REQUIRED_KEYS);
-
-            return new LanguageDetector(
-                session: $this->get(Session::class),
-                supportedLocales: array_keys($config['supported_locales']),
-                defaultLocale: $config['default_locale']
-            );
-        });
-    }
-
-    /**
-     * Registriert Localization Middlewares
-     */
-    private function registerMiddlewares(): void
-    {
-        $this->transient(LanguageMiddleware::class, function () {
-            return new LanguageMiddleware(
-                detector: $this->get(LanguageDetector::class),
-                translator: $this->get(Translator::class)
-            );
-        });
-    }
-
-    /**
-     * Bindet Localization-Interfaces
-     */
-    protected function bindInterfaces(): void
-    {
-        // Hier können Localization-Interfaces gebunden werden
-        // $this->bind(TranslatorInterface::class, Translator::class);
-    }
-
-    /**
-     * Stellt sicher, dass Language-Verzeichnisse existieren
-     */
-    private function ensureLanguageDirectories(array $config): void
-    {
-        $languagesPath = $this->basePath($config['languages_path']);
-
-        if (!is_dir($languagesPath) && !mkdir($languagesPath, 0755, true)) {
-            throw new \RuntimeException("Cannot create languages directory: {$languagesPath}");
-        }
-
-        foreach (array_keys($config['supported_locales']) as $locale) {
-            $localePath = $languagesPath . '/' . $locale;
-            if (!is_dir($localePath) && !mkdir($localePath, 0755, true)) {
-                throw new \RuntimeException("Cannot create locale directory: {$localePath}");
-            }
-        }
     }
 
     /**
@@ -242,5 +204,43 @@ class LocalizationServiceProvider extends AbstractServiceProvider
             ],
             default => ['placeholder' => 'Placeholder-Inhalt für ' . $group]
         };
+    }
+
+    /**
+     * Registriert Language Detector als Singleton
+     */
+    private function registerLanguageDetector(): void
+    {
+        $this->singleton(LanguageDetector::class, function () {
+            $config = $this->loadAndValidateConfig('localization', self::REQUIRED_KEYS);
+
+            return new LanguageDetector(
+                session: $this->get(Session::class),
+                supportedLocales: array_keys($config['supported_locales']),
+                defaultLocale: $config['default_locale']
+            );
+        });
+    }
+
+    /**
+     * Registriert Localization Middlewares
+     */
+    private function registerMiddlewares(): void
+    {
+        $this->transient(LanguageMiddleware::class, function () {
+            return new LanguageMiddleware(
+                detector: $this->get(LanguageDetector::class),
+                translator: $this->get(Translator::class)
+            );
+        });
+    }
+
+    /**
+     * Bindet Localization-Interfaces
+     */
+    protected function bindInterfaces(): void
+    {
+        // Hier können Localization-Interfaces gebunden werden
+        // $this->bind(TranslatorInterface::class, Translator::class);
     }
 }

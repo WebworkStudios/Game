@@ -10,38 +10,10 @@ class VariableToken implements TemplateToken
 {
     public function __construct(
         private readonly string $variable,
-        private readonly array $filters = [],
-        private readonly bool $shouldEscape = true
-    ) {}
-
-    public function getType(): string
+        private readonly array  $filters = [],
+        private readonly bool   $shouldEscape = true
+    )
     {
-        return 'variable';
-    }
-
-    public function getVariable(): string
-    {
-        return $this->variable;
-    }
-
-    public function getFilters(): array
-    {
-        return $this->filters;
-    }
-
-    public function shouldEscape(): bool
-    {
-        return $this->shouldEscape;
-    }
-
-    public function toArray(): array
-    {
-        return [
-            'type' => 'variable',
-            'variable' => $this->variable,
-            'filters' => $this->filters,
-            'should_escape' => $this->shouldEscape
-        ];
     }
 
     public static function fromArray(array $data): self
@@ -102,5 +74,35 @@ class VariableToken implements TemplateToken
             }
         }
         return false;
+    }
+
+    public function getType(): string
+    {
+        return 'variable';
+    }
+
+    public function getVariable(): string
+    {
+        return $this->variable;
+    }
+
+    public function getFilters(): array
+    {
+        return $this->filters;
+    }
+
+    public function shouldEscape(): bool
+    {
+        return $this->shouldEscape;
+    }
+
+    public function toArray(): array
+    {
+        return [
+            'type' => 'variable',
+            'variable' => $this->variable,
+            'filters' => $this->filters,
+            'should_escape' => $this->shouldEscape
+        ];
     }
 }

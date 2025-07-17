@@ -18,29 +18,8 @@ class FilterExecutor
 {
     public function __construct(
         private readonly FilterRegistry $registry
-    ) {}
-
-    /**
-     * Führt einen Filter aus
-     */
-    public function execute(string $filterName, mixed $value, array $parameters = []): mixed
+    )
     {
-        try {
-            $filter = $this->registry->get($filterName);
-
-            // Filter mit Parametern ausführen
-            return $filter($value, ...$parameters);
-
-        } catch (RuntimeException $e) {
-            // Registry-Fehler weiterleiten
-            throw $e;
-        } catch (\Throwable $e) {
-            // Filter-Execution-Fehler
-            throw new RuntimeException(
-                "Filter '{$filterName}' execution failed: " . $e->getMessage(),
-                previous: $e
-            );
-        }
     }
 
     /**
@@ -68,6 +47,29 @@ class FilterExecutor
         }
 
         return $value;
+    }
+
+    /**
+     * Führt einen Filter aus
+     */
+    public function execute(string $filterName, mixed $value, array $parameters = []): mixed
+    {
+        try {
+            $filter = $this->registry->get($filterName);
+
+            // Filter mit Parametern ausführen
+            return $filter($value, ...$parameters);
+
+        } catch (RuntimeException $e) {
+            // Registry-Fehler weiterleiten
+            throw $e;
+        } catch (\Throwable $e) {
+            // Filter-Execution-Fehler
+            throw new RuntimeException(
+                "Filter '{$filterName}' execution failed: " . $e->getMessage(),
+                previous: $e
+            );
+        }
     }
 
     /**

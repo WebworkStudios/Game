@@ -17,6 +17,14 @@ use Exception;
 class DateFilters
 {
     /**
+     * Formatiert als deutsche Datum
+     */
+    public static function dateGerman(mixed $value): string
+    {
+        return self::date($value, 'd.m.Y');
+    }
+
+    /**
      * Formatiert Datum
      */
     public static function date(mixed $value, string $format = 'Y-m-d'): string
@@ -34,11 +42,23 @@ class DateFilters
     }
 
     /**
-     * Formatiert als deutsche Datum
+     * Hilfsmethode: Erstellt DateTime aus verschiedenen Formaten
      */
-    public static function dateGerman(mixed $value): string
+    private static function createDateTime(mixed $value): DateTime
     {
-        return self::date($value, 'd.m.Y');
+        if ($value instanceof DateTimeInterface) {
+            return DateTime::createFromInterface($value);
+        }
+
+        if (is_string($value)) {
+            return new DateTime($value);
+        }
+
+        if (is_int($value)) {
+            return new DateTime('@' . $value);
+        }
+
+        throw new Exception('Invalid date format');
     }
 
     /**
@@ -185,25 +205,5 @@ class DateFilters
         } catch (Exception) {
             return 0;
         }
-    }
-
-    /**
-     * Hilfsmethode: Erstellt DateTime aus verschiedenen Formaten
-     */
-    private static function createDateTime(mixed $value): DateTime
-    {
-        if ($value instanceof DateTimeInterface) {
-            return DateTime::createFromInterface($value);
-        }
-
-        if (is_string($value)) {
-            return new DateTime($value);
-        }
-
-        if (is_int($value)) {
-            return new DateTime('@' . $value);
-        }
-
-        throw new Exception('Invalid date format');
     }
 }

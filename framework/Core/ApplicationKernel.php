@@ -8,7 +8,6 @@ use Framework\Http\HttpStatus;
 use Framework\Http\Request;
 use Framework\Http\Response;
 use Framework\Routing\Router;
-use RuntimeException;
 use Throwable;
 
 /**
@@ -88,6 +87,14 @@ class ApplicationKernel
     }
 
     /**
+     * Holt Service aus Container
+     */
+    public function get(string $abstract): mixed
+    {
+        return $this->container->get($abstract);
+    }
+
+    /**
      * Setup Router
      */
     private function setupRouter(): void
@@ -96,17 +103,6 @@ class ApplicationKernel
 
         // Hier könnten globale Middleware registriert werden:
         // $this->registerGlobalMiddleware();
-    }
-
-    /**
-     * Registriert globale Middleware (optional)
-     *
-     * Kann überschrieben oder erweitert werden für spezifische Anforderungen
-     */
-    protected function registerGlobalMiddleware(): void
-    {
-        // Beispiel:
-        // $this->router->addGlobalMiddleware(SomeMiddleware::class);
     }
 
     /**
@@ -149,20 +145,20 @@ class ApplicationKernel
     // ===================================================================
 
     /**
+     * Gibt Debug-Status zurück
+     */
+    public function isDebug(): bool
+    {
+        return $this->debug;
+    }
+
+    /**
      * Setzt Debug-Modus
      */
     public function setDebug(bool $debug): self
     {
         $this->debug = $debug;
         return $this;
-    }
-
-    /**
-     * Gibt Debug-Status zurück
-     */
-    public function isDebug(): bool
-    {
-        return $this->debug;
     }
 
     /**
@@ -187,19 +183,19 @@ class ApplicationKernel
     }
 
     /**
-     * Baut vollständigen Pfad basierend auf Base Path
-     */
-    public function path(string $path = ''): string
-    {
-        return $this->basePath . ($path ? '/' . ltrim($path, '/') : '');
-    }
-
-    /**
      * Alias für path() für BC compatibility
      */
     public function basePath(string $path = ''): string
     {
         return $this->path($path);
+    }
+
+    /**
+     * Baut vollständigen Pfad basierend auf Base Path
+     */
+    public function path(string $path = ''): string
+    {
+        return $this->basePath . ($path ? '/' . ltrim($path, '/') : '');
     }
 
     // ===================================================================
@@ -215,10 +211,13 @@ class ApplicationKernel
     }
 
     /**
-     * Holt Service aus Container
+     * Registriert globale Middleware (optional)
+     *
+     * Kann überschrieben oder erweitert werden für spezifische Anforderungen
      */
-    public function get(string $abstract): mixed
+    protected function registerGlobalMiddleware(): void
     {
-        return $this->container->get($abstract);
+        // Beispiel:
+        // $this->router->addGlobalMiddleware(SomeMiddleware::class);
     }
 }

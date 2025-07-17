@@ -1,7 +1,8 @@
 <?php
+
 namespace Framework\Templating;
 
-use Framework\Templating\Parsing\{TemplateParser, TemplateTokenizer, ControlFlowParser, TemplatePathResolver};
+use Framework\Templating\Parsing\{ControlFlowParser, TemplateParser, TemplatePathResolver, TemplateTokenizer};
 use Framework\Templating\Rendering\{TemplateRenderer, TemplateVariableResolver};
 
 /**
@@ -14,9 +15,10 @@ class TemplateEngine
 
     public function __construct(
         private readonly TemplatePathResolver $pathResolver,
-        private readonly TemplateCache $cache,
-        private readonly FilterManager $filterManager
-    ) {
+        private readonly TemplateCache        $cache,
+        private readonly FilterManager        $filterManager
+    )
+    {
         // Parser-Pipeline erstellen
         $tokenizer = new TemplateTokenizer();
         $controlFlowParser = new ControlFlowParser();
@@ -25,6 +27,18 @@ class TemplateEngine
         // Renderer-Pipeline erstellen
         $variableResolver = new TemplateVariableResolver();
         $this->renderer = new TemplateRenderer($variableResolver, $filterManager, $pathResolver);
+    }
+
+    /**
+     * Template mit Caching rendern
+     */
+    public function renderCached(string $template, array $data = [], int $ttl = 0): string
+    {
+        if ($ttl <= 0) {
+            return $this->render($template, $data);
+        }
+
+        return $this->renderWidget($template, $data, $ttl);
     }
 
     /**
@@ -69,17 +83,5 @@ class TemplateEngine
         $this->cache->storeFragment($cacheKey, $content, $ttl);
 
         return $content;
-    }
-
-    /**
-     * Template mit Caching rendern
-     */
-    public function renderCached(string $template, array $data = [], int $ttl = 0): string
-    {
-        if ($ttl <= 0) {
-            return $this->render($template, $data);
-        }
-
-        return $this->renderWidget($template, $data, $ttl);
     }
 }

@@ -68,17 +68,6 @@ class FilterRegistry
     }
 
     /**
-     * Gibt alle verfügbaren Filter-Namen zurück
-     */
-    public function getFilterNames(): array
-    {
-        return array_unique(array_merge(
-            array_keys($this->filters),
-            array_keys($this->lazyFilters)
-        ));
-    }
-
-    /**
      * Entfernt einen Filter
      */
     public function remove(string $name): void
@@ -101,5 +90,16 @@ class FilterRegistry
     public function count(): int
     {
         return count($this->getFilterNames());
+    }
+
+    /**
+     * Gibt alle verfügbaren Filter-Namen zurück
+     */
+    public function getFilterNames(): array
+    {
+        return array_unique(array_merge(
+            array_keys($this->filters),
+            array_keys($this->lazyFilters)
+        ));
     }
 }

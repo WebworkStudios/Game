@@ -30,6 +30,22 @@ class SecurityServiceProvider extends AbstractServiceProvider
     }
 
     /**
+     * Validiert Session-Verzeichnis
+     */
+    private function validateSessionDirectory(): void
+    {
+        $config = $this->loadAndValidateConfig('security');
+
+        if (isset($config['session']['save_path'])) {
+            $sessionPath = $this->basePath($config['session']['save_path'] ?? 'storage/sessions');
+
+            if (!is_dir($sessionPath) && !mkdir($sessionPath, 0755, true)) {
+                throw new \RuntimeException("Cannot create session directory: {$sessionPath}");
+            }
+        }
+    }
+
+    /**
      * Registriert alle Security Services
      */
     protected function registerServices(): void
@@ -101,22 +117,6 @@ class SecurityServiceProvider extends AbstractServiceProvider
         $this->singleton(Csrf::class, function () {
             return new Csrf($this->get(Session::class));
         });
-    }
-
-    /**
-     * Validiert Session-Verzeichnis
-     */
-    private function validateSessionDirectory(): void
-    {
-        $config = $this->loadAndValidateConfig('security');
-
-        if (isset($config['session']['save_path'])) {
-            $sessionPath = $this->basePath($config['session']['save_path'] ?? 'storage/sessions');
-
-            if (!is_dir($sessionPath) && !mkdir($sessionPath, 0755, true)) {
-                throw new \RuntimeException("Cannot create session directory: {$sessionPath}");
-            }
-        }
     }
 
     /**
