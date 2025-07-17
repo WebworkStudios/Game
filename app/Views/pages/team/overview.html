@@ -125,27 +125,21 @@
             <div class="filter-group">
                 <label for="position-filter">Position:</label>
                 <select id="position-filter" name="position">
-                    {% for filter_options.positions as value: label %}
-                    <option value="{{ value }}">{{ label }}</option>
-                    {% endfor %}
+                    {{ filter_options.positions_html|raw }}
                 </select>
             </div>
 
             <div class="filter-group">
                 <label for="status-filter">Status:</label>
                 <select id="status-filter" name="status">
-                    {% for filter_options.status as value: label %}
-                    <option value="{{ value }}">{{ label }}</option>
-                    {% endfor %}
+                    {{ filter_options.status_html|raw }}
                 </select>
             </div>
 
             <div class="filter-group">
                 <label for="age-filter">Altersgruppe:</label>
                 <select id="age-filter" name="age_group">
-                    {% for filter_options.age_groups as value: label %}
-                    <option value="{{ value }}">{{ label }}</option>
-                    {% endfor %}
+                    {{ filter_options.age_groups_html|raw }}
                 </select>
             </div>
 
@@ -153,63 +147,74 @@
         </div>
     </section>
 
-    <!-- Debug-Sektion -->
-    <section class="debug-section" style="background: #f0f0f0; padding: 20px; margin: 20px 0; border-radius: 8px;">
-        <h3>🔍 Debug Informationen</h3>
-        <p><strong>players_by_position Type:</strong> {{ players_by_position|type }}</p>
-        <p><strong>Torhüter Array:</strong> {{ players_by_position.goalkeepers|debug }}</p>
-        <p><strong>Erstes Element:</strong> {{ players_by_position.goalkeepers.0.name }}</p>
-        <div style="background: white; padding: 10px; margin: 10px 0; border-radius: 4px;">
-            <pre>{{ players_by_position|json_encode }}</pre>
-        </div>
-    </section>
-
     <!-- Spieler nach Positionen -->
     <section class="squad-by-position">
         <h2>👨‍💼 Kader nach Positionen</h2>
 
-        <!-- Torhüter - TEST verschiedene Syntaxe -->
+        <!-- Torhüter -->
         <div class="position-section" data-position="goalkeepers">
             <h3 class="position-title">
                 <span class="position-icon">🥅</span>
                 Torhüter ({{ players_by_position.goalkeepers|length }})
             </h3>
 
-            <!-- Test 1: Direkter Zugriff auf erstes Element -->
-            <div class="test-section">
-                <h4>Test 1 - Direkter Zugriff:</h4>
-                {% if players_by_position.goalkeepers.0 %}
-                <p>Erster Torhüter: {{ players_by_position.goalkeepers.0.name }}</p>
-                {% endif %}
-            </div>
-
-            <!-- Test 2: For-Loop mit Array-Syntax -->
-            <div class="test-section">
-                <h4>Test 2 - For-Loop (Array-Syntax):</h4>
-                {% for players_by_position.goalkeepers as goalkeeper %}
-                <div class="simple-player-card" style="border: 1px solid #ccc; padding: 10px; margin: 5px 0; border-radius: 4px;">
-                    <strong>Name:</strong> {{ goalkeeper.name }}<br>
-                    <strong>Alter:</strong> {{ goalkeeper.age }}<br>
-                    <strong>Nummer:</strong> {{ goalkeeper.shirt_number }}
-                </div>
-                {% endfor %}
-            </div>
-
-            <!-- Test 3: Alternative For-Loop Syntax -->
-            <div class="test-section">
-                <h4>Test 3 - Alternative Syntax:</h4>
-                {% if players_by_position.goalkeepers %}
+            {% if players_by_position.goalkeepers %}
+            <div class="players-grid">
                 {% for goalkeeper in players_by_position.goalkeepers %}
-                <div class="simple-player-card" style="border: 1px solid #009688; padding: 10px; margin: 5px 0; border-radius: 4px;">
-                    <strong>Name:</strong> {{ goalkeeper.name }}<br>
-                    <strong>Position:</strong> Torhüter<br>
-                    <strong>Tore:</strong> {{ goalkeeper.goals }}
+                <div class="player-card">
+                    <div class="player-header">
+                        <div class="player-avatar">
+                            <div class="player-initials">{{ goalkeeper.name|first }}{{ goalkeeper.name|last }}</div>
+                            <div class="shirt-number">{{ goalkeeper.shirt_number }}</div>
+                        </div>
+                        <div class="player-basic-info">
+                            <h4 class="player-name">{{ goalkeeper.name }}</h4>
+                            <div class="player-meta">
+                                <span class="player-age">{{ goalkeeper.age }} Jahre</span>
+                                <span class="player-nationality">{{ goalkeeper.nationality }}</span>
+                            </div>
+                        </div>
+                        {% if goalkeeper.injured %}
+                        <div class="injury-status">
+                            <span class="injury-icon">🏥</span>
+                            <span class="injury-text">Verletzt</span>
+                        </div>
+                        {% endif %}
+                    </div>
+                    <div class="player-stats">
+                        <div class="stats-row">
+                            <div class="stat-item">
+                                <span class="stat-icon">⚽</span>
+                                <span class="stat-value">{{ goalkeeper.goals }}</span>
+                                <span class="stat-label">Tore</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-icon">🎯</span>
+                                <span class="stat-value">{{ goalkeeper.assists }}</span>
+                                <span class="stat-label">Assists</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-icon">📊</span>
+                                <span class="stat-value">{{ goalkeeper.rating }}</span>
+                                <span class="stat-label">Rating</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-icon">👕</span>
+                                <span class="stat-value">{{ goalkeeper.appearances }}</span>
+                                <span class="stat-label">Spiele</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="player-contract">
+                        <span class="contract-info">Vertrag bis: {{ goalkeeper.contract_until }}</span>
+                        <span class="market-value">Marktwert: {{ goalkeeper.market_value|number_format }}€</span>
+                    </div>
                 </div>
                 {% endfor %}
-                {% else %}
-                <p>Keine Torhüter gefunden</p>
-                {% endif %}
             </div>
+            {% else %}
+            <p class="no-players">Keine Torhüter im Kader</p>
+            {% endif %}
         </div>
 
         <!-- Verteidiger -->
@@ -221,21 +226,21 @@
 
             {% if players_by_position.defenders %}
             <div class="players-grid">
-                {% for players_by_position.defenders as player %}
+                {% for defender in players_by_position.defenders %}
                 <div class="player-card">
                     <div class="player-header">
                         <div class="player-avatar">
-                            <div class="player-initials">{{ player.name|first }}{{ player.name|last }}</div>
-                            <div class="shirt-number">{{ player.shirt_number }}</div>
+                            <div class="player-initials">{{ defender.name|first }}{{ defender.name|last }}</div>
+                            <div class="shirt-number">{{ defender.shirt_number }}</div>
                         </div>
                         <div class="player-basic-info">
-                            <h4 class="player-name">{{ player.name }}</h4>
+                            <h4 class="player-name">{{ defender.name }}</h4>
                             <div class="player-meta">
-                                <span class="player-age">{{ player.age }} Jahre</span>
-                                <span class="player-nationality">{{ player.nationality }}</span>
+                                <span class="player-age">{{ defender.age }} Jahre</span>
+                                <span class="player-nationality">{{ defender.nationality }}</span>
                             </div>
                         </div>
-                        {% if player.injured %}
+                        {% if defender.injured %}
                         <div class="injury-status">
                             <span class="injury-icon">🏥</span>
                             <span class="injury-text">Verletzt</span>
@@ -246,25 +251,29 @@
                         <div class="stats-row">
                             <div class="stat-item">
                                 <span class="stat-icon">⚽</span>
-                                <span class="stat-value">{{ player.goals }}</span>
+                                <span class="stat-value">{{ defender.goals }}</span>
                                 <span class="stat-label">Tore</span>
                             </div>
                             <div class="stat-item">
                                 <span class="stat-icon">🎯</span>
-                                <span class="stat-value">{{ player.assists }}</span>
+                                <span class="stat-value">{{ defender.assists }}</span>
                                 <span class="stat-label">Assists</span>
                             </div>
                             <div class="stat-item">
                                 <span class="stat-icon">📊</span>
-                                <span class="stat-value">{{ player.rating }}</span>
+                                <span class="stat-value">{{ defender.rating }}</span>
                                 <span class="stat-label">Rating</span>
                             </div>
                             <div class="stat-item">
                                 <span class="stat-icon">👕</span>
-                                <span class="stat-value">{{ player.appearances }}</span>
+                                <span class="stat-value">{{ defender.appearances }}</span>
                                 <span class="stat-label">Spiele</span>
                             </div>
                         </div>
+                    </div>
+                    <div class="player-contract">
+                        <span class="contract-info">Vertrag bis: {{ defender.contract_until }}</span>
+                        <span class="market-value">Marktwert: {{ defender.market_value|number_format }}€</span>
                     </div>
                 </div>
                 {% endfor %}
@@ -283,21 +292,21 @@
 
             {% if players_by_position.midfielders %}
             <div class="players-grid">
-                {% for players_by_position.midfielders as player %}
+                {% for midfielder in players_by_position.midfielders %}
                 <div class="player-card">
                     <div class="player-header">
                         <div class="player-avatar">
-                            <div class="player-initials">{{ player.name|first }}{{ player.name|last }}</div>
-                            <div class="shirt-number">{{ player.shirt_number }}</div>
+                            <div class="player-initials">{{ midfielder.name|first }}{{ midfielder.name|last }}</div>
+                            <div class="shirt-number">{{ midfielder.shirt_number }}</div>
                         </div>
                         <div class="player-basic-info">
-                            <h4 class="player-name">{{ player.name }}</h4>
+                            <h4 class="player-name">{{ midfielder.name }}</h4>
                             <div class="player-meta">
-                                <span class="player-age">{{ player.age }} Jahre</span>
-                                <span class="player-nationality">{{ player.nationality }}</span>
+                                <span class="player-age">{{ midfielder.age }} Jahre</span>
+                                <span class="player-nationality">{{ midfielder.nationality }}</span>
                             </div>
                         </div>
-                        {% if player.injured %}
+                        {% if midfielder.injured %}
                         <div class="injury-status">
                             <span class="injury-icon">🏥</span>
                             <span class="injury-text">Verletzt</span>
@@ -308,25 +317,29 @@
                         <div class="stats-row">
                             <div class="stat-item">
                                 <span class="stat-icon">⚽</span>
-                                <span class="stat-value">{{ player.goals }}</span>
+                                <span class="stat-value">{{ midfielder.goals }}</span>
                                 <span class="stat-label">Tore</span>
                             </div>
                             <div class="stat-item">
                                 <span class="stat-icon">🎯</span>
-                                <span class="stat-value">{{ player.assists }}</span>
+                                <span class="stat-value">{{ midfielder.assists }}</span>
                                 <span class="stat-label">Assists</span>
                             </div>
                             <div class="stat-item">
                                 <span class="stat-icon">📊</span>
-                                <span class="stat-value">{{ player.rating }}</span>
+                                <span class="stat-value">{{ midfielder.rating }}</span>
                                 <span class="stat-label">Rating</span>
                             </div>
                             <div class="stat-item">
                                 <span class="stat-icon">👕</span>
-                                <span class="stat-value">{{ player.appearances }}</span>
+                                <span class="stat-value">{{ midfielder.appearances }}</span>
                                 <span class="stat-label">Spiele</span>
                             </div>
                         </div>
+                    </div>
+                    <div class="player-contract">
+                        <span class="contract-info">Vertrag bis: {{ midfielder.contract_until }}</span>
+                        <span class="market-value">Marktwert: {{ midfielder.market_value|number_format }}€</span>
                     </div>
                 </div>
                 {% endfor %}
@@ -345,21 +358,21 @@
 
             {% if players_by_position.forwards %}
             <div class="players-grid">
-                {% for players_by_position.forwards as player %}
+                {% for forward in players_by_position.forwards %}
                 <div class="player-card">
                     <div class="player-header">
                         <div class="player-avatar">
-                            <div class="player-initials">{{ player.name|first }}{{ player.name|last }}</div>
-                            <div class="shirt-number">{{ player.shirt_number }}</div>
+                            <div class="player-initials">{{ forward.name|first }}{{ forward.name|last }}</div>
+                            <div class="shirt-number">{{ forward.shirt_number }}</div>
                         </div>
                         <div class="player-basic-info">
-                            <h4 class="player-name">{{ player.name }}</h4>
+                            <h4 class="player-name">{{ forward.name }}</h4>
                             <div class="player-meta">
-                                <span class="player-age">{{ player.age }} Jahre</span>
-                                <span class="player-nationality">{{ player.nationality }}</span>
+                                <span class="player-age">{{ forward.age }} Jahre</span>
+                                <span class="player-nationality">{{ forward.nationality }}</span>
                             </div>
                         </div>
-                        {% if player.injured %}
+                        {% if forward.injured %}
                         <div class="injury-status">
                             <span class="injury-icon">🏥</span>
                             <span class="injury-text">Verletzt</span>
@@ -370,25 +383,29 @@
                         <div class="stats-row">
                             <div class="stat-item">
                                 <span class="stat-icon">⚽</span>
-                                <span class="stat-value">{{ player.goals }}</span>
+                                <span class="stat-value">{{ forward.goals }}</span>
                                 <span class="stat-label">Tore</span>
                             </div>
                             <div class="stat-item">
                                 <span class="stat-icon">🎯</span>
-                                <span class="stat-value">{{ player.assists }}</span>
+                                <span class="stat-value">{{ forward.assists }}</span>
                                 <span class="stat-label">Assists</span>
                             </div>
                             <div class="stat-item">
                                 <span class="stat-icon">📊</span>
-                                <span class="stat-value">{{ player.rating }}</span>
+                                <span class="stat-value">{{ forward.rating }}</span>
                                 <span class="stat-label">Rating</span>
                             </div>
                             <div class="stat-item">
                                 <span class="stat-icon">👕</span>
-                                <span class="stat-value">{{ player.appearances }}</span>
+                                <span class="stat-value">{{ forward.appearances }}</span>
                                 <span class="stat-label">Spiele</span>
                             </div>
                         </div>
+                    </div>
+                    <div class="player-contract">
+                        <span class="contract-info">Vertrag bis: {{ forward.contract_until }}</span>
+                        <span class="market-value">Marktwert: {{ forward.market_value|number_format }}€</span>
                     </div>
                 </div>
                 {% endfor %}
@@ -398,62 +415,13 @@
             {% endif %}
         </div>
     </section>
-
-    <!-- Verletzte Spieler Übersicht -->
-    {% if squad_stats.injured_players > 0 %}
-    <section class="injured-players">
-        <h2 class="section-title warning">🏥 Verletzte Spieler</h2>
-        <div class="injured-list">
-            {% for players_by_position as position: players %}
-            {% for players as player %}
-            {% if player.injured %}
-            <div class="injured-player-item">
-                <div class="player-info">
-                    <span class="player-name">{{ player.name }}</span>
-                    <span class="player-position">({{ position|translate_position }})</span>
-                </div>
-                {% if player.injury_until %}
-                <div class="injury-info">
-                    <span class="injury-until">Bis: {{ player.injury_until|date }}</span>
-                </div>
-                {% endif %}
-            </div>
-            {% endif %}
-            {% endfor %}
-            {% endfor %}
-        </div>
-    </section>
-    {% endif %}
-
-    <!-- Quick Actions -->
-    <section class="team-actions">
-        <h2>⚡ Schnellaktionen</h2>
-        <div class="action-buttons">
-            <a href="/team/tactics" class="action-btn primary">
-                <span class="btn-icon">📋</span>
-                Taktik bearbeiten
-            </a>
-            <a href="/transfers" class="action-btn secondary">
-                <span class="btn-icon">🔄</span>
-                Transfermarkt
-            </a>
-            <a href="/team/training" class="action-btn secondary">
-                <span class="btn-icon">🏃‍♂️</span>
-                Training planen
-            </a>
-            <a href="/team/contracts" class="action-btn secondary">
-                <span class="btn-icon">📄</span>
-                Verträge verwalten
-            </a>
-        </div>
-    </section>
 </div>
 
 <style>
     .team-overview {
+        padding: 20px;
         max-width: 1200px;
         margin: 0 auto;
-        padding: 20px;
     }
 
     .team-header {
@@ -464,19 +432,18 @@
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         color: white;
         padding: 30px;
-        border-radius: 15px;
+        border-radius: 16px;
         display: grid;
         grid-template-columns: auto 1fr auto;
         gap: 30px;
         align-items: center;
-        box-shadow: 0 10px 30px rgba(0,0,0,0.2);
     }
 
     .team-logo .logo {
         width: 80px;
         height: 80px;
         border-radius: 50%;
-        object-fit: cover;
+        border: 3px solid rgba(255,255,255,0.3);
     }
 
     .logo-placeholder {
@@ -487,12 +454,12 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        font-size: 32px;
+        font-size: 2rem;
         font-weight: bold;
     }
 
     .team-details h1 {
-        margin: 0 0 10px 0;
+        margin: 0 0 15px 0;
         font-size: 2.5rem;
         font-weight: 700;
     }
@@ -633,8 +600,7 @@
         border: none;
         border-radius: 8px;
         cursor: pointer;
-        font-weight: 600;
-        transition: background 0.2s;
+        font-size: 0.9rem;
     }
 
     .filter-reset:hover {
@@ -642,7 +608,7 @@
     }
 
     .position-section {
-        margin-bottom: 50px;
+        margin-bottom: 40px;
     }
 
     .position-title {
@@ -651,8 +617,7 @@
         gap: 10px;
         margin-bottom: 20px;
         font-size: 1.5rem;
-        font-weight: 600;
-        color: #333;
+        font-weight: 700;
     }
 
     .position-icon {
@@ -661,131 +626,135 @@
 
     .players-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
         gap: 20px;
+    }
+
+    .player-card {
+        background: white;
+        border-radius: 12px;
+        padding: 20px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        transition: transform 0.2s;
+    }
+
+    .player-card:hover {
+        transform: translateY(-5px);
+    }
+
+    .player-header {
+        display: flex;
+        align-items: center;
+        gap: 15px;
+        margin-bottom: 15px;
+    }
+
+    .player-avatar {
+        position: relative;
+        width: 60px;
+        height: 60px;
+        background: linear-gradient(135deg, #667eea, #764ba2);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-weight: bold;
+    }
+
+    .player-initials {
+        font-size: 1.2rem;
+    }
+
+    .shirt-number {
+        position: absolute;
+        top: -8px;
+        right: -8px;
+        background: #ff6b6b;
+        color: white;
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.8rem;
+        font-weight: bold;
+    }
+
+    .player-basic-info {
+        flex: 1;
+    }
+
+    .player-name {
+        margin: 0 0 5px 0;
+        font-size: 1.1rem;
+        font-weight: 700;
+    }
+
+    .player-meta {
+        display: flex;
+        gap: 15px;
+        font-size: 0.9rem;
+        color: #666;
+    }
+
+    .injury-status {
+        background: #ff6b6b;
+        color: white;
+        padding: 5px 10px;
+        border-radius: 20px;
+        font-size: 0.8rem;
+        display: flex;
+        align-items: center;
+        gap: 5px;
+    }
+
+    .stats-row {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 10px;
+    }
+
+    .stat-item {
+        text-align: center;
+        padding: 8px;
+        background: #f8f9fa;
+        border-radius: 8px;
+    }
+
+    .stat-value {
+        display: block;
+        font-size: 1.2rem;
+        font-weight: 700;
+        margin-bottom: 2px;
+    }
+
+    .stat-label {
+        font-size: 0.8rem;
+        color: #666;
+    }
+
+    .player-contract {
+        margin-top: 15px;
+        padding-top: 15px;
+        border-top: 1px solid #e1e5e9;
+        display: flex;
+        justify-content: space-between;
+        font-size: 0.9rem;
+        color: #666;
+    }
+
+    .market-value {
+        font-weight: 600;
+        color: #28a745;
     }
 
     .no-players {
         text-align: center;
-        padding: 40px;
-        color: #6c757d;
+        color: #666;
         font-style: italic;
-        background: #f8f9fa;
-        border-radius: 8px;
-    }
-
-    .injured-players {
-        background: #fff5f5;
-        border: 2px solid #fed7d7;
-        border-radius: 12px;
-        padding: 25px;
-        margin-bottom: 40px;
-    }
-
-    .section-title.warning {
-        color: #e53e3e;
-        margin-bottom: 20px;
-    }
-
-    .injured-list {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-        gap: 15px;
-    }
-
-    .injured-player-item {
-        background: white;
-        padding: 15px;
-        border-radius: 8px;
-        border-left: 4px solid #e53e3e;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-    }
-
-    .player-info {
-        display: flex;
-        gap: 10px;
-        align-items: center;
-    }
-
-    .player-name {
-        font-weight: 600;
-        color: #333;
-    }
-
-    .player-position {
-        color: #6c757d;
-        font-size: 0.9rem;
-    }
-
-    .injury-info {
-        text-align: right;
-    }
-
-    .injury-until {
-        color: #e53e3e;
-        font-size: 0.9rem;
-        font-weight: 500;
-    }
-
-    .team-actions {
-        background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-        padding: 30px;
-        border-radius: 15px;
-        color: white;
-    }
-
-    .team-actions h2 {
-        margin-bottom: 25px;
-        color: white;
-    }
-
-    .action-buttons {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-        gap: 15px;
-    }
-
-    .action-btn {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        padding: 15px 20px;
-        border-radius: 8px;
-        text-decoration: none;
-        font-weight: 600;
-        transition: all 0.2s;
-        text-align: center;
-        justify-content: center;
-    }
-
-    .action-btn.primary {
-        background: white;
-        color: #f5576c;
-    }
-
-    .action-btn.secondary {
-        background: rgba(255,255,255,0.2);
-        color: white;
-        border: 2px solid rgba(255,255,255,0.3);
-    }
-
-    .action-btn:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 5px 15px rgba(0,0,0,0.2);
-    }
-
-    .action-btn.primary:hover {
-        background: #f8f9fa;
-    }
-
-    .action-btn.secondary:hover {
-        background: rgba(255,255,255,0.3);
-    }
-
-    .btn-icon {
-        font-size: 1.2rem;
+        padding: 40px;
     }
 
     /* Responsive Design */
@@ -812,8 +781,8 @@
             grid-template-columns: 1fr;
         }
 
-        .action-buttons {
-            grid-template-columns: 1fr;
+        .stats-row {
+            grid-template-columns: repeat(2, 1fr);
         }
     }
 
@@ -834,116 +803,215 @@
             flex-direction: column;
             gap: 10px;
         }
+
+        .player-contract {
+            flex-direction: column;
+            gap: 5px;
+        }
     }
 </style>
 
-<script>
-    // JavaScript für Filter-Funktionalität
-    document.addEventListener('DOMContentLoaded', function() {
-        const positionFilter = document.getElementById('position-filter');
-        const statusFilter = document.getElementById('status-filter');
-        const ageFilter = document.getElementById('age-filter');
-        const resetButton = document.querySelector('.filter-reset');
+<!-- Test-Sektion für JavaScript-Debugging -->
+<section class="javascript-test" style="background: #fff3cd; padding: 20px; margin: 20px 0; border-radius: 8px;">
+    <h3>🔧 JavaScript Test</h3>
+    <p id="js-test-result">JavaScript wird getestet...</p>
+    <button onclick="alert('Inline onclick funktioniert!')">Inline Test</button>
+    <button onclick="
+        console.log('DOM TEST: Inline Funktion wird ausgeführt');
+        var testElement = document.getElementById('js-test-result');
+        if (testElement) {
+            testElement.textContent = '✅ DOM Test erfolgreich!';
+            testElement.style.color = 'green';
+            testElement.style.fontWeight = 'bold';
+            alert('DOM Test erfolgreich!');
+        } else {
+            alert('DOM Test fehlgeschlagen');
+        }
+    ">DOM Test (Inline)</button>
+</section>
 
-        // Filter Event Listeners
-        positionFilter.addEventListener('change', applyFilters);
-        statusFilter.addEventListener('change', applyFilters);
-        ageFilter.addEventListener('change', applyFilters);
-        resetButton.addEventListener('click', resetFilters);
+<!-- Filter-Sektion mit hart-kodierten Optionen -->
+<section class="player-filters">
+    <h2>🔍 Spieler filtern</h2>
+    <div class="filter-controls">
+        <div class="filter-group">
+            <label for="position-filter">Position:</label>
+            <select id="position-filter" name="position" onchange="
+                    console.log('POSITION FILTER: Wird ausgeführt');
+                    var positionFilter = document.getElementById('position-filter');
+                    var selectedPosition = positionFilter.value;
+                    console.log('Gewählte Position:', selectedPosition);
 
-        function applyFilters() {
-            const positionValue = positionFilter.value;
-            const statusValue = statusFilter.value;
-            const ageValue = ageFilter.value;
+                    var positionSections = document.querySelectorAll('.position-section');
+                    console.log('Position-Sektionen gefunden:', positionSections.length);
 
-            const positionSections = document.querySelectorAll('.position-section');
+                    var totalVisible = 0;
+                    for (var i = 0; i < positionSections.length; i++) {
+                        var section = positionSections[i];
+                        var sectionPosition = section.dataset.position;
+                        var shouldShow = selectedPosition === 'all' || sectionPosition === selectedPosition;
 
-            positionSections.forEach(section => {
-                const position = section.dataset.position;
-                let showSection = true;
+                        section.style.display = shouldShow ? 'block' : 'none';
 
-                // Position Filter
-                if (positionValue !== 'all' && position !== positionValue) {
-                    showSection = false;
-                }
-
-                // Show/Hide Section
-                section.style.display = showSection ? 'block' : 'none';
-
-                // Filter individual player cards within visible sections
-                if (showSection) {
-                    const playerCards = section.querySelectorAll('.player-card');
-                    playerCards.forEach(card => {
-                        let showCard = true;
-
-                        // Status Filter (injured/available)
-                        if (statusValue !== 'all') {
-                            const isInjured = card.querySelector('.injury-status') !== null;
-                            if (statusValue === 'injured' && !isInjured) showCard = false;
-                            if (statusValue === 'available' && isInjured) showCard = false;
+                        if (shouldShow) {
+                            var playerCards = section.querySelectorAll('.player-card');
+                            totalVisible += playerCards.length;
                         }
 
-                        // Age Filter
-                        if (ageValue !== 'all') {
-                            const ageElement = card.querySelector('.player-age');
-                            if (ageElement) {
-                                const age = parseInt(ageElement.textContent);
-                                if (ageValue === 'young' && age >= 21) showCard = false;
-                                if (ageValue === 'prime' && (age < 21 || age > 30)) showCard = false;
-                                if (ageValue === 'veteran' && age <= 30) showCard = false;
-                            }
+                        console.log('Sektion ' + i + ': Position=' + sectionPosition + ', Anzeigen=' + shouldShow);
+                    }
+
+                    console.log('Sichtbare Sektionen nach Filter:', totalVisible);
+                    alert('Position-Filter angewendet! Position: ' + selectedPosition + ', Sichtbare Spieler: ' + totalVisible);
+                ">
+                <option value="all">Alle Positionen</option>
+                <option value="goalkeepers">Torhüter</option>
+                <option value="defenders">Verteidiger</option>
+                <option value="midfielders">Mittelfeld</option>
+                <option value="forwards">Stürmer</option>
+            </select>
+        </div>
+
+        <div class="filter-group">
+            <label for="status-filter">Status:</label>
+            <select id="status-filter" name="status" onchange="
+                    console.log('STATUS FILTER: Wird ausgeführt');
+                    var statusFilter = document.getElementById('status-filter');
+                    var selectedStatus = statusFilter.value;
+                    console.log('Gewählter Status:', selectedStatus);
+
+                    var playerCards = document.querySelectorAll('.player-card');
+                    var visibleCount = 0;
+
+                    for (var i = 0; i < playerCards.length; i++) {
+                        var card = playerCards[i];
+                        var hasInjuryStatus = card.querySelector('.injury-status') !== null;
+                        var shouldShow = true;
+
+                        if (selectedStatus === 'injured' && !hasInjuryStatus) {
+                            shouldShow = false;
+                        } else if (selectedStatus === 'available' && hasInjuryStatus) {
+                            shouldShow = false;
                         }
 
-                        card.style.display = showCard ? 'block' : 'none';
-                    });
+                        card.style.display = shouldShow ? 'block' : 'none';
+
+                        if (shouldShow) visibleCount++;
+
+                        console.log('Spieler ' + i + ': Verletzt=' + hasInjuryStatus + ', Status-Filter=' + selectedStatus + ', Anzeigen=' + shouldShow);
+                    }
+
+                    console.log('Sichtbare Spieler nach Status-Filter:', visibleCount);
+                    alert('Status-Filter angewendet! Status: ' + selectedStatus + ', Sichtbare Spieler: ' + visibleCount);
+                ">
+                <option value="all">Alle Spieler</option>
+                <option value="available">Verfügbar</option>
+                <option value="injured">Verletzt</option>
+            </select>
+        </div>
+
+        <div class="filter-group">
+            <label for="age-filter">Altersgruppe:</label>
+            <select id="age-filter" name="age_group" onchange="
+                    console.log('AGE FILTER: Wird ausgeführt');
+                    var ageFilter = document.getElementById('age-filter');
+                    var selectedAge = ageFilter.value;
+                    console.log('Gewählte Altersgruppe:', selectedAge);
+
+                    var playerCards = document.querySelectorAll('.player-card');
+                    var visibleCount = 0;
+
+                    for (var i = 0; i < playerCards.length; i++) {
+                        var card = playerCards[i];
+                        var ageElement = card.querySelector('.player-age');
+                        var ageText = ageElement ? ageElement.textContent.trim() : '';
+                        var playerAge = parseInt(ageText.replace(/\\D/g, '')) || 0;
+
+                        var shouldShow = true;
+
+                        if (selectedAge === 'young' && playerAge >= 21) {
+                            shouldShow = false;
+                        } else if (selectedAge === 'prime' && (playerAge < 21 || playerAge > 30)) {
+                            shouldShow = false;
+                        } else if (selectedAge === 'veteran' && playerAge <= 30) {
+                            shouldShow = false;
+                        }
+
+                        card.style.display = shouldShow ? 'block' : 'none';
+
+                        if (shouldShow) visibleCount++;
+
+                        console.log('Spieler ' + i + ': Alter=' + playerAge + ', Alters-Filter=' + selectedAge + ', Anzeigen=' + shouldShow);
+                    }
+
+                    console.log('Sichtbare Spieler nach Alters-Filter:', visibleCount);
+                    alert('Alters-Filter angewendet! Altersgruppe: ' + selectedAge + ', Sichtbare Spieler: ' + visibleCount);
+                ">
+                <option value="all">Alle Altersgruppen</option>
+                <option value="young">U21 (unter 21)</option>
+                <option value="prime">Prime (21-30)</option>
+                <option value="veteran">Veteran (über 30)</option>
+            </select>
+        </div>
+
+        <button type="button" class="filter-reset" onclick="
+                console.log('RESET: Alle Filter werden zurückgesetzt');
+
+                var positionFilter = document.getElementById('position-filter');
+                var statusFilter = document.getElementById('status-filter');
+                var ageFilter = document.getElementById('age-filter');
+
+                if (positionFilter) positionFilter.value = 'all';
+                if (statusFilter) statusFilter.value = 'all';
+                if (ageFilter) ageFilter.value = 'all';
+
+                var playerCards = document.querySelectorAll('.player-card');
+                var positionSections = document.querySelectorAll('.position-section');
+
+                for (var i = 0; i < playerCards.length; i++) {
+                    playerCards[i].style.display = 'block';
                 }
-            });
 
-            // Update statistics after filtering
-            updateFilteredStats();
-        }
-
-        function resetFilters() {
-            positionFilter.value = 'all';
-            statusFilter.value = 'all';
-            ageFilter.value = 'all';
-
-            // Show all sections and cards
-            document.querySelectorAll('.position-section').forEach(section => {
-                section.style.display = 'block';
-            });
-
-            document.querySelectorAll('.player-card').forEach(card => {
-                card.style.display = 'block';
-            });
-
-            updateFilteredStats();
-        }
-
-        function updateFilteredStats() {
-            const visibleCards = document.querySelectorAll('.player-card[style="display: block"], .player-card:not([style*="display: none"])');
-            const visibleCount = visibleCards.length;
-
-            // Update player count display if needed
-            const countElement = document.querySelector('.filtered-count');
-            if (countElement) {
-                countElement.textContent = `${visibleCount} Spieler gefunden`;
-            }
-        }
-
-        // Add smooth scrolling for position navigation
-        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
-            anchor.addEventListener('click', function (e) {
-                e.preventDefault();
-                const target = document.querySelector(this.getAttribute('href'));
-                if (target) {
-                    target.scrollIntoView({
-                        behavior: 'smooth',
-                        block: 'start'
-                    });
+                for (var i = 0; i < positionSections.length; i++) {
+                    positionSections[i].style.display = 'block';
                 }
-            });
-        });
-    });
-</script>
+
+                console.log('RESET: Alle Filter zurückgesetzt, alle Elemente sichtbar');
+                alert('Alle Filter zurückgesetzt!');
+            ">Filter zurücksetzen</button>
+    </div>
+</section>
+
+<!-- Debug-Ausgabe für Filter-Optionen -->
+<section class="debug-section" style="background: #f0f0f0; padding: 20px; margin: 20px 0; border-radius: 8px;">
+    <h3>🔍 Debug Informationen</h3>
+    <button onclick="
+        var positionFilter = document.getElementById('position-filter');
+        var statusFilter = document.getElementById('status-filter');
+        var ageFilter = document.getElementById('age-filter');
+        var playerCards = document.querySelectorAll('.player-card');
+        var positionSections = document.querySelectorAll('.position-section');
+
+        var debug = 'DEBUG INFO:\\n';
+        debug += 'Position Filter: ' + (positionFilter ? 'GEFUNDEN (' + positionFilter.children.length + ' Optionen)' : 'NICHT GEFUNDEN') + '\\n';
+        debug += 'Status Filter: ' + (statusFilter ? 'GEFUNDEN (' + statusFilter.children.length + ' Optionen)' : 'NICHT GEFUNDEN') + '\\n';
+        debug += 'Age Filter: ' + (ageFilter ? 'GEFUNDEN (' + ageFilter.children.length + ' Optionen)' : 'NICHT GEFUNDEN') + '\\n';
+        debug += 'Spielerkarten: ' + playerCards.length + '\\n';
+        debug += 'Position-Sektionen: ' + positionSections.length + '\\n';
+
+        if (positionFilter && positionFilter.children.length > 0) {
+            debug += '\\nPosition-Optionen:\\n';
+            for (var i = 0; i < positionFilter.children.length; i++) {
+                var option = positionFilter.children[i];
+                debug += '  ' + i + ': \"' + option.value + '\" = \"' + option.textContent + '\"\\n';
+    }
+    }
+
+    alert(debug);
+    console.log(debug);
+    ">Debug Info anzeigen</button>
+</section>
+
+<!-- Entfernen des problematischen Script-Tags -->
+
 {% endblock %}
