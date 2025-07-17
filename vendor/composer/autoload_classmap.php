@@ -12,7 +12,6 @@ return array(
     'App\\Actions\\TemplateTestAction' => $baseDir . '/app/Actions/TemplateTestAction.php',
     'Composer\\InstalledVersions' => $vendorDir . '/composer/InstalledVersions.php',
     'Framework\\Core\\AbstractServiceProvider' => $baseDir . '/framework/Core/AbstractServiceProvider.php',
-    'Framework\\Core\\Application' => $baseDir . '/framework/Core/Application.php',
     'Framework\\Core\\ApplicationKernel' => $baseDir . '/framework/Core/ApplicationKernel.php',
     'Framework\\Core\\ConfigManager' => $baseDir . '/framework/Core/ConfigManager.php',
     'Framework\\Core\\ConfigNotFoundException' => $baseDir . '/framework/Core/ConfigNotFoundException.php',

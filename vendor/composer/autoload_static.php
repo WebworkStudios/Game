@@ -35,7 +35,6 @@ class ComposerStaticInit76c9304563798f214bebb069e4a2ab06
         'App\\Actions\\TemplateTestAction' => __DIR__ . '/../..' . '/app/Actions/TemplateTestAction.php',
         'Composer\\InstalledVersions' => __DIR__ . '/..' . '/composer/InstalledVersions.php',
         'Framework\\Core\\AbstractServiceProvider' => __DIR__ . '/../..' . '/framework/Core/AbstractServiceProvider.php',
-        'Framework\\Core\\Application' => __DIR__ . '/../..' . '/framework/Core/Application.php',
         'Framework\\Core\\ApplicationKernel' => __DIR__ . '/../..' . '/framework/Core/ApplicationKernel.php',
         'Framework\\Core\\ConfigManager' => __DIR__ . '/../..' . '/framework/Core/ConfigManager.php',
         'Framework\\Core\\ConfigNotFoundException' => __DIR__ . '/../..' . '/framework/Core/ConfigNotFoundException.php',
