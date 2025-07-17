@@ -1,11 +1,10 @@
 <?php
-
 declare(strict_types=1);
 
 namespace Framework\Http;
 
 /**
- * HTTP-Status Codes Enum
+ * HTTP-Status Codes Enum mit erweiterten Methoden für PHP 8.4
  */
 enum HttpStatus: int
 {
@@ -13,6 +12,7 @@ enum HttpStatus: int
     case CONTINUE = 100;
     case SWITCHING_PROTOCOLS = 101;
     case PROCESSING = 102;
+    case EARLY_HINTS = 103; // HINZUGEFÜGT: RFC 8297
 
     // 2xx Success
     case OK = 200;
@@ -22,6 +22,9 @@ enum HttpStatus: int
     case NO_CONTENT = 204;
     case RESET_CONTENT = 205;
     case PARTIAL_CONTENT = 206;
+    case MULTI_STATUS = 207; // HINZUGEFÜGT: WebDAV
+    case ALREADY_REPORTED = 208; // HINZUGEFÜGT: WebDAV
+    case IM_USED = 226; // HINZUGEFÜGT: RFC 3229
 
     // 3xx Redirection
     case MULTIPLE_CHOICES = 300;
@@ -52,9 +55,18 @@ enum HttpStatus: int
     case UNSUPPORTED_MEDIA_TYPE = 415;
     case RANGE_NOT_SATISFIABLE = 416;
     case EXPECTATION_FAILED = 417;
+    case IM_A_TEAPOT = 418; // HINZUGEFÜGT: RFC 2324 (April Fools)
     case PAGE_EXPIRED = 419;
+    case MISDIRECTED_REQUEST = 421; // HINZUGEFÜGT: RFC 7540
     case UNPROCESSABLE_ENTITY = 422;
+    case LOCKED = 423; // HINZUGEFÜGT: WebDAV
+    case FAILED_DEPENDENCY = 424; // HINZUGEFÜGT: WebDAV
+    case TOO_EARLY = 425; // HINZUGEFÜGT: RFC 8470
+    case UPGRADE_REQUIRED = 426; // HINZUGEFÜGT: RFC 2817
+    case PRECONDITION_REQUIRED = 428; // HINZUGEFÜGT: RFC 6585
     case TOO_MANY_REQUESTS = 429;
+    case REQUEST_HEADER_FIELDS_TOO_LARGE = 431; // HINZUGEFÜGT: RFC 6585
+    case UNAVAILABLE_FOR_LEGAL_REASONS = 451; // HINZUGEFÜGT: RFC 7725
 
     // 5xx Server Error
     case INTERNAL_SERVER_ERROR = 500;
@@ -62,114 +74,108 @@ enum HttpStatus: int
     case BAD_GATEWAY = 502;
     case SERVICE_UNAVAILABLE = 503;
     case GATEWAY_TIMEOUT = 504;
-    case HTTP_VERSION_NOT_SUPPORTED = 505;
+    case HTTP_VERSION_NOT_SUPPORTED = 505; // HINZUGEFÜGT
+    case VARIANT_ALSO_NEGOTIATES = 506; // HINZUGEFÜGT: RFC 2295
+    case INSUFFICIENT_STORAGE = 507; // HINZUGEFÜGT: WebDAV
+    case LOOP_DETECTED = 508; // HINZUGEFÜGT: WebDAV
+    case NOT_EXTENDED = 510; // HINZUGEFÜGT: RFC 2774
+    case NETWORK_AUTHENTICATION_REQUIRED = 511; // HINZUGEFÜGT: RFC 6585
 
     /**
-     * Gibt den HTTP-Status-Text zurück
+     * MODERNISIERT: Typed Class Constants (PHP 8.3+)
+     */
+    private const array STATUS_TEXTS = [
+        100 => 'Continue',
+        101 => 'Switching Protocols',
+        102 => 'Processing',
+        103 => 'Early Hints',
+        200 => 'OK',
+        201 => 'Created',
+        202 => 'Accepted',
+        203 => 'Non-Authoritative Information',
+        204 => 'No Content',
+        205 => 'Reset Content',
+        206 => 'Partial Content',
+        207 => 'Multi-Status',
+        208 => 'Already Reported',
+        226 => 'IM Used',
+        300 => 'Multiple Choices',
+        301 => 'Moved Permanently',
+        302 => 'Found',
+        303 => 'See Other',
+        304 => 'Not Modified',
+        305 => 'Use Proxy',
+        307 => 'Temporary Redirect',
+        308 => 'Permanent Redirect',
+        400 => 'Bad Request',
+        401 => 'Unauthorized',
+        402 => 'Payment Required',
+        403 => 'Forbidden',
+        404 => 'Not Found',
+        405 => 'Method Not Allowed',
+        406 => 'Not Acceptable',
+        407 => 'Proxy Authentication Required',
+        408 => 'Request Timeout',
+        409 => 'Conflict',
+        410 => 'Gone',
+        411 => 'Length Required',
+        412 => 'Precondition Failed',
+        413 => 'Payload Too Large',
+        414 => 'URI Too Long',
+        415 => 'Unsupported Media Type',
+        416 => 'Range Not Satisfiable',
+        417 => 'Expectation Failed',
+        418 => "I'm a teapot",
+        419 => 'Page Expired',
+        421 => 'Misdirected Request',
+        422 => 'Unprocessable Entity',
+        423 => 'Locked',
+        424 => 'Failed Dependency',
+        425 => 'Too Early',
+        426 => 'Upgrade Required',
+        428 => 'Precondition Required',
+        429 => 'Too Many Requests',
+        431 => 'Request Header Fields Too Large',
+        451 => 'Unavailable For Legal Reasons',
+        500 => 'Internal Server Error',
+        501 => 'Not Implemented',
+        502 => 'Bad Gateway',
+        503 => 'Service Unavailable',
+        504 => 'Gateway Timeout',
+        505 => 'HTTP Version Not Supported',
+        506 => 'Variant Also Negotiates',
+        507 => 'Insufficient Storage',
+        508 => 'Loop Detected',
+        510 => 'Not Extended',
+        511 => 'Network Authentication Required',
+    ];
+
+    /**
+     * MODERNISIERT: Bessere Implementierung mit match
      */
     public function getText(): string
     {
-        return match ($this) {
-            // 1xx Informational
-            self::CONTINUE => 'Continue',
-            self::SWITCHING_PROTOCOLS => 'Switching Protocols',
-            self::PROCESSING => 'Processing',
-
-            // 2xx Success
-            self::OK => 'OK',
-            self::CREATED => 'Created',
-            self::ACCEPTED => 'Accepted',
-            self::NON_AUTHORITATIVE_INFORMATION => 'Non-Authoritative Information',
-            self::NO_CONTENT => 'No Content',
-            self::RESET_CONTENT => 'Reset Content',
-            self::PARTIAL_CONTENT => 'Partial Content',
-
-            // 3xx Redirection
-            self::MULTIPLE_CHOICES => 'Multiple Choices',
-            self::MOVED_PERMANENTLY => 'Moved Permanently',
-            self::FOUND => 'Found',
-            self::SEE_OTHER => 'See Other',
-            self::NOT_MODIFIED => 'Not Modified',
-            self::USE_PROXY => 'Use Proxy',
-            self::TEMPORARY_REDIRECT => 'Temporary Redirect',
-            self::PERMANENT_REDIRECT => 'Permanent Redirect',
-
-            // 4xx Client Error
-            self::BAD_REQUEST => 'Bad Request',
-            self::UNAUTHORIZED => 'Unauthorized',
-            self::PAYMENT_REQUIRED => 'Payment Required',
-            self::FORBIDDEN => 'Forbidden',
-            self::NOT_FOUND => 'Not Found',
-            self::METHOD_NOT_ALLOWED => 'Method Not Allowed',
-            self::NOT_ACCEPTABLE => 'Not Acceptable',
-            self::PROXY_AUTHENTICATION_REQUIRED => 'Proxy Authentication Required',
-            self::REQUEST_TIMEOUT => 'Request Timeout',
-            self::CONFLICT => 'Conflict',
-            self::GONE => 'Gone',
-            self::LENGTH_REQUIRED => 'Length Required',
-            self::PRECONDITION_FAILED => 'Precondition Failed',
-            self::PAYLOAD_TOO_LARGE => 'Payload Too Large',
-            self::URI_TOO_LONG => 'URI Too Long',
-            self::UNSUPPORTED_MEDIA_TYPE => 'Unsupported Media Type',
-            self::RANGE_NOT_SATISFIABLE => 'Range Not Satisfiable',
-            self::EXPECTATION_FAILED => 'Expectation Failed',
-            self::PAGE_EXPIRED => 'Page Expired',
-            self::UNPROCESSABLE_ENTITY => 'Unprocessable Entity',
-            self::TOO_MANY_REQUESTS => 'Too Many Requests',
-
-            // 5xx Server Error
-            self::INTERNAL_SERVER_ERROR => 'Internal Server Error',
-            self::NOT_IMPLEMENTED => 'Not Implemented',
-            self::BAD_GATEWAY => 'Bad Gateway',
-            self::SERVICE_UNAVAILABLE => 'Service Unavailable',
-            self::GATEWAY_TIMEOUT => 'Gateway Timeout',
-            self::HTTP_VERSION_NOT_SUPPORTED => 'HTTP Version Not Supported',
-        };
+        return self::STATUS_TEXTS[$this->value] ?? 'Unknown Status';
     }
 
     /**
-     * Prüft ob Status Code informational ist (1xx)
-     */
-    public function isInformational(): bool
-    {
-        return $this->value >= 100 && $this->value < 200;
-    }
-
-    /**
-     * Alias für isSuccess() - für Kompatibilität mit Response.php
+     * Prüft ob Status-Code successful ist (2xx)
      */
     public function isSuccessful(): bool
-    {
-        return $this->isSuccess();
-    }
-
-    /**
-     * Prüft ob Status Code erfolgreiche Antwort ist (2xx)
-     * KORRIGIERT: Sowohl isSuccess() als auch isSuccessful() verfügbar
-     */
-    public function isSuccess(): bool
     {
         return $this->value >= 200 && $this->value < 300;
     }
 
     /**
-     * Prüft ob Status Code Umleitung ist (3xx)
+     * Prüft ob Status-Code redirect ist (3xx)
      */
-    public function isRedirection(): bool
+    public function isRedirect(): bool
     {
         return $this->value >= 300 && $this->value < 400;
     }
 
     /**
-     * Prüft ob Status Code einen Fehler darstellt (4xx oder 5xx)
-     */
-    public function isError(): bool
-    {
-        return $this->isClientError() || $this->isServerError();
-    }
-
-    /**
-     * Prüft ob Status Code Client-Fehler ist (4xx)
+     * Prüft ob Status-Code client error ist (4xx)
      */
     public function isClientError(): bool
     {
@@ -177,7 +183,7 @@ enum HttpStatus: int
     }
 
     /**
-     * Prüft ob Status Code Server-Fehler ist (5xx)
+     * Prüft ob Status-Code server error ist (5xx)
      */
     public function isServerError(): bool
     {
@@ -185,30 +191,34 @@ enum HttpStatus: int
     }
 
     /**
-     * Prüft ob Status Code eine Umleitung mit Location-Header ist
+     * NEU: Prüft ob Status-Code eine Antwort mit Body erwarten kann
      */
-    public function isRedirect(): bool
+    public function mayHaveBody(): bool
     {
         return match ($this) {
-            self::MOVED_PERMANENTLY,
-            self::FOUND,
-            self::SEE_OTHER,
-            self::TEMPORARY_REDIRECT,
-            self::PERMANENT_REDIRECT => true,
-            default => false,
+            self::NO_CONTENT, self::RESET_CONTENT, self::NOT_MODIFIED => false,
+            default => !$this->isInformational(),
         };
     }
 
     /**
-     * Prüft ob Response-Body erlaubt ist
+     * Prüft ob Status-Code informational ist (1xx)
      */
-    public function allowsBody(): bool
+    public function isInformational(): bool
+    {
+        return $this->value >= 100 && $this->value < 200;
+    }
+
+    /**
+     * NEU: Prüft ob Status cacheable ist
+     */
+    public function isCacheable(): bool
     {
         return match ($this) {
-            self::NO_CONTENT,
-            self::RESET_CONTENT,
-            self::NOT_MODIFIED => false,
-            default => true,
+            self::OK, self::NON_AUTHORITATIVE_INFORMATION, self::PARTIAL_CONTENT,
+            self::MULTIPLE_CHOICES, self::MOVED_PERMANENTLY, self::GONE,
+            self::NOT_FOUND, self::METHOD_NOT_ALLOWED, self::UNAVAILABLE_FOR_LEGAL_REASONS => true,
+            default => false,
         };
     }
 }

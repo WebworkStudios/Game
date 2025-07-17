@@ -1,12 +1,10 @@
 <?php
-
-
 declare(strict_types=1);
 
 namespace Framework\Http;
 
 /**
- * HTTP-Methoden Enum
+ * HTTP-Methoden Enum mit erweiterten Funktionen für PHP 8.4
  */
 enum HttpMethod: string
 {
@@ -17,6 +15,16 @@ enum HttpMethod: string
     case DELETE = 'DELETE';
     case HEAD = 'HEAD';
     case OPTIONS = 'OPTIONS';
+    case TRACE = 'TRACE';    // HINZUGEFÜGT: Fehlende HTTP-Methode
+    case CONNECT = 'CONNECT'; // HINZUGEFÜGT: Fehlende HTTP-Methode
+
+    /**
+     * NEU: Gibt alle verfügbaren Methoden als Array zurück
+     */
+    public static function all(): array
+    {
+        return array_map(fn(self $case) => $case->value, self::cases());
+    }
 
     /**
      * Prüft ob HTTP-Methode idempotent ist
@@ -24,8 +32,8 @@ enum HttpMethod: string
     public function isIdempotent(): bool
     {
         return match ($this) {
-            self::GET, self::HEAD, self::OPTIONS, self::PUT, self::DELETE => true,
-            self::POST, self::PATCH => false,
+            self::GET, self::HEAD, self::OPTIONS, self::PUT, self::DELETE, self::TRACE => true,
+            self::POST, self::PATCH, self::CONNECT => false,
         };
     }
 
@@ -35,7 +43,7 @@ enum HttpMethod: string
     public function isSafe(): bool
     {
         return match ($this) {
-            self::GET, self::HEAD, self::OPTIONS => true,
+            self::GET, self::HEAD, self::OPTIONS, self::TRACE => true,
             default => false,
         };
     }
@@ -47,7 +55,7 @@ enum HttpMethod: string
     {
         return match ($this) {
             self::POST, self::PUT, self::PATCH => true,
-            self::GET, self::HEAD, self::DELETE, self::OPTIONS => false,
+            self::GET, self::HEAD, self::DELETE, self::OPTIONS, self::TRACE, self::CONNECT => false,
         };
     }
 
@@ -60,5 +68,13 @@ enum HttpMethod: string
             self::GET, self::HEAD => true,
             default => false,
         };
+    }
+
+    /**
+     * NEU: Erstellt sicheren HTTP-Method-String für Logs
+     */
+    public function toLogString(): string
+    {
+        return $this->value;
     }
 }

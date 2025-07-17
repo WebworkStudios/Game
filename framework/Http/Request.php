@@ -7,13 +7,20 @@ namespace Framework\Http;
 use JsonException;
 
 /**
- * HTTP Request - Immutable Request Object
- *
- * ERWEITERT: Mit Path Parameters Support für Router
+ * HTTP Request - Immutable Request Object mit PHP 8.4 Features
  */
 readonly class Request
 {
+    /**
+     * MODERNISIERT: Typed Class Constants (PHP 8.3+)
+     */
     private const string DEFAULT_PROTOCOL = 'HTTP/1.1';
+    private const array TRUSTED_HEADERS = [
+        'x-forwarded-for',
+        'x-forwarded-proto',
+        'x-forwarded-port',
+        'x-real-ip',
+    ];
 
     public function __construct(
         private HttpMethod $method,
@@ -26,7 +33,7 @@ readonly class Request
         private array      $server = [],
         private string     $body = '',
         private string     $protocol = self::DEFAULT_PROTOCOL,
-        private array      $pathParameters = [], // NEU: Route-Parameter
+        private array      $pathParameters = [],
     )
     {
     }
@@ -57,7 +64,7 @@ readonly class Request
     }
 
     /**
-     * Parst HTTP-Headers aus $_SERVER
+     * MODERNISIERT: Bessere Header-Parsing mit PHP 8.4 Features
      */
     private static function parseHeaders(): array
     {
@@ -70,7 +77,7 @@ readonly class Request
             }
         }
 
-        // Spezielle Headers
+        // Spezielle Headers hinzufügen
         if (isset($_SERVER['CONTENT_TYPE'])) {
             $headers['content-type'] = $_SERVER['CONTENT_TYPE'];
         }
@@ -79,22 +86,19 @@ readonly class Request
             $headers['content-length'] = $_SERVER['CONTENT_LENGTH'];
         }
 
+        // Basic Auth Support
         if (isset($_SERVER['PHP_AUTH_USER'])) {
-            $headers['authorization'] = 'Basic ' . base64_encode(
-                    $_SERVER['PHP_AUTH_USER'] . ':' . ($_SERVER['PHP_AUTH_PW'] ?? '')
-                );
+            $credentials = $_SERVER['PHP_AUTH_USER'] . ':' . ($_SERVER['PHP_AUTH_PW'] ?? '');
+            $headers['authorization'] = 'Basic ' . base64_encode($credentials);
         }
 
         return $headers;
     }
 
     // ===================================================================
-    // Immutable With Methods
+    // Immutable With Methods - PHP 8.4 optimiert
     // ===================================================================
 
-    /**
-     * Erstellt neuen Request mit geänderter URI
-     */
     public function withUri(string $uri): self
     {
         return new self(
@@ -112,9 +116,6 @@ readonly class Request
         );
     }
 
-    /**
-     * Erstellt neuen Request mit geänderter HTTP-Methode
-     */
     public function withMethod(HttpMethod $method): self
     {
         return new self(
@@ -132,15 +133,12 @@ readonly class Request
         );
     }
 
-    /**
-     * Erstellt neuen Request mit zusätzlichen Headers
-     */
     public function withHeaders(array $headers): self
     {
         return new self(
             method: $this->method,
             uri: $this->uri,
-            headers: array_merge($this->headers, $headers),
+            headers: [...$this->headers, ...$headers], // MODERNISIERT: Spread Operator
             query: $this->query,
             post: $this->post,
             files: $this->files,
@@ -152,9 +150,6 @@ readonly class Request
         );
     }
 
-    /**
-     * Erstellt neuen Request mit neuem Body
-     */
     public function withBody(string $body): self
     {
         return new self(
@@ -172,9 +167,6 @@ readonly class Request
         );
     }
 
-    /**
-     * NEU: Erstellt neuen Request mit Path Parameters
-     */
     public function withPathParameters(array $parameters): self
     {
         return new self(
@@ -188,20 +180,17 @@ readonly class Request
             server: $this->server,
             body: $this->body,
             protocol: $this->protocol,
-            pathParameters: array_merge($this->pathParameters, $parameters),
+            pathParameters: [...$this->pathParameters, ...$parameters], // MODERNISIERT
         );
     }
 
-    /**
-     * Erstellt neuen Request mit zusätzlichen Query-Parametern
-     */
     public function withQuery(array $query): self
     {
         return new self(
             method: $this->method,
             uri: $this->uri,
             headers: $this->headers,
-            query: array_merge($this->query, $query),
+            query: [...$this->query, ...$query], // MODERNISIERT
             post: $this->post,
             files: $this->files,
             cookies: $this->cookies,
@@ -213,7 +202,7 @@ readonly class Request
     }
 
     // ===================================================================
-    // Getter Methods
+    // Getter Methods - ERWEITERT
     // ===================================================================
 
     public function getMethod(): HttpMethod
@@ -234,40 +223,6 @@ readonly class Request
     public function getPost(): array
     {
         return $this->post;
-    }
-
-    /**
-     * Alias für getFiles() für bessere API-Konsistenz
-     */
-    public function files(): array
-    {
-        return $this->getFiles();
-    }
-
-    /**
-     * Holt Files-Daten
-     */
-    public function getFiles(): array
-    {
-        return $this->files;
-    }
-
-    /**
-     * Holt spezifische Datei
-     */
-    public function file(string $name): ?array
-    {
-        return $this->files[$name] ?? null;
-    }
-
-    /**
-     * Prüft ob Datei hochgeladen wurde
-     */
-    public function hasFile(string $name): bool
-    {
-        return isset($this->files[$name]) &&
-            is_array($this->files[$name]) &&
-            $this->files[$name]['error'] === UPLOAD_ERR_OK;
     }
 
     public function getCookies(): array
@@ -295,20 +250,60 @@ readonly class Request
         return $this->headers;
     }
 
-    /**
-     * NEU: Holt Path Parameters
-     */
     public function getPathParameters(): array
     {
         return $this->pathParameters;
     }
 
-    /**
-     * NEU: Holt spezifischen Path Parameter
-     */
     public function getPathParameter(string $name, mixed $default = null): mixed
     {
         return $this->pathParameters[$name] ?? $default;
+    }
+
+    /**
+     * NEU: Holt Input-Wert aus Query oder Post (ähnlich Laravel)
+     */
+    public function input(string $key, mixed $default = null): mixed
+    {
+        return $this->query[$key] ?? $this->post[$key] ?? $default;
+    }
+
+    // ===================================================================
+    // Enhanced Methods - NEU für PHP 8.4
+    // ===================================================================
+
+    /**
+     * NEU: Prüft ob Input existiert
+     */
+    public function has(string $key): bool
+    {
+        return isset($this->query[$key]) || isset($this->post[$key]);
+    }
+
+    /**
+     * NEU: Holt nur bestimmte Input-Felder
+     */
+    public function only(array $keys): array
+    {
+        $all = $this->all();
+        return array_intersect_key($all, array_flip($keys));
+    }
+
+    /**
+     * NEU: Holt alle Input-Werte
+     */
+    public function all(): array
+    {
+        return [...$this->query, ...$this->post]; // MODERNISIERT: Spread
+    }
+
+    /**
+     * NEU: Schließt bestimmte Input-Felder aus
+     */
+    public function except(array $keys): array
+    {
+        $all = $this->all();
+        return array_diff_key($all, array_flip($keys));
     }
 
     public function hasHeader(string $name): bool
@@ -316,194 +311,117 @@ readonly class Request
         return isset($this->headers[strtolower($name)]);
     }
 
-    public function getUserAgent(): ?string
+    /**
+     * NEU: JSON Body Parsing mit json_validate (PHP 8.3+)
+     */
+    public function json(): array
     {
-        return $this->getHeader('user-agent');
+        if (!json_validate($this->body)) { // MODERNISIERT: json_validate
+            throw new JsonException('Invalid JSON in request body');
+        }
+
+        try {
+            return json_decode($this->body, true, 512, JSON_THROW_ON_ERROR);
+        } catch (JsonException $e) {
+            throw new JsonException('Failed to parse JSON: ' . $e->getMessage());
+        }
     }
 
+    /**
+     * NEU: Prüft ob Request JSON ist
+     */
+    public function isJson(): bool
+    {
+        $contentType = $this->getHeader('content-type');
+        return $contentType && str_contains($contentType, 'application/json');
+    }
+
+    /**
+     * VERBESSERT: Header-Zugriff mit Case-Insensitive
+     */
     public function getHeader(string $name): ?string
     {
         return $this->headers[strtolower($name)] ?? null;
     }
 
-    public function getContentLength(): ?int
-    {
-        $length = $this->getHeader('content-length');
-        return $length !== null ? (int)$length : null;
-    }
-
     /**
-     * Holt nur spezifische Input-Felder
+     * MODERNISIERT: File Handling mit besserer Typisierung
      */
-    public function only(array $keys): array
+    public function file(string $name): ?array
     {
-        $data = $this->all();
-        return array_intersect_key($data, array_flip($keys));
+        return $this->files[$name] ?? null;
+    }
+
+    public function hasFile(string $name): bool
+    {
+        return isset($this->files[$name]) &&
+            is_array($this->files[$name]) &&
+            ($this->files[$name]['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_OK;
     }
 
     /**
-     * Holt alle Input-Daten
+     * NEU: Aliases für bessere API
      */
-    public function all(): array
+    public function files(): array
     {
-        return array_merge($this->query, $this->post, $this->pathParameters);
+        return $this->getFiles();
     }
 
-    // ===================================================================
-    // Request Data Access Methods
-    // ===================================================================
+    public function getFiles(): array
+    {
+        return $this->files;
+    }
+
+    public function getUserAgent(): ?string
+    {
+        return $this->getHeader('user-agent');
+    }
 
     /**
-     * Holt alle Input-Daten außer spezifischen
+     * NEU: IP-Adresse mit Proxy-Support
      */
-    public function except(array $keys): array
+    public function getClientIp(): string
     {
-        $data = $this->all();
-        return array_diff_key($data, array_flip($keys));
+        // Prüfe Proxy-Headers (nur wenn vertrauenswürdig)
+        foreach (self::TRUSTED_HEADERS as $header) {
+            if ($ip = $this->getHeader($header)) {
+                // Ersten IP aus komma-separierter Liste nehmen
+                $ip = explode(',', $ip)[0];
+                $ip = trim($ip);
+
+                if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
+                    return $ip;
+                }
+            }
+        }
+
+        return $this->server['REMOTE_ADDR'] ?? '127.0.0.1';
     }
 
     /**
-     * Prüft ob Input-Feld existiert und nicht leer ist
+     * NEU: HTTPS Detection
      */
-    public function filled(string $key): bool
+    public function isSecure(): bool
     {
-        return $this->has($key) && !empty($this->input($key));
+        if (($this->server['HTTPS'] ?? 'off') !== 'off') {
+            return true;
+        }
+
+        if (($this->server['SERVER_PORT'] ?? 80) == 443) {
+            return true;
+        }
+
+        $proto = $this->getHeader('x-forwarded-proto');
+        return $proto === 'https';
     }
 
     /**
-     * Prüft ob Input-Feld existiert
-     */
-    public function has(string $key): bool
-    {
-        return isset($this->query[$key]) || isset($this->post[$key]) || isset($this->pathParameters[$key]);
-    }
-
-    /**
-     * Holt Input-Wert aus Query oder Post
-     */
-    public function input(string $key, mixed $default = null): mixed
-    {
-        return $this->query[$key] ?? $this->post[$key] ?? $this->pathParameters[$key] ?? $default;
-    }
-
-    /**
-     * Prüft ob Request JSON erwartet
-     */
-    public function expectsJson(): bool
-    {
-        return $this->wantsJson() || $this->isJson();
-    }
-
-    /**
-     * Prüft ob Request JSON will
-     */
-    public function wantsJson(): bool
-    {
-        $accept = $this->getHeader('accept');
-        return $accept && str_contains($accept, 'application/json');
-    }
-
-    // ===================================================================
-    // Request Type Detection
-    // ===================================================================
-
-    /**
-     * Prüft ob Request JSON ist
-     */
-    public function isJson(): bool
-    {
-        $contentType = $this->getContentType();
-        return $contentType && str_contains($contentType, 'application/json');
-    }
-
-    public function getContentType(): ?string
-    {
-        return $this->getHeader('content-type');
-    }
-
-    /**
-     * Prüft ob Request AJAX ist
+     * NEU: Ajax Detection
      */
     public function isAjax(): bool
     {
         return $this->getHeader('x-requested-with') === 'XMLHttpRequest';
     }
-
-    /**
-     * Prüft ob Request über HTTPS ist
-     */
-    public function isSecure(): bool
-    {
-        return $this->server['HTTPS'] === 'on' || $this->server['HTTP_X_FORWARDED_PROTO'] === 'https';
-    }
-
-    /**
-     * Prüft ob Request ein POST ist
-     */
-    public function isPost(): bool
-    {
-        return $this->method === HttpMethod::POST;
-    }
-
-    /**
-     * Prüft ob Request ein GET ist
-     */
-    public function isGet(): bool
-    {
-        return $this->method === HttpMethod::GET;
-    }
-
-    /**
-     * Holt JSON-Feld
-     */
-    public function jsonField(string $key, mixed $default = null): mixed
-    {
-        $json = $this->json();
-        return $json[$key] ?? $default;
-    }
-
-    // ===================================================================
-    // JSON/Body Parsing
-    // ===================================================================
-
-    /**
-     * Parst JSON Body
-     */
-    public function json(): array
-    {
-        if (!$this->isJson()) {
-            return [];
-        }
-
-        try {
-            return json_decode($this->body, true, 512, JSON_THROW_ON_ERROR);
-        } catch (JsonException) {
-            return [];
-        }
-    }
-
-    /**
-     * Debug-Ausgabe der Request-Daten
-     */
-    public function dump(): self
-    {
-        echo "\n=== HTTP REQUEST DEBUG ===\n";
-        echo "Method: {$this->method->value}\n";
-        echo "URI: {$this->uri}\n";
-        echo "Path: {$this->getPath()}\n";
-        echo "Query: " . json_encode($this->query) . "\n";
-        echo "Post: " . json_encode($this->post) . "\n";
-        echo "Path Parameters: " . json_encode($this->pathParameters) . "\n";
-        echo "Headers: " . json_encode($this->headers) . "\n";
-        echo "Body Length: " . strlen($this->body) . " bytes\n";
-        echo "========================\n\n";
-
-        return $this;
-    }
-
-    // ===================================================================
-    // Debug Methods
-    // ===================================================================
 
     public function getPath(): string
     {

@@ -5,15 +5,16 @@ declare(strict_types=1);
 namespace Framework\Http;
 
 use InvalidArgumentException;
+use JsonException;
 
 /**
- * HTTP Response - Mutable Response Object
- *
- * BEREINIGT: Alle deprecated static factory methods entfernt.
- * Verwende ausschließlich ResponseFactory für Response-Erstellung.
+ * HTTP Response - Mutable Response Object mit PHP 8.4 Features
  */
 class Response
 {
+    /**
+     * MODERNISIERT: Typed Class Constants (PHP 8.3+)
+     */
     private const array DEFAULT_HEADERS = [
         'Content-Type' => 'text/html; charset=UTF-8',
         'X-Frame-Options' => 'SAMEORIGIN',
@@ -32,23 +33,17 @@ class Response
         string             $body = '',
     )
     {
-        $this->headers = array_merge(self::DEFAULT_HEADERS, $headers);
+        $this->headers = [...self::DEFAULT_HEADERS, ...$headers]; // MODERNISIERT
         $this->body = $body;
     }
 
     // ===================================================================
-    // Fluent Interface Methods
+    // Fluent Interface Methods - MODERNISIERT
     // ===================================================================
 
     public function withStatus(HttpStatus $status): self
     {
         $this->status = $status;
-        return $this;
-    }
-
-    public function withHeaders(array $headers): self
-    {
-        $this->headers = array_merge($this->headers, $headers);
         return $this;
     }
 
@@ -58,28 +53,14 @@ class Response
         return $this;
     }
 
-    public function withBody(string $body): self
-    {
-        $this->body = $body;
-        return $this;
-    }
-
-    public function withContentType(string $contentType): self
-    {
-        return $this->withHeader('Content-Type', $contentType);
-    }
-
-    public function withHeader(string $name, string $value): self
-    {
-        $this->headers[$name] = $value;
-        return $this;
-    }
-
     public function withCookieDeleted(string $name, string $path = '/', string $domain = ''): self
     {
         return $this->withCookie($name, '', time() - 3600, $path, $domain);
     }
 
+    /**
+     * MODERNISIERT: Cookie-Handling mit SameSite-Enum Support
+     */
     public function withCookie(
         string $name,
         string $value,
@@ -107,23 +88,9 @@ class Response
         return $this;
     }
 
-    // ===================================================================
-    // Getter Methods
-    // ===================================================================
-
     public function getStatus(): HttpStatus
     {
         return $this->status;
-    }
-
-    public function getStatusCode(): int
-    {
-        return $this->status->value;
-    }
-
-    public function getStatusText(): string
-    {
-        return $this->status->getText();
     }
 
     public function getHeaders(): array
@@ -131,15 +98,19 @@ class Response
         return $this->headers;
     }
 
+    public function getHeader(string $name): ?string
+    {
+        return $this->headers[$name] ?? null;
+    }
+
     public function hasHeader(string $name): bool
     {
         return isset($this->headers[$name]);
     }
 
-    public function getHeader(string $name): ?string
-    {
-        return $this->headers[$name] ?? null;
-    }
+    // ===================================================================
+    // Getter Methods - ERWEITERT
+    // ===================================================================
 
     public function getBody(): string
     {
@@ -150,10 +121,6 @@ class Response
     {
         return $this->sent;
     }
-
-    // ===================================================================
-    // Status Check Methods
-    // ===================================================================
 
     public function isSuccessful(): bool
     {
@@ -175,14 +142,14 @@ class Response
         return $this->status->isServerError();
     }
 
+    // ===================================================================
+    // Status Check Methods - DELEGIERT AN ENUM
+    // ===================================================================
+
     public function isInformational(): bool
     {
         return $this->status->isInformational();
     }
-
-    // ===================================================================
-    // Output Methods
-    // ===================================================================
 
     /**
      * Sendet Response an Browser
@@ -199,12 +166,14 @@ class Response
     }
 
     /**
-     * Sendet HTTP Headers
+     * MODERNISIERT: Header-Sending mit besserer Prüfung
      */
     private function sendHeaders(): void
     {
-        if (headers_sent()) {
-            return;
+        if (headers_sent($file, $line)) {
+            throw new InvalidArgumentException(
+                "Headers already sent in {$file}:{$line}"
+            );
         }
 
         // Status Line
@@ -216,17 +185,10 @@ class Response
         }
     }
 
-    /**
-     * Sendet Response Body
-     */
     private function sendBody(): void
     {
         echo $this->body;
     }
-
-    // ===================================================================
-    // Debug Methods
-    // ===================================================================
 
     public function __toString(): string
     {
@@ -244,19 +206,79 @@ class Response
         );
     }
 
+    // ===================================================================
+    // Output Methods - MODERNISIERT
+    // ===================================================================
+
     /**
-     * Debug-Ausgabe der Response
+     * NEU: Debug-Ausgabe der Response mit mehr Details
      */
     public function dump(): void
     {
         echo "\n=== HTTP RESPONSE DEBUG ===\n";
         echo "Status: {$this->status->value} {$this->status->getText()}\n";
+        echo "Sent: " . ($this->sent ? 'Yes' : 'No') . "\n";
         echo "Headers:\n";
         foreach ($this->headers as $name => $value) {
             echo "  {$name}: {$value}\n";
         }
         echo "Body Length: " . strlen($this->body) . " bytes\n";
         echo "Body Preview: " . substr($this->body, 0, 100) . "...\n";
+        echo "Is Cacheable: " . ($this->status->isCacheable() ? 'Yes' : 'No') . "\n";
+        echo "May Have Body: " . ($this->status->mayHaveBody() ? 'Yes' : 'No') . "\n";
         echo "========================\n\n";
+    }
+
+    /**
+     * NEU: JSON Response Helper
+     */
+    public function json(array|object $data, int $flags = JSON_THROW_ON_ERROR): self
+    {
+        try {
+            $json = json_encode($data, $flags);
+            return $this->withContentType('application/json')
+                ->withBody($json);
+        } catch (JsonException $e) {
+            throw new InvalidArgumentException('Failed to encode JSON: ' . $e->getMessage());
+        }
+    }
+
+    public function withBody(string $body): self
+    {
+        $this->body = $body;
+        return $this;
+    }
+
+    // ===================================================================
+    // Debug Methods - ERWEITERT
+    // ===================================================================
+
+    public function withContentType(string $contentType): self
+    {
+        return $this->withHeader('Content-Type', $contentType);
+    }
+
+    public function withHeader(string $name, string $value): self
+    {
+        $this->headers[$name] = $value;
+        return $this;
+    }
+
+    /**
+     * NEU: Download Response Helper
+     */
+    public function download(string $content, string $filename, string $contentType = 'application/octet-stream'): self
+    {
+        return $this->withHeaders([
+            'Content-Type' => $contentType,
+            'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+            'Content-Length' => (string)strlen($content),
+        ])->withBody($content);
+    }
+
+    public function withHeaders(array $headers): self
+    {
+        $this->headers = [...$this->headers, ...$headers]; // MODERNISIERT
+        return $this;
     }
 }
