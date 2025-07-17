@@ -9,8 +9,8 @@ use InvalidArgumentException;
 /**
  * HTTP Response - Mutable Response Object
  *
- * Bereinigt: Alle deprecated static factory methods entfernt.
- * Verwende ResponseFactory für Response-Erstellung.
+ * BEREINIGT: Alle deprecated static factory methods entfernt.
+ * Verwende ausschließlich ResponseFactory für Response-Erstellung.
  */
 class Response
 {
@@ -36,7 +36,9 @@ class Response
         $this->body = $body;
     }
 
-    // Fluent Interface
+    // ===================================================================
+    // Fluent Interface Methods
+    // ===================================================================
 
     public function withStatus(HttpStatus $status): self
     {
@@ -105,7 +107,9 @@ class Response
         return $this->withCookie($name, '', time() - 3600, $path, $domain);
     }
 
-    // Getters
+    // ===================================================================
+    // Getter Methods
+    // ===================================================================
 
     public function getStatus(): HttpStatus
     {
@@ -147,30 +151,41 @@ class Response
         return $this->sent;
     }
 
-    public function getContentType(): string
-    {
-        return $this->getHeader('Content-Type') ?? 'text/html; charset=UTF-8';
-    }
-
-    // Status Checks
+    // ===================================================================
+    // Status Check Methods
+    // ===================================================================
 
     public function isSuccessful(): bool
     {
-        return $this->status->isSuccess();
+        return $this->status->isSuccessful();
     }
 
-    public function isError(): bool
+    public function isRedirect(): bool
     {
-        return $this->status->isError();
+        return $this->status->isRedirect();
     }
 
-    public function isJson(): bool
+    public function isClientError(): bool
     {
-        return str_contains($this->getContentType(), 'application/json');
+        return $this->status->isClientError();
     }
+
+    public function isServerError(): bool
+    {
+        return $this->status->isServerError();
+    }
+
+    public function isInformational(): bool
+    {
+        return $this->status->isInformational();
+    }
+
+    // ===================================================================
+    // Output Methods
+    // ===================================================================
 
     /**
-     * Sendet Response an Client
+     * Sendet Response an Browser
      */
     public function send(): void
     {
@@ -178,24 +193,70 @@ class Response
             throw new InvalidArgumentException('Response has already been sent');
         }
 
-        if (headers_sent($file, $line)) {
-            throw new InvalidArgumentException("Headers already sent in {$file} on line {$line}");
+        $this->sendHeaders();
+        $this->sendBody();
+        $this->sent = true;
+    }
+
+    /**
+     * Sendet HTTP Headers
+     */
+    private function sendHeaders(): void
+    {
+        if (headers_sent()) {
+            return;
         }
 
-        // Status Code senden
+        // Status Line
         http_response_code($this->status->value);
 
-        // Headers senden
+        // Headers
         foreach ($this->headers as $name => $value) {
             header("{$name}: {$value}");
         }
+    }
 
-        // Body senden (außer bei HEAD-Requests und Status Codes ohne Body)
-        if ($this->status->allowsBody() &&
-            ($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'HEAD') {
-            echo $this->body;
+    /**
+     * Sendet Response Body
+     */
+    private function sendBody(): void
+    {
+        echo $this->body;
+    }
+
+    // ===================================================================
+    // Debug Methods
+    // ===================================================================
+
+    public function __toString(): string
+    {
+        $headers = [];
+        foreach ($this->headers as $name => $value) {
+            $headers[] = "{$name}: {$value}";
         }
 
-        $this->sent = true;
+        return sprintf(
+            "HTTP/1.1 %d %s\r\n%s\r\n\r\n%s",
+            $this->status->value,
+            $this->status->getText(),
+            implode("\r\n", $headers),
+            $this->body
+        );
+    }
+
+    /**
+     * Debug-Ausgabe der Response
+     */
+    public function dump(): void
+    {
+        echo "\n=== HTTP RESPONSE DEBUG ===\n";
+        echo "Status: {$this->status->value} {$this->status->getText()}\n";
+        echo "Headers:\n";
+        foreach ($this->headers as $name => $value) {
+            echo "  {$name}: {$value}\n";
+        }
+        echo "Body Length: " . strlen($this->body) . " bytes\n";
+        echo "Body Preview: " . substr($this->body, 0, 100) . "...\n";
+        echo "========================\n\n";
     }
 }

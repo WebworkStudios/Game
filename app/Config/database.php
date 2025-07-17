@@ -7,6 +7,7 @@ return [
     |--------------------------------------------------------------------------
     | Default MySQL Connection
     |--------------------------------------------------------------------------
+    | Vereinfachte Konfiguration - ConnectionManager adaptiert automatisch
     */
     'default' => [
         'host' => 'localhost',
@@ -21,32 +22,9 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | ConnectionManager Compatibility
-    |--------------------------------------------------------------------------
-    | Diese Struktur wird vom DatabaseServiceProvider benötigt
-    */
-    'connections' => [
-        'mysql' => [
-            'driver' => 'mysql',
-            'host' => 'localhost',
-            'port' => 3306,
-            'database' => 'kickerscup',
-            'username' => 'root',
-            'password' => '',
-            'charset' => 'utf8mb4',
-            'collation' => 'utf8mb4_unicode_ci',
-            'prefix' => '',
-            'strict' => true,
-            'engine' => 'InnoDB',
-            'options' => [],
-        ],
-    ],
-
-    /*
-    |--------------------------------------------------------------------------
     | Read Replicas (optional)
     |--------------------------------------------------------------------------
-    | Uncomment to enable read/write splitting:
+    | Mehrere Verbindungen für Read/Write-Splitting:
     */
     /*
     'default' => [
@@ -70,6 +48,36 @@ return [
             'type' => 'read',
             'weight' => 1,
         ],
+    ],
+    */
+
+    /*
+    |--------------------------------------------------------------------------
+    | Additional Named Connections
+    |--------------------------------------------------------------------------
+    | Weitere benannte Verbindungen für verschiedene Zwecke:
+    */
+    /*
+    'analytics' => [
+        'host' => 'analytics.localhost',
+        'port' => 3306,
+        'database' => 'kickerscup_analytics',
+        'username' => 'analytics',
+        'password' => 'analytics_password',
+        'charset' => 'utf8mb4',
+        'type' => 'read',
+        'weight' => 1,
+    ],
+
+    'reporting' => [
+        'host' => 'reporting.localhost',
+        'port' => 3306,
+        'database' => 'kickerscup_reports',
+        'username' => 'reporting',
+        'password' => 'reporting_password',
+        'charset' => 'utf8mb4',
+        'type' => 'read',
+        'weight' => 1,
     ],
     */
 ];

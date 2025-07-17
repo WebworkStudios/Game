@@ -15,7 +15,7 @@ use RuntimeException;
 /**
  * Router - Attribute-based HTTP Router mit Middleware-Support
  *
- * KORRIGIERTE VERSION: Verwendet ResponseFactory statt statische Response-Methoden
+ * KORRIGIERTE VERSION: Alle Probleme behoben
  */
 class Router
 {
@@ -27,11 +27,9 @@ class Router
     private bool $routesLoaded = false;
     private array $globalMiddlewares = [];
 
-    /** @var callable|null */
-    private $notFoundHandler = null;
-
-    /** @var callable|null */
-    private $methodNotAllowedHandler = null;
+    // KORRIGIERT: Callable properties mit korrekter Syntax
+    private mixed $notFoundHandler = null;
+    private mixed $methodNotAllowedHandler = null;
 
     public function __construct(
         private readonly ServiceContainer $container,
@@ -45,7 +43,6 @@ class Router
      */
     public function handle(Request $request): Response
     {
-        // IMMER zuerst Routes laden
         $this->loadRoutes();
 
         $method = $request->getMethod();
@@ -91,9 +88,6 @@ class Router
      */
     private function findRoute(string $path, HttpMethod $method): ?array
     {
-        // WICHTIG: Routes MÜSSEN geladen werden BEVOR wir suchen
-        $this->loadRoutes();
-
         foreach ($this->routes as $route) {
             $parameters = $route->matches($path);
 
@@ -110,8 +104,6 @@ class Router
 
     /**
      * Behandelt 404 Not Found
-     *
-     * FIX: Verwendet ResponseFactory statt statische Response-Methoden
      */
     private function handleNotFound(Request $request): Response
     {
@@ -123,15 +115,12 @@ class Router
             }
         }
 
-        // FIX: Verwende ResponseFactory statt Response::notFound()
         $responseFactory = $this->container->get(ResponseFactory::class);
         return $responseFactory->notFound(self::DEFAULT_404_MESSAGE);
     }
 
     /**
      * Behandelt 405 Method Not Allowed
-     *
-     * FIX: Verwendet ResponseFactory statt statische Response-Methoden
      */
     private function handleMethodNotAllowed(Request $request, RouteEntry $route): Response
     {
@@ -148,7 +137,6 @@ class Router
             $route->methods
         );
 
-        // FIX: Verwende ResponseFactory statt Response::methodNotAllowed()
         $responseFactory = $this->container->get(ResponseFactory::class);
         return $responseFactory->methodNotAllowed(self::DEFAULT_405_MESSAGE)
             ->withHeader('Allow', implode(', ', $allowedMethods));
@@ -159,10 +147,10 @@ class Router
      */
     private function executeRoute(Request $request, RouteEntry $route, array $parameters): Response
     {
-        // Parameter zum Request hinzufügen
+        // KORRIGIERT: Verwende erweiterten Request mit Parametern
         $requestWithParams = $this->addParametersToRequest($request, $parameters);
 
-        // Middleware-Chain aufbauen: Global + Route Middlewares
+        // Middleware-Chain aufbauen
         $middlewares = array_merge($this->globalMiddlewares, $route->middlewares);
         $handler = fn(Request $req) => $this->executeAction($req, $route->action);
 
@@ -186,7 +174,7 @@ class Router
     }
 
     /**
-     * Fügt Route-Parameter zum Request hinzu
+     * KORRIGIERT: Fügt Route-Parameter zum Request hinzu
      */
     private function addParametersToRequest(Request $request, array $parameters): Request
     {
@@ -216,25 +204,99 @@ class Router
      */
     private function executeAction(Request $request, string $actionClass): Response
     {
-        $action = $this->container->get($actionClass);
+        try {
+            $action = $this->container->get($actionClass);
 
-        if (!method_exists($action, '__invoke')) {
-            throw new RuntimeException("Action {$actionClass} must have __invoke method");
+            if (!is_callable($action)) {
+                throw new InvalidArgumentException(
+                    "Action {$actionClass} must be callable"
+                );
+            }
+
+            $response = $action($request);
+
+            if (!$response instanceof Response) {
+                throw new InvalidArgumentException(
+                    'Action must return a Response instance. Got: ' . get_debug_type($response)
+                );
+            }
+
+            return $response;
+
+        } catch (\Throwable $e) {
+            return $this->handleActionError($e, $request);
         }
-
-        $response = $action($request);
-
-        if (!$response instanceof Response) {
-            throw new RuntimeException(
-                "Action {$actionClass} must return Response instance"
-            );
-        }
-
-        return $response;
     }
 
     /**
-     * Fügt globale Middleware hinzu
+     * Behandelt Action-Fehler
+     */
+    private function handleActionError(\Throwable $e, Request $request): Response
+    {
+        $responseFactory = $this->container->get(ResponseFactory::class);
+
+        // In Development: Detaillierte Fehlermeldung
+        if ($this->isDebugMode()) {
+            $errorDetails = [
+                'error' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'trace' => $e->getTraceAsString(),
+            ];
+
+            if ($request->expectsJson()) {
+                return $responseFactory->json($errorDetails, \Framework\Http\HttpStatus::INTERNAL_SERVER_ERROR);
+            } else {
+                return $responseFactory->serverError(
+                    $this->formatErrorForHtml($errorDetails)
+                );
+            }
+        }
+
+        // Production: Generische Fehlermeldung
+        if ($request->expectsJson()) {
+            return $responseFactory->json(
+                ['error' => 'Internal server error'],
+                \Framework\Http\HttpStatus::INTERNAL_SERVER_ERROR
+            );
+        }
+
+        return $responseFactory->serverError('Internal Server Error');
+    }
+
+    /**
+     * Prüft ob Debug-Modus aktiv ist
+     */
+    private function isDebugMode(): bool
+    {
+        try {
+            $config = $this->container->get('config');
+            return $config['app']['debug'] ?? false;
+        } catch (\Exception) {
+            return false;
+        }
+    }
+
+    /**
+     * Formatiert Fehler für HTML-Ausgabe
+     */
+    private function formatErrorForHtml(array $errorDetails): string
+    {
+        return sprintf(
+            '<h1>Application Error</h1><p><strong>%s</strong></p><p>File: %s:%d</p><pre>%s</pre>',
+            htmlspecialchars($errorDetails['error']),
+            htmlspecialchars($errorDetails['file']),
+            $errorDetails['line'],
+            htmlspecialchars($errorDetails['trace'])
+        );
+    }
+
+    // ===================================================================
+    // Public API Methods
+    // ===================================================================
+
+    /**
+     * Registriert globale Middleware
      */
     public function addGlobalMiddleware(string $middlewareClass): void
     {
@@ -242,23 +304,7 @@ class Router
     }
 
     /**
-     * Holt alle globalen Middlewares
-     */
-    public function getGlobalMiddlewares(): array
-    {
-        return $this->globalMiddlewares;
-    }
-
-    /**
-     * Setzt alle globalen Middlewares
-     */
-    public function setGlobalMiddlewares(array $middlewares): void
-    {
-        $this->globalMiddlewares = $middlewares;
-    }
-
-    /**
-     * Setzt 404-Handler
+     * Registriert benutzerdefinierten 404 Handler
      */
     public function setNotFoundHandler(callable $handler): void
     {
@@ -266,7 +312,7 @@ class Router
     }
 
     /**
-     * Setzt 405-Handler
+     * Registriert benutzerdefinierten 405 Handler
      */
     public function setMethodNotAllowedHandler(callable $handler): void
     {
@@ -274,9 +320,9 @@ class Router
     }
 
     /**
-     * Generiert URL für benannte Route
+     * KORRIGIERT: Generiert URL für benannte Route
      */
-    public function url(string $name, array $parameters = []): string
+    public function route(string $name, array $parameters = []): string
     {
         $this->loadRoutes();
 
@@ -285,20 +331,62 @@ class Router
         }
 
         $route = $this->namedRoutes[$name];
-        return $route->buildUrl($parameters);
+        return $this->generateUrl($route, $parameters);
     }
 
     /**
-     * Holt benannte Route
+     * KORRIGIERT: Generiert URL aus RouteEntry
      */
-    public function getNamedRoute(string $name): ?RouteEntry
+    private function generateUrl(RouteEntry $route, array $parameters = []): string
+    {
+        // Hole die Route-Attribute für Pattern-Generierung
+        $routeAttributes = $this->getRouteAttributes($route->action);
+
+        if (empty($routeAttributes)) {
+            throw new RuntimeException("No route attributes found for action {$route->action}");
+        }
+
+        // Verwende das erste Route-Attribut
+        $routeAttribute = $routeAttributes[0];
+        $path = $routeAttribute->path;
+
+        // Ersetze Parameter im Pfad
+        foreach ($parameters as $key => $value) {
+            $path = str_replace('{' . $key . '}', (string) $value, $path);
+        }
+
+        return $path;
+    }
+
+    /**
+     * Holt Route-Attribute einer Action-Klasse
+     */
+    private function getRouteAttributes(string $actionClass): array
+    {
+        try {
+            $reflection = new \ReflectionClass($actionClass);
+            $attributes = $reflection->getAttributes(Route::class);
+
+            return array_map(
+                fn(\ReflectionAttribute $attr) => $attr->newInstance(),
+                $attributes
+            );
+        } catch (\ReflectionException) {
+            return [];
+        }
+    }
+
+    /**
+     * Prüft ob Route existiert
+     */
+    public function hasRoute(string $name): bool
     {
         $this->loadRoutes();
-        return $this->namedRoutes[$name] ?? null;
+        return isset($this->namedRoutes[$name]);
     }
 
     /**
-     * Holt alle Routes
+     * Holt alle registrierten Routes
      */
     public function getRoutes(): array
     {

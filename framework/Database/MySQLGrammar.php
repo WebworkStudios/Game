@@ -1,10 +1,13 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Framework\Database;
 
 /**
  * MySQL Grammar - Generiert MySQL-spezifische SQL-Statements
+ *
+ * REFACTORED: Verwendet MySQLIdentifier für einheitliches Wrapping
  */
 class MySQLGrammar
 {
@@ -16,7 +19,7 @@ class MySQLGrammar
         $sql = 'SELECT ' . $this->compileColumns($components['select'] ?? ['*']);
 
         if (isset($components['from'])) {
-            $sql .= ' FROM ' . $this->wrapTable($components['from']);
+            $sql .= ' FROM ' . MySQLIdentifier::wrapTable($components['from']);
         }
 
         if (isset($components['joins'])) {
@@ -28,7 +31,7 @@ class MySQLGrammar
         }
 
         if (isset($components['groups']) && !empty($components['groups'])) {
-            $sql .= ' GROUP BY ' . implode(', ', array_map([$this, 'wrapColumn'], $components['groups']));
+            $sql .= ' GROUP BY ' . implode(', ', MySQLIdentifier::wrapColumns($components['groups']));
         }
 
         if (isset($components['havings'])) {
@@ -55,34 +58,7 @@ class MySQLGrammar
             return '*';
         }
 
-        return implode(', ', array_map([$this, 'wrapColumn'], $columns));
-    }
-
-    /**
-     * Wraps table name mit MySQL Backticks
-     */
-    public function wrapTable(string $table): string
-    {
-        return "`{$table}`";
-    }
-
-    /**
-     * Wraps column name mit MySQL Backticks
-     */
-    public function wrapColumn(string $column): string
-    {
-        // Handle table.column notation
-        if (str_contains($column, '.')) {
-            [$table, $col] = explode('.', $column, 2);
-            return $this->wrapTable($table) . '.' . $this->wrapColumn($col);
-        }
-
-        // Don't wrap functions or *
-        if (str_contains($column, '(') || $column === '*') {
-            return $column;
-        }
-
-        return "`{$column}`";
+        return implode(', ', MySQLIdentifier::wrapColumns($columns));
     }
 
     /**
@@ -96,10 +72,10 @@ class MySQLGrammar
             $sql .= sprintf(
                 ' %s %s ON %s %s %s',
                 $join['type']->value,
-                $this->wrapTable($join['table']),
-                $this->wrapColumn($join['first']),
+                MySQLIdentifier::wrapTable($join['table']),
+                MySQLIdentifier::wrapColumn($join['first']),
                 $join['operator'],
-                $this->wrapColumn($join['second'])
+                MySQLIdentifier::wrapColumn($join['second'])
             );
         }
 
@@ -122,19 +98,31 @@ class MySQLGrammar
             $conditions[] = match ($where['type']) {
                 'basic' => sprintf(
                     '%s %s :%s',
-                    $this->wrapColumn($where['column']),
+                    MySQLIdentifier::wrapColumn($where['column']),
                     $where['operator'],
                     $where['binding']
                 ),
                 'in' => sprintf(
                     '%s IN (%s)',
-                    $this->wrapColumn($where['column']),
+                    MySQLIdentifier::wrapColumn($where['column']),
                     implode(', ', array_map(fn($b) => ":{$b}", $where['bindings']))
                 ),
                 'null' => sprintf(
                     '%s IS %sNULL',
-                    $this->wrapColumn($where['column']),
+                    MySQLIdentifier::wrapColumn($where['column']),
                     $where['not'] ? 'NOT ' : ''
+                ),
+                'exists' => sprintf(
+                    '%sEXISTS (%s)',
+                    $where['not'] ? 'NOT ' : '',
+                    $where['query']
+                ),
+                'between' => sprintf(
+                    '%s %sBETWEEN :%s AND :%s',
+                    MySQLIdentifier::wrapColumn($where['column']),
+                    $where['not'] ? 'NOT ' : '',
+                    $where['binding_min'],
+                    $where['binding_max']
                 ),
                 default => throw new \InvalidArgumentException("Unsupported where type: {$where['type']}")
             };
@@ -158,7 +146,7 @@ class MySQLGrammar
         foreach ($havings as $having) {
             $conditions[] = sprintf(
                 '%s %s :%s',
-                $this->wrapColumn($having['column']),
+                MySQLIdentifier::wrapColumn($having['column']),
                 $having['operator'],
                 $having['binding']
             );
@@ -178,7 +166,7 @@ class MySQLGrammar
 
         $conditions = [];
         foreach ($orders as $order) {
-            $conditions[] = $this->wrapColumn($order['column']) . ' ' . $order['direction']->value;
+            $conditions[] = MySQLIdentifier::wrapColumn($order['column']) . ' ' . $order['direction']->value;
         }
 
         return ' ORDER BY ' . implode(', ', $conditions);
@@ -203,12 +191,12 @@ class MySQLGrammar
      */
     public function compileInsert(string $table, array $values): string
     {
-        $table = $this->wrapTable($table);
+        $table = MySQLIdentifier::wrapTable($table);
 
         // Multiple rows
         if (isset($values[0]) && is_array($values[0])) {
             $columns = array_keys($values[0]);
-            $wrappedColumns = implode(', ', array_map([$this, 'wrapColumn'], $columns));
+            $wrappedColumns = implode(', ', MySQLIdentifier::wrapColumns($columns));
 
             $valueGroups = [];
             foreach ($values as $index => $row) {
@@ -224,7 +212,7 @@ class MySQLGrammar
 
         // Single row
         $columns = array_keys($values);
-        $wrappedColumns = implode(', ', array_map([$this, 'wrapColumn'], $columns));
+        $wrappedColumns = implode(', ', MySQLIdentifier::wrapColumns($columns));
         $placeholders = ':' . implode(', :', $columns);
 
         return "INSERT INTO {$table} ({$wrappedColumns}) VALUES ({$placeholders})";
@@ -235,11 +223,11 @@ class MySQLGrammar
      */
     public function compileUpdate(string $table, array $values, array $wheres): string
     {
-        $table = $this->wrapTable($table);
+        $table = MySQLIdentifier::wrapTable($table);
 
         $sets = [];
         foreach (array_keys($values) as $column) {
-            $sets[] = $this->wrapColumn($column) . " = :{$column}";
+            $sets[] = MySQLIdentifier::wrapColumn($column) . " = :{$column}";
         }
 
         $sql = "UPDATE {$table} SET " . implode(', ', $sets);
@@ -256,7 +244,7 @@ class MySQLGrammar
      */
     public function compileDelete(string $table, array $wheres): string
     {
-        $table = $this->wrapTable($table);
+        $table = MySQLIdentifier::wrapTable($table);
         $sql = "DELETE FROM {$table}";
 
         if (!empty($wheres)) {
@@ -264,5 +252,72 @@ class MySQLGrammar
         }
 
         return $sql;
+    }
+
+    /**
+     * Kompiliert CREATE TABLE Statement
+     */
+    public function compileCreateTable(string $table, array $columns, array $options = []): string
+    {
+        $table = MySQLIdentifier::wrapTable($table);
+        $columnDefinitions = [];
+
+        foreach ($columns as $column) {
+            $columnDefinitions[] = $this->compileColumnDefinition($column);
+        }
+
+        $sql = "CREATE TABLE {$table} (\n    " . implode(",\n    ", $columnDefinitions) . "\n)";
+
+        // Table options
+        if (!empty($options)) {
+            $sql .= ' ' . implode(' ', $options);
+        }
+
+        return $sql;
+    }
+
+    /**
+     * Kompiliert Column Definition für CREATE TABLE
+     */
+    private function compileColumnDefinition(array $column): string
+    {
+        $name = MySQLIdentifier::wrapColumn($column['name']);
+        $type = $column['type'];
+
+        $definition = "{$name} {$type}";
+
+        if (isset($column['nullable']) && !$column['nullable']) {
+            $definition .= ' NOT NULL';
+        }
+
+        if (isset($column['default'])) {
+            $definition .= ' DEFAULT ' . $column['default'];
+        }
+
+        if (isset($column['auto_increment']) && $column['auto_increment']) {
+            $definition .= ' AUTO_INCREMENT';
+        }
+
+        if (isset($column['primary']) && $column['primary']) {
+            $definition .= ' PRIMARY KEY';
+        }
+
+        return $definition;
+    }
+
+    /**
+     * DEPRECATED: Backwards compatibility - use MySQLIdentifier directly
+     */
+    public function wrapTable(string $table): string
+    {
+        return MySQLIdentifier::wrapTable($table);
+    }
+
+    /**
+     * DEPRECATED: Backwards compatibility - use MySQLIdentifier directly
+     */
+    public function wrapColumn(string $column): string
+    {
+        return MySQLIdentifier::wrapColumn($column);
     }
 }

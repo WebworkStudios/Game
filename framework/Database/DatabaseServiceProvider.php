@@ -10,7 +10,7 @@ use Framework\Core\ConfigValidation;
 /**
  * Database Service Provider - Registriert Database Services im Framework
  *
- * BEREINIGT: Verwendet ConfigValidation Trait, eliminiert Code-Duplikation
+ * BEREINIGT: Eliminiert Config-Duplikation, vereinfachte Konfiguration
  */
 class DatabaseServiceProvider extends AbstractServiceProvider
 {
@@ -30,7 +30,7 @@ class DatabaseServiceProvider extends AbstractServiceProvider
             throw new \RuntimeException('PDO MySQL driver is required');
         }
 
-        // Config-Validierung (eliminiert die vorherige Duplikation)
+        // Config-Validierung
         $this->ensureConfigExists('database');
     }
 
@@ -50,13 +50,13 @@ class DatabaseServiceProvider extends AbstractServiceProvider
     private function registerConnectionManager(): void
     {
         $this->singleton(ConnectionManager::class, function () {
-            // Verwendet die neue loadAndValidateConfig() Methode
             $config = $this->loadAndValidateConfig('database');
 
-            // Struktur-Anpassung für ConnectionManager
-            $connectionManagerConfig = $this->adaptConfigForConnectionManager($config);
+            // Direkte Verwendung der Config ohne Duplikation
+            $connectionManager = new ConnectionManager();
+            $connectionManager->loadFromConfig($config);
 
-            return new ConnectionManager($connectionManagerConfig);
+            return $connectionManager;
         });
     }
 
@@ -102,36 +102,5 @@ class DatabaseServiceProvider extends AbstractServiceProvider
     {
         // Hier können Repository Interfaces gebunden werden
         // $this->bind(UserRepositoryInterface::class, UserRepository::class);
-    }
-
-    /**
-     * Adaptiert Config-Struktur für ConnectionManager
-     */
-    private function adaptConfigForConnectionManager(array $config): array
-    {
-        // Falls bereits im ConnectionManager-Format (mit 'connections' key)
-        if (isset($config['connections'])) {
-            return $config;
-        }
-
-        // Konvertiere app/Config/database.php Format zu ConnectionManager Format
-        $adapted = [
-            'default' => 'mysql',
-            'connections' => []
-        ];
-
-        // Hauptverbindung als 'mysql' Connection
-        if (isset($config['default'])) {
-            $adapted['connections']['mysql'] = array_merge($config['default'], [
-                'driver' => 'mysql',
-                'collation' => 'utf8mb4_unicode_ci',
-                'prefix' => '',
-                'strict' => true,
-                'engine' => 'InnoDB',
-                'options' => [],
-            ]);
-        }
-
-        return $adapted;
     }
 }
