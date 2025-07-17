@@ -14,14 +14,16 @@ class NumberFilters
     /**
      * Formatiert Zahlen mit Tausender-Trennzeichen
      */
-    public static function numberFormat(mixed $value, int $decimals = 0, string $decimalSeparator = ',', string $thousandsSeparator = '.'): string
+    public static function numberFormat(mixed $value, mixed $decimals = 0, string $decimalSeparator = ',', string $thousandsSeparator = '.'): string
     {
         if ($value === null) {
             return '0';
         }
 
         $numericValue = is_numeric($value) ? (float)$value : 0.0;
-        return number_format($numericValue, $decimals, $decimalSeparator, $thousandsSeparator);
+        $decimalsInt = is_numeric($decimals) ? (int)$decimals : 0;
+
+        return number_format($numericValue, $decimalsInt, $decimalSeparator, $thousandsSeparator);
     }
 
     /**
@@ -42,14 +44,15 @@ class NumberFilters
     /**
      * Formatiert als Prozent
      */
-    public static function percent(mixed $value, int $decimals = 1): string
+    public static function percent(mixed $value, mixed $decimals = 1): string
     {
         if ($value === null) {
             return '0%';
         }
 
         $numericValue = is_numeric($value) ? (float)$value : 0.0;
-        $formatted = self::numberFormat($numericValue * 100, $decimals);
+        $decimalsInt = is_numeric($decimals) ? (int)$decimals : 1;
+        $formatted = self::numberFormat($numericValue * 100, $decimalsInt);
 
         return $formatted . '%';
     }
@@ -57,14 +60,16 @@ class NumberFilters
     /**
      * Rundet Zahlen
      */
-    public static function round(mixed $value, int $precision = 0): float
+    public static function round(mixed $value, mixed $precision = 0): float
     {
         if ($value === null) {
             return 0.0;
         }
 
         $numericValue = is_numeric($value) ? (float)$value : 0.0;
-        return round($numericValue, $precision);
+        $precisionInt = is_numeric($precision) ? (int)$precision : 0;
+
+        return round($numericValue, $precisionInt);
     }
 
     /**
@@ -109,13 +114,14 @@ class NumberFilters
     /**
      * Formatiert Bytes in lesbare Einheiten
      */
-    public static function fileSize(mixed $value, int $precision = 2): string
+    public static function fileSize(mixed $value, mixed $precision = 2): string
     {
         if ($value === null) {
             return '0 B';
         }
 
         $bytes = is_numeric($value) ? (float)$value : 0.0;
+        $precisionInt = is_numeric($precision) ? (int)$precision : 2;
         $units = ['B', 'KB', 'MB', 'GB', 'TB'];
 
         $i = 0;
@@ -124,7 +130,7 @@ class NumberFilters
             $i++;
         }
 
-        return self::numberFormat($bytes, $precision) . ' ' . $units[$i];
+        return self::numberFormat($bytes, $precisionInt) . ' ' . $units[$i];
     }
 
     /**

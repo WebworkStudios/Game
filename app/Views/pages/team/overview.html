@@ -397,7 +397,7 @@
             <span class="meta-item">🏆 {{ team_info.league|default:'Liga' }}</span>
             <span class="meta-item">👥 {{ squad_stats.total_players|default:0 }} Spieler</span>
             <span class="meta-item">⌀ {{ team_info.average_age|default:0 }} Jahre</span>
-            <span class="meta-item">💰 €{{ (team_info.total_market_value / 1000000)|default:0|number_format:0 }}M</span>
+            <span class="meta-item">💰 €{{ team_info.total_market_value_millions|default:0|number_format:0 }}M</span>
             <span class="meta-item">⚽ {{ team_info.formation|default:'Formation' }}</span>
         </div>
     </header>
@@ -572,7 +572,7 @@
                     <div class="detail-item">
                         <span class="detail-label">Marktwert:</span>
                         <span class="detail-value market-value">
-                            €{{ (player.market_value / 1000000)|default:0|number_format:1 }}M
+                            €{{ player.market_value_millions|default:0|number_format:1 }}M
                         </span>
                     </div>
                     <div class="detail-item">

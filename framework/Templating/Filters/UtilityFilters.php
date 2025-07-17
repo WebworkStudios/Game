@@ -115,15 +115,16 @@ class UtilityFilters
     /**
      * Pluralisierung (einfache deutsche Regel)
      */
-    public static function plural(mixed $value, int $count, string $pluralSuffix = 'e'): string
+    public static function plural(mixed $value, mixed $count, string $pluralSuffix = 'e'): string
     {
         if ($value === null) {
             return '';
         }
 
         $singular = (string)$value;
+        $countInt = is_numeric($count) ? (int)$count : 0;
 
-        if ($count === 1) {
+        if ($countInt === 1) {
             return $singular;
         }
 

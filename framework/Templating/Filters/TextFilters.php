@@ -38,19 +38,20 @@ class TextFilters
     /**
      * Kürzt Text auf bestimmte Länge
      */
-    public static function truncate(mixed $value, int $length = 100, string $suffix = '...'): string
+    public static function truncate(mixed $value, mixed $length = 100, string $suffix = '...'): string
     {
         if ($value === null) {
             return '';
         }
 
         $stringValue = (string)$value;
+        $lengthInt = is_numeric($length) ? (int)$length : 100;
 
-        if (mb_strlen($stringValue) <= $length) {
+        if (mb_strlen($stringValue) <= $lengthInt) {
             return $stringValue;
         }
 
-        return mb_substr($stringValue, 0, $length) . $suffix;
+        return mb_substr($stringValue, 0, $lengthInt) . $suffix;
     }
 
     /**
@@ -196,13 +197,19 @@ class TextFilters
     /**
      * Wiederholt String x-mal
      */
-    public static function repeat(mixed $value, int $times): string
+    public static function repeat(mixed $value, mixed $times): string
     {
-        if ($value === null || $times <= 0) {
+        if ($value === null) {
             return '';
         }
 
-        return str_repeat((string)$value, $times);
+        $timesInt = is_numeric($times) ? (int)$times : 0;
+
+        if ($timesInt <= 0) {
+            return '';
+        }
+
+        return str_repeat((string)$value, $timesInt);
     }
 
     /**

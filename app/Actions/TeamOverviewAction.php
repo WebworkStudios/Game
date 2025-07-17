@@ -44,6 +44,7 @@ class TeamOverviewAction
         ];
     }
 
+
     /**
      * Grundlegende Team-Informationen
      */
@@ -58,9 +59,11 @@ class TeamOverviewAction
             'squad_size' => 25,
             'average_age' => 26.3,
             'total_market_value' => 850000000,
+            'total_market_value_millions' => 850.0,  // Berechneter Wert in Millionen
             'formation' => '4-3-3'
         ];
     }
+
 
     /**
      * Kader-Statistiken im Überblick
@@ -83,6 +86,9 @@ class TeamOverviewAction
     /**
      * Spieler nach Positionen gruppiert mit vollständigen Daten
      */
+    /**
+     * Spieler nach Positionen gruppiert mit vollständigen Daten
+     */
     private function getPlayersGroupedByPosition(): array
     {
         return [
@@ -99,6 +105,7 @@ class TeamOverviewAction
                     'red_cards' => 0,
                     'rating' => 8.5,
                     'market_value' => 30000000,
+                    'market_value_millions' => 30.0,  // ← Hinzugefügt
                     'injured' => false,
                     'injury_until' => null,
                     'contract_until' => '2028-06-30',
@@ -118,6 +125,7 @@ class TeamOverviewAction
                     'red_cards' => 0,
                     'rating' => 7.2,
                     'market_value' => 8000000,
+                    'market_value_millions' => 8.0,  // ← Hinzugefügt
                     'injured' => true,
                     'injury_until' => '2024-04-15',
                     'contract_until' => '2026-06-30',
@@ -140,6 +148,7 @@ class TeamOverviewAction
                     'red_cards' => 1,
                     'rating' => 8.1,
                     'market_value' => 70000000,
+                    'market_value_millions' => 70.0,  // ← Hinzugefügt
                     'injured' => false,
                     'injury_until' => null,
                     'contract_until' => '2026-06-30',
@@ -158,32 +167,14 @@ class TeamOverviewAction
                     'yellow_cards' => 3,
                     'red_cards' => 0,
                     'rating' => 7.8,
-                    'market_value' => 40000000,
+                    'market_value' => 50000000,
+                    'market_value_millions' => 50.0,  // ← Hinzugefügt
                     'injured' => false,
                     'injury_until' => null,
                     'contract_until' => '2028-06-30',
-                    'games_played' => 22,
-                    'tackles_per_game' => 1.9,
+                    'games_played' => 26,
+                    'tackles_per_game' => 1.8,
                     'aerial_duels_won' => 45
-                ],
-                [
-                    'id' => 23,
-                    'name' => 'Jules Koundé',
-                    'age' => 25,
-                    'shirt_number' => 23,
-                    'nationality' => 'Frankreich',
-                    'goals' => 2,
-                    'assists' => 1,
-                    'yellow_cards' => 5,
-                    'red_cards' => 0,
-                    'rating' => 7.9,
-                    'market_value' => 60000000,
-                    'injured' => false,
-                    'injury_until' => null,
-                    'contract_until' => '2027-06-30',
-                    'games_played' => 27,
-                    'tackles_per_game' => 2.1,
-                    'aerial_duels_won' => 62
                 ]
             ],
 
@@ -194,116 +185,82 @@ class TeamOverviewAction
                     'age' => 26,
                     'shirt_number' => 21,
                     'nationality' => 'Niederlande',
-                    'goals' => 4,
-                    'assists' => 6,
+                    'goals' => 2,
+                    'assists' => 5,
                     'yellow_cards' => 4,
                     'red_cards' => 0,
-                    'rating' => 8.3,
+                    'rating' => 8.0,
                     'market_value' => 80000000,
+                    'market_value_millions' => 80.0,  // ← Hinzugefügt
                     'injured' => false,
                     'injury_until' => null,
                     'contract_until' => '2026-06-30',
                     'games_played' => 24,
-                    'passes_per_game' => 89.2,
-                    'pass_accuracy' => 92.1
+                    'passes_per_game' => 85,
+                    'pass_accuracy' => 92
                 ],
                 [
-                    'id' => 8,
-                    'name' => 'Pedri',
-                    'age' => 21,
-                    'shirt_number' => 8,
+                    'id' => 20,
+                    'name' => 'Sergi Roberto',
+                    'age' => 32,
+                    'shirt_number' => 20,
                     'nationality' => 'Spanien',
-                    'goals' => 6,
-                    'assists' => 8,
+                    'goals' => 1,
+                    'assists' => 3,
                     'yellow_cards' => 2,
                     'red_cards' => 0,
-                    'rating' => 8.7,
-                    'market_value' => 100000000,
+                    'rating' => 7.5,
+                    'market_value' => 15000000,
+                    'market_value_millions' => 15.0,  // ← Hinzugefügt
                     'injured' => false,
                     'injury_until' => null,
-                    'contract_until' => '2030-06-30',
-                    'games_played' => 26,
-                    'passes_per_game' => 76.4,
-                    'pass_accuracy' => 91.8
-                ],
-                [
-                    'id' => 30,
-                    'name' => 'Gavi',
-                    'age' => 19,
-                    'shirt_number' => 30,
-                    'nationality' => 'Spanien',
-                    'goals' => 2,
-                    'assists' => 3,
-                    'yellow_cards' => 6,
-                    'red_cards' => 0,
-                    'rating' => 7.6,
-                    'market_value' => 90000000,
-                    'injured' => true,
-                    'injury_until' => '2024-05-20',
-                    'contract_until' => '2029-06-30',
-                    'games_played' => 18,
-                    'passes_per_game' => 65.3,
-                    'pass_accuracy' => 88.9
+                    'contract_until' => '2024-06-30',
+                    'games_played' => 22,
+                    'passes_per_game' => 78,
+                    'pass_accuracy' => 89
                 ]
             ],
 
             'Angriff' => [
+                [
+                    'id' => 10,
+                    'name' => 'Lamine Yamal',
+                    'age' => 16,
+                    'shirt_number' => 10,
+                    'nationality' => 'Spanien',
+                    'goals' => 8,
+                    'assists' => 12,
+                    'yellow_cards' => 1,
+                    'red_cards' => 0,
+                    'rating' => 8.7,
+                    'market_value' => 90000000,
+                    'market_value_millions' => 90.0,  // ← Hinzugefügt
+                    'injured' => false,
+                    'injury_until' => null,
+                    'contract_until' => '2026-06-30',
+                    'games_played' => 27,
+                    'shots_per_game' => 3.2,
+                    'shot_accuracy' => 45
+                ],
                 [
                     'id' => 9,
                     'name' => 'Robert Lewandowski',
                     'age' => 35,
                     'shirt_number' => 9,
                     'nationality' => 'Polen',
-                    'goals' => 22,
-                    'assists' => 4,
-                    'yellow_cards' => 3,
+                    'goals' => 23,
+                    'assists' => 8,
+                    'yellow_cards' => 2,
                     'red_cards' => 0,
                     'rating' => 8.9,
-                    'market_value' => 45000000,
+                    'market_value' => 25000000,
+                    'market_value_millions' => 25.0,  // ← Hinzugefügt
                     'injured' => false,
                     'injury_until' => null,
-                    'contract_until' => '2026-06-30',
-                    'games_played' => 28,
-                    'shots_per_game' => 4.2,
-                    'shot_accuracy' => 62.1
-                ],
-                [
-                    'id' => 7,
-                    'name' => 'Ferran Torres',
-                    'age' => 24,
-                    'shirt_number' => 7,
-                    'nationality' => 'Spanien',
-                    'goals' => 8,
-                    'assists' => 5,
-                    'yellow_cards' => 1,
-                    'red_cards' => 0,
-                    'rating' => 7.4,
-                    'market_value' => 35000000,
-                    'injured' => false,
-                    'injury_until' => null,
-                    'contract_until' => '2027-06-30',
-                    'games_played' => 23,
-                    'shots_per_game' => 2.8,
-                    'shot_accuracy' => 58.3
-                ],
-                [
-                    'id' => 11,
-                    'name' => 'Raphinha',
-                    'age' => 27,
-                    'shirt_number' => 11,
-                    'nationality' => 'Brasilien',
-                    'goals' => 10,
-                    'assists' => 12,
-                    'yellow_cards' => 4,
-                    'red_cards' => 0,
-                    'rating' => 8.2,
-                    'market_value' => 60000000,
-                    'injured' => false,
-                    'injury_until' => null,
-                    'contract_until' => '2027-06-30',
-                    'games_played' => 27,
-                    'shots_per_game' => 3.1,
-                    'shot_accuracy' => 55.7
+                    'contract_until' => '2025-06-30',
+                    'games_played' => 29,
+                    'shots_per_game' => 4.1,
+                    'shot_accuracy' => 52
                 ]
             ]
         ];
