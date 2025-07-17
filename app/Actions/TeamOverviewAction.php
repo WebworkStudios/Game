@@ -22,9 +22,7 @@ class TeamOverviewAction
 {
     public function __construct(
         private readonly ResponseFactory $responseFactory
-    )
-    {
-    }
+    ) {}
 
     public function __invoke(Request $request): Response
     {
@@ -42,10 +40,10 @@ class TeamOverviewAction
             'team_info' => $this->getTeamInformation(),
             'squad_stats' => $this->getSquadStatistics(),
             'players_by_position' => $this->getPlayersGroupedByPosition(),
-            'filter_options' => $this->getFilterOptions()
+            'filter_options' => $this->getFilterOptions(),
+            'financial_overview' => $this->getFinancialOverview()
         ];
     }
-
 
     /**
      * Grundlegende Team-Informationen
@@ -55,17 +53,16 @@ class TeamOverviewAction
         return [
             'name' => 'FC Barcelona',
             'league' => 'La Liga',
-            'season' => '2023/24',
+            'season' => '2024/25',
             'manager' => 'Xavi Hernández',
             'stadium' => 'Camp Nou',
             'squad_size' => 25,
             'average_age' => 26.3,
             'total_market_value' => 850000000,
-            'total_market_value_millions' => 850.0,  // Berechneter Wert in Millionen
-            'formation' => '4-3-3'
+            'formation' => '4-3-3',
+            'logo_url' => '/assets/images/teams/barcelona-logo.png'
         ];
     }
-
 
     /**
      * Kader-Statistiken im Überblick
@@ -81,217 +78,285 @@ class TeamOverviewAction
             'injured_players' => 2,
             'players_over_30' => 7,
             'avg_market_value' => 34000000,
-            'contract_expiring' => 4
+            'contract_expiring' => 4,
+            'foreign_players' => 18,
+            'youth_players' => 3
         ];
     }
 
     /**
-     * Spieler nach Positionen gruppiert mit vollständigen Daten
-     */
-    /**
-     * Spieler nach Positionen gruppiert mit vollständigen Daten
+     * Spieler nach Positionen gruppiert
      */
     private function getPlayersGroupedByPosition(): array
     {
         return [
-            'Torwart' => [
+            'goalkeepers' => [
                 [
                     'id' => 1,
                     'name' => 'Marc-André ter Stegen',
                     'age' => 31,
+                    'nationality' => 'Germany',
+                    'market_value' => 35000000,
+                    'contract_until' => '2025-06-30',
                     'shirt_number' => 1,
-                    'nationality' => 'Deutschland',
-                    'goals' => 0,
-                    'assists' => 1,
-                    'yellow_cards' => 2,
-                    'red_cards' => 0,
-                    'rating' => 8.5,
-                    'market_value' => 30000000,
-                    'market_value_millions' => 30.0,  // ← Hinzugefügt
                     'injured' => false,
-                    'injury_until' => null,
-                    'contract_until' => '2028-06-30',
-                    'games_played' => 28,
-                    'clean_sheets' => 15,
-                    'saves_per_game' => 3.2
+                    'goals' => 0,
+                    'assists' => 2,
+                    'rating' => 8.5,
+                    'appearances' => 25
                 ],
                 [
                     'id' => 13,
                     'name' => 'Iñaki Peña',
                     'age' => 24,
+                    'nationality' => 'Spain',
+                    'market_value' => 8000000,
+                    'contract_until' => '2026-06-30',
                     'shirt_number' => 13,
-                    'nationality' => 'Spanien',
+                    'injured' => false,
                     'goals' => 0,
                     'assists' => 0,
-                    'yellow_cards' => 0,
-                    'red_cards' => 0,
                     'rating' => 7.2,
-                    'market_value' => 8000000,
-                    'market_value_millions' => 8.0,  // ← Hinzugefügt
-                    'injured' => true,
-                    'injury_until' => '2024-04-15',
-                    'contract_until' => '2026-06-30',
-                    'games_played' => 8,
-                    'clean_sheets' => 3,
-                    'saves_per_game' => 2.8
+                    'appearances' => 8
+                ],
+                [
+                    'id' => 26,
+                    'name' => 'Ander Astralaga',
+                    'age' => 20,
+                    'nationality' => 'Spain',
+                    'market_value' => 500000,
+                    'contract_until' => '2025-06-30',
+                    'shirt_number' => 26,
+                    'injured' => false,
+                    'goals' => 0,
+                    'assists' => 0,
+                    'rating' => 6.8,
+                    'appearances' => 2
                 ]
             ],
-
-            'Abwehr' => [
+            'defenders' => [
                 [
-                    'id' => 4,
-                    'name' => 'Ronald Araújo',
-                    'age' => 25,
-                    'shirt_number' => 4,
-                    'nationality' => 'Uruguay',
-                    'goals' => 3,
-                    'assists' => 2,
-                    'yellow_cards' => 8,
-                    'red_cards' => 1,
-                    'rating' => 8.1,
-                    'market_value' => 70000000,
-                    'market_value_millions' => 70.0,  // ← Hinzugefügt
+                    'id' => 2,
+                    'name' => 'João Cancelo',
+                    'age' => 29,
+                    'nationality' => 'Portugal',
+                    'market_value' => 40000000,
+                    'contract_until' => '2025-06-30',
+                    'shirt_number' => 2,
                     'injured' => false,
-                    'injury_until' => null,
-                    'contract_until' => '2026-06-30',
-                    'games_played' => 25,
-                    'tackles_per_game' => 2.4,
-                    'aerial_duels_won' => 68
+                    'goals' => 3,
+                    'assists' => 8,
+                    'rating' => 8.1,
+                    'appearances' => 28
                 ],
                 [
                     'id' => 3,
                     'name' => 'Alejandro Balde',
                     'age' => 20,
-                    'shirt_number' => 3,
-                    'nationality' => 'Spanien',
-                    'goals' => 1,
-                    'assists' => 4,
-                    'yellow_cards' => 3,
-                    'red_cards' => 0,
-                    'rating' => 7.8,
-                    'market_value' => 50000000,
-                    'market_value_millions' => 50.0,  // ← Hinzugefügt
-                    'injured' => false,
-                    'injury_until' => null,
+                    'nationality' => 'Spain',
+                    'market_value' => 45000000,
                     'contract_until' => '2028-06-30',
-                    'games_played' => 26,
-                    'tackles_per_game' => 1.8,
-                    'aerial_duels_won' => 45
+                    'shirt_number' => 3,
+                    'injured' => true,
+                    'injury_until' => '2025-02-15',
+                    'goals' => 1,
+                    'assists' => 5,
+                    'rating' => 7.8,
+                    'appearances' => 22
+                ],
+                [
+                    'id' => 4,
+                    'name' => 'Ronald Araújo',
+                    'age' => 24,
+                    'nationality' => 'Uruguay',
+                    'market_value' => 60000000,
+                    'contract_until' => '2026-06-30',
+                    'shirt_number' => 4,
+                    'injured' => false,
+                    'goals' => 2,
+                    'assists' => 1,
+                    'rating' => 8.3,
+                    'appearances' => 30
+                ],
+                [
+                    'id' => 5,
+                    'name' => 'Iñigo Martínez',
+                    'age' => 32,
+                    'nationality' => 'Spain',
+                    'market_value' => 15000000,
+                    'contract_until' => '2025-06-30',
+                    'shirt_number' => 5,
+                    'injured' => false,
+                    'goals' => 1,
+                    'assists' => 2,
+                    'rating' => 7.9,
+                    'appearances' => 24
                 ]
             ],
-
-            'Mittelfeld' => [
+            'midfielders' => [
+                [
+                    'id' => 8,
+                    'name' => 'Pedri',
+                    'age' => 21,
+                    'nationality' => 'Spain',
+                    'market_value' => 100000000,
+                    'contract_until' => '2026-06-30',
+                    'shirt_number' => 8,
+                    'injured' => false,
+                    'goals' => 6,
+                    'assists' => 9,
+                    'rating' => 8.7,
+                    'appearances' => 32
+                ],
+                [
+                    'id' => 6,
+                    'name' => 'Gavi',
+                    'age' => 19,
+                    'nationality' => 'Spain',
+                    'market_value' => 90000000,
+                    'contract_until' => '2026-06-30',
+                    'shirt_number' => 6,
+                    'injured' => true,
+                    'injury_until' => '2025-03-01',
+                    'goals' => 2,
+                    'assists' => 4,
+                    'rating' => 8.2,
+                    'appearances' => 18
+                ],
                 [
                     'id' => 21,
                     'name' => 'Frenkie de Jong',
                     'age' => 26,
-                    'shirt_number' => 21,
-                    'nationality' => 'Niederlande',
-                    'goals' => 2,
-                    'assists' => 5,
-                    'yellow_cards' => 4,
-                    'red_cards' => 0,
-                    'rating' => 8.0,
-                    'market_value' => 80000000,
-                    'market_value_millions' => 80.0,  // ← Hinzugefügt
-                    'injured' => false,
-                    'injury_until' => null,
+                    'nationality' => 'Netherlands',
+                    'market_value' => 70000000,
                     'contract_until' => '2026-06-30',
-                    'games_played' => 24,
-                    'passes_per_game' => 85,
-                    'pass_accuracy' => 92
+                    'shirt_number' => 21,
+                    'injured' => false,
+                    'goals' => 4,
+                    'assists' => 6,
+                    'rating' => 8.0,
+                    'appearances' => 29
                 ],
                 [
-                    'id' => 20,
-                    'name' => 'Sergi Roberto',
-                    'age' => 32,
-                    'shirt_number' => 20,
-                    'nationality' => 'Spanien',
-                    'goals' => 1,
-                    'assists' => 3,
-                    'yellow_cards' => 2,
-                    'red_cards' => 0,
-                    'rating' => 7.5,
-                    'market_value' => 15000000,
-                    'market_value_millions' => 15.0,  // ← Hinzugefügt
+                    'id' => 22,
+                    'name' => 'İlkay Gündoğan',
+                    'age' => 33,
+                    'nationality' => 'Germany',
+                    'market_value' => 25000000,
+                    'contract_until' => '2025-06-30',
+                    'shirt_number' => 22,
                     'injured' => false,
-                    'injury_until' => null,
-                    'contract_until' => '2024-06-30',
-                    'games_played' => 22,
-                    'passes_per_game' => 78,
-                    'pass_accuracy' => 89
+                    'goals' => 8,
+                    'assists' => 11,
+                    'rating' => 8.4,
+                    'appearances' => 31
                 ]
             ],
-
-            'Angriff' => [
-                [
-                    'id' => 10,
-                    'name' => 'Lamine Yamal',
-                    'age' => 16,
-                    'shirt_number' => 10,
-                    'nationality' => 'Spanien',
-                    'goals' => 8,
-                    'assists' => 12,
-                    'yellow_cards' => 1,
-                    'red_cards' => 0,
-                    'rating' => 8.7,
-                    'market_value' => 90000000,
-                    'market_value_millions' => 90.0,  // ← Hinzugefügt
-                    'injured' => false,
-                    'injury_until' => null,
-                    'contract_until' => '2026-06-30',
-                    'games_played' => 27,
-                    'shots_per_game' => 3.2,
-                    'shot_accuracy' => 45
-                ],
+            'forwards' => [
                 [
                     'id' => 9,
                     'name' => 'Robert Lewandowski',
                     'age' => 35,
-                    'shirt_number' => 9,
-                    'nationality' => 'Polen',
-                    'goals' => 23,
-                    'assists' => 8,
-                    'yellow_cards' => 2,
-                    'red_cards' => 0,
-                    'rating' => 8.9,
-                    'market_value' => 25000000,
-                    'market_value_millions' => 25.0,  // ← Hinzugefügt
-                    'injured' => false,
-                    'injury_until' => null,
+                    'nationality' => 'Poland',
+                    'market_value' => 45000000,
                     'contract_until' => '2025-06-30',
-                    'games_played' => 29,
-                    'shots_per_game' => 4.1,
-                    'shot_accuracy' => 52
+                    'shirt_number' => 9,
+                    'injured' => false,
+                    'goals' => 24,
+                    'assists' => 8,
+                    'rating' => 9.1,
+                    'appearances' => 33
+                ],
+                [
+                    'id' => 11,
+                    'name' => 'Raphinha',
+                    'age' => 27,
+                    'nationality' => 'Brazil',
+                    'market_value' => 60000000,
+                    'contract_until' => '2027-06-30',
+                    'shirt_number' => 11,
+                    'injured' => false,
+                    'goals' => 12,
+                    'assists' => 15,
+                    'rating' => 8.6,
+                    'appearances' => 35
+                ],
+                [
+                    'id' => 7,
+                    'name' => 'Ferran Torres',
+                    'age' => 24,
+                    'nationality' => 'Spain',
+                    'market_value' => 40000000,
+                    'contract_until' => '2027-06-30',
+                    'shirt_number' => 7,
+                    'injured' => false,
+                    'goals' => 9,
+                    'assists' => 6,
+                    'rating' => 7.8,
+                    'appearances' => 28
+                ],
+                [
+                    'id' => 14,
+                    'name' => 'João Félix',
+                    'age' => 24,
+                    'nationality' => 'Portugal',
+                    'market_value' => 50000000,
+                    'contract_until' => '2024-06-30',
+                    'shirt_number' => 14,
+                    'injured' => false,
+                    'goals' => 7,
+                    'assists' => 4,
+                    'rating' => 7.9,
+                    'appearances' => 26
                 ]
             ]
         ];
     }
 
     /**
-     * Optionen für Kader-Filter
+     * Filter-Optionen für die Spielersuche
      */
     private function getFilterOptions(): array
     {
         return [
             'positions' => [
                 'all' => 'Alle Positionen',
-                'goalkeeper' => 'Torwart',
-                'defender' => 'Abwehr',
+                'goalkeeper' => 'Torhüter',
+                'defender' => 'Verteidiger',
                 'midfielder' => 'Mittelfeld',
-                'forward' => 'Angriff'
+                'forward' => 'Stürmer'
             ],
             'status' => [
                 'all' => 'Alle Spieler',
                 'available' => 'Verfügbar',
-                'injured' => 'Verletzt',
-                'suspended' => 'Gesperrt'
+                'injured' => 'Verletzt'
             ],
-            'contract' => [
-                'all' => 'Alle Verträge',
-                'expiring' => 'Läuft aus',
-                'long_term' => 'Langfristig'
+            'age_groups' => [
+                'all' => 'Alle Altersgruppen',
+                'young' => 'U21 (unter 21)',
+                'prime' => 'Prime (21-30)',
+                'veteran' => 'Veteran (über 30)'
             ]
+        ];
+    }
+
+    /**
+     * Finanzielle Übersicht des Teams
+     */
+    private function getFinancialOverview(): array
+    {
+        return [
+            'total_market_value' => 850000000,
+            'total_market_value_millions' => 850.0,
+            'avg_market_value' => 34000000,
+            'most_valuable_player' => [
+                'name' => 'Pedri',
+                'value' => 100000000
+            ],
+            'salary_budget' => 400000000,
+            'salary_spent' => 380000000,
+            'salary_remaining' => 20000000,
+            'transfer_budget' => 50000000
         ];
     }
 }
