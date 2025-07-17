@@ -1,6 +1,5 @@
 <?php
 
-
 declare(strict_types=1);
 
 namespace Framework\Http;
@@ -64,14 +63,9 @@ enum HttpStatus: int
     case SERVICE_UNAVAILABLE = 503;
     case GATEWAY_TIMEOUT = 504;
     case HTTP_VERSION_NOT_SUPPORTED = 505;
-    case INSUFFICIENT_STORAGE = 507;
-    case LOOP_DETECTED = 508;
-    case NOT_EXTENDED = 510;
-    case NETWORK_AUTHENTICATION_REQUIRED = 511;
-    case FROM = 423;
 
     /**
-     * Gibt den Reason-Phrase Text zurück
+     * Gibt den HTTP-Status-Text zurück
      */
     public function getText(): string
     {
@@ -119,8 +113,8 @@ enum HttpStatus: int
             self::UNSUPPORTED_MEDIA_TYPE => 'Unsupported Media Type',
             self::RANGE_NOT_SATISFIABLE => 'Range Not Satisfiable',
             self::EXPECTATION_FAILED => 'Expectation Failed',
-            self::UNPROCESSABLE_ENTITY => 'Unprocessable Entity',
             self::PAGE_EXPIRED => 'Page Expired',
+            self::UNPROCESSABLE_ENTITY => 'Unprocessable Entity',
             self::TOO_MANY_REQUESTS => 'Too Many Requests',
 
             // 5xx Server Error
@@ -130,10 +124,6 @@ enum HttpStatus: int
             self::SERVICE_UNAVAILABLE => 'Service Unavailable',
             self::GATEWAY_TIMEOUT => 'Gateway Timeout',
             self::HTTP_VERSION_NOT_SUPPORTED => 'HTTP Version Not Supported',
-            self::INSUFFICIENT_STORAGE => 'Insufficient Storage',
-            self::LOOP_DETECTED => 'Loop Detected',
-            self::NOT_EXTENDED => 'Not Extended',
-            self::NETWORK_AUTHENTICATION_REQUIRED => 'Network Authentication Required',
         };
     }
 
@@ -147,10 +137,19 @@ enum HttpStatus: int
 
     /**
      * Prüft ob Status Code erfolgreiche Antwort ist (2xx)
+     * KORRIGIERT: Sowohl isSuccess() als auch isSuccessful() verfügbar
      */
     public function isSuccess(): bool
     {
         return $this->value >= 200 && $this->value < 300;
+    }
+
+    /**
+     * Alias für isSuccess() - für Kompatibilität mit Response.php
+     */
+    public function isSuccessful(): bool
+    {
+        return $this->isSuccess();
     }
 
     /**

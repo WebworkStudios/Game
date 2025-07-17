@@ -13,7 +13,7 @@ use Framework\Http\ResponseFactory;
 /**
  * ValidatesRequests - Trait for easy validation in Actions
  *
- * KORRIGIERT: Verwendet korrekte Request-Methoden (getFiles statt files)
+ * KORRIGIERT: Korrekte Parametersignatur für Application::validateOrFail
  */
 trait ValidatesRequest
 {
@@ -26,6 +26,7 @@ trait ValidatesRequest
         $customMessages = $this->messages();
 
         if (property_exists($this, 'app') && $this->app instanceof Application) {
+            // KORRIGIERT: Korrekte Parameterreihenfolge für Application::validateOrFail
             return $this->app->validateOrFail($data, $rules, $customMessages, $connectionName);
         }
 
@@ -55,6 +56,7 @@ trait ValidatesRequest
         $customMessages = $this->messages();
 
         if (property_exists($this, 'app') && $this->app instanceof Application) {
+            // KORRIGIERT: Korrekte Parameterreihenfolge für Application::validate
             return $this->app->validate($data, $rules, $customMessages, $connectionName);
         }
 
@@ -272,11 +274,12 @@ trait ValidatesRequest
         $validator = $this->validate($request, $rules, $connectionName);
 
         if ($validator->fails()) {
-            throw new \InvalidArgumentException('Validation failed: ' . implode(', ', $validator->errors()));
+            throw new \InvalidArgumentException('Validation failed: ' . implode(', ', $validator->errors()->flatten()));
         }
 
         return $validator->validated();
     }
+
 
     /**
      * NEU: Safe validation that returns null on failure
