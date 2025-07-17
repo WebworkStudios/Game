@@ -48,6 +48,7 @@ class FilterManager
         $this->registerNumberFilters();
         $this->registerDateFilters();
         $this->registerUtilityFilters();
+        $this->registerDebugFilters(); // DEBUG-FILTER HINZUGEFÜGT
 
         if ($this->translator !== null) {
             $this->registerTranslationFilters();
@@ -129,6 +130,32 @@ class FilterManager
         $this->registry->registerLazy('join', fn() => [UtilityFilters::class, 'join']);
         $this->registry->registerLazy('split', fn() => [UtilityFilters::class, 'split']);
         $this->registry->registerLazy('unique', fn() => [UtilityFilters::class, 'unique']);
+    }
+
+    /**
+     * Registriert Debug-Filter (NEU HINZUGEFÜGT)
+     */
+    private function registerDebugFilters(): void
+    {
+        // Debug-Filter für Development-Zwecke
+        $this->registry->registerLazy('debug', fn() => function(mixed $value): string {
+            if (is_array($value) || is_object($value)) {
+                return '<pre>' . htmlspecialchars(print_r($value, true)) . '</pre>';
+            }
+            return '<pre>' . htmlspecialchars(var_export($value, true)) . '</pre>';
+        });
+
+        // Zusätzliche Debug-Filter
+        $this->registry->registerLazy('var_dump', fn() => function(mixed $value): string {
+            ob_start();
+            var_dump($value);
+            $output = ob_get_clean();
+            return '<pre>' . htmlspecialchars($output) . '</pre>';
+        });
+
+        $this->registry->registerLazy('json_encode', fn() => function(mixed $value): string {
+            return json_encode($value, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+        });
     }
 
     /**
