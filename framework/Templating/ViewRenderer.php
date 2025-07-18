@@ -4,54 +4,66 @@ declare(strict_types=1);
 
 namespace Framework\Templating;
 
+use Framework\Assets\JavaScriptAssetManager;
 use Framework\Http\HttpStatus;
 use Framework\Http\Response;
 use Framework\Localization\Translator;
 use Framework\Security\Csrf;
+use Framework\Templating\Filters\JavaScriptFilterRegistrar;
 
 /**
- * ViewRenderer - Integriert die neue SRP-konforme TemplateEngine in das Response System
+ * ViewRenderer - Erweitert um JavaScript Asset Management
  *
- * UPDATED: Angepasst für neue TemplateEngine-Architektur
- *
- * Verantwortlichkeiten:
- * - Template-Rendering zu HTTP-Response konvertieren
- * - Auto-Injection von Framework-Services (Translator, CSRF)
- * - Content-Type und HTTP-Header Management
- * - Graceful Handling von optionalen Dependencies
- * - CSRF-Token Integration für Security
+ * NEUE FEATURES:
+ * - Automatische JavaScript-Asset Integration
+ * - Script-Injection am Ende des HTML-Body
+ * - Filter-basierte Script-Registrierung in Templates
  */
 readonly class ViewRenderer
 {
+    private JavaScriptAssetManager $assetManager;
+
     public function __construct(
         private TemplateEngine $engine,
         private ?Translator    $translator = null,
-        private ?Csrf          $csrf = null
-    )
-    {
+        private ?Csrf          $csrf = null,
+        ?JavaScriptAssetManager $assetManager = null
+    ) {
+        // JavaScript Asset Manager initialisieren
+        $this->assetManager = $assetManager ?? new JavaScriptAssetManager(
+            publicPath: 'public/js/',
+            baseUrl: '/js/',
+            debugMode: ($_ENV['APP_DEBUG'] ?? 'false') === 'true'
+        );
+
+        // JavaScript-Filter in der Template-Engine registrieren
+        $this->registerJavaScriptFilters();
     }
 
     /**
-     * Rendert Template zu HTTP Response
-     *
-     * ENHANCED: Erweiterte Auto-Injection und besseres Error-Handling
+     * Rendert Template zu HTTP Response mit JavaScript-Asset Integration
      */
     public function render(
         string     $template,
         array      $data = [],
         HttpStatus $status = HttpStatus::OK,
         array      $headers = []
-    ): Response
-    {
+    ): Response {
         try {
+            // Asset Manager für Template verfügbar machen
+            $data = $this->injectAssetManager($data);
+
             // Auto-inject Framework-Services
             $data = $this->injectFrameworkServices($data);
 
             // Auto-inject Global Template Variables
             $data = $this->injectGlobalVariables($data);
 
-            // Render template content mit neuer Engine
+            // Template rendern
             $content = $this->engine->render($template, $data);
+
+            // JavaScript-Assets automatisch am Ende des Body einfügen
+            $content = $this->injectJavaScriptAssets($content);
 
             // Post-process content (CSRF meta injection, etc.)
             $content = $this->postProcessContent($content, $data);
@@ -67,366 +79,243 @@ readonly class ViewRenderer
     }
 
     /**
-     * Injiziert Framework-Services in Template-Daten
+     * JavaScript Asset Manager in Template-Daten injizieren
+     */
+    private function injectAssetManager(array $data): array
+    {
+        // Asset Manager für Templates verfügbar machen
+        $data['js'] = $this->assetManager;
+
+        // Helper-Funktionen für Templates
+        $data['asset_helpers'] = [
+            'js_script' => fn(string $file, array $attrs = ['defer' => true]) =>
+            $this->assetManager->addScript($file, $attrs),
+            'js_module' => fn(string $file, int $priority = 100) =>
+            $this->assetManager->addModule($file, $priority),
+            'js_inline' => fn(string $content, int $priority = 50) =>
+            $this->assetManager->addInlineScript($content, $priority),
+        ];
+
+        return $data;
+    }
+
+    /**
+     * JavaScript-Assets automatisch in HTML einfügen
+     */
+    private function injectJavaScriptAssets(string $content): string
+    {
+        $scripts = $this->assetManager->render();
+
+        if (empty($scripts)) {
+            return $content;
+        }
+
+        // Script-Tags vor schließendem </body> einfügen
+        if (stripos($content, '</body>') !== false) {
+            $content = preg_replace(
+                '/(<\/body\s*>)/i',
+                "\n{$scripts}\n$1",
+                $content,
+                1
+            );
+        } else {
+            // Fallback: Am Ende anhängen
+            $content .= "\n{$scripts}";
+        }
+
+        // Asset Manager für nächste Anfrage zurücksetzen
+        $this->assetManager->clear();
+
+        return $content;
+    }
+
+    /**
+     * JavaScript-Filter in der Template-Engine registrieren
+     */
+    private function registerJavaScriptFilters(): void
+    {
+        // Filter-Manager aus Engine holen (falls verfügbar)
+        $reflection = new \ReflectionClass($this->engine);
+
+        try {
+            $filterManagerProperty = $reflection->getProperty('filterManager');
+            $filterManagerProperty->setAccessible(true);
+            $filterManager = $filterManagerProperty->getValue($this->engine);
+
+            if ($filterManager instanceof \Framework\Templating\FilterManager) {
+                JavaScriptFilterRegistrar::register($filterManager, $this->assetManager);
+            }
+        } catch (\ReflectionException $e) {
+            // Filter-Manager nicht verfügbar - Filter können manuell registriert werden
+        }
+    }
+
+    /**
+     * Framework-Services in Template-Daten injizieren (erweitert)
      */
     private function injectFrameworkServices(array $data): array
     {
-        // Localization Services
+        // Bestehende Service-Injection
         if ($this->translator !== null) {
             $data = $this->injectTranslationServices($data);
         }
 
-        // Security Services
         if ($this->csrf !== null) {
             $data = $this->injectSecurityServices($data);
         }
 
+        // JavaScript Asset Helpers
+        $data['js_helpers'] = [
+            'add_script' => fn(string $file) => $this->assetManager->addScript($file),
+            'add_module' => fn(string $file) => $this->assetManager->addModule($file),
+            'script_url' => fn(string $file) => '/js/' . $file . '?v=' . filemtime('public/js/' . $file),
+        ];
+
         return $data;
     }
 
     /**
-     * Injiziert Translation-Services
+     * Global Template Variables injizieren (erweitert)
+     */
+    private function injectGlobalVariables(array $data): array
+    {
+        // App-Informationen
+        $data['app_name'] = $_ENV['APP_NAME'] ?? 'KickersCup Manager';
+        $data['app_version'] = $_ENV['APP_VERSION'] ?? '1.0.0';
+        $data['app_env'] = $_ENV['APP_ENV'] ?? 'production';
+        $data['app_debug'] = ($_ENV['APP_DEBUG'] ?? 'false') === 'true';
+
+        // Asset-URLs
+        $data['asset_url'] = $_ENV['ASSET_URL'] ?? '/assets';
+        $data['js_url'] = '/js';
+        $data['css_url'] = '/css';
+
+        return $data;
+    }
+
+    /**
+     * Translation Services injizieren
      */
     private function injectTranslationServices(array $data): array
     {
         try {
-            // Current locale
             if (!isset($data['current_locale'])) {
                 $data['current_locale'] = $this->translator->getLocale();
             }
 
-            // Available locales
             if (!isset($data['available_locales'])) {
                 $data['available_locales'] = $this->translator->getSupportedLocales();
             }
 
-            // Translation helper function
-            if (!isset($data['trans'])) {
-                $data['trans'] = function (string $key, array $parameters = []) {
-                    return $this->translator->translate($key, $parameters);
-                };
-            }
+            // Translation Helper für Templates
+            $data['trans'] = fn(string $key, array $params = []) =>
+            $this->translator->translate($key, $params);
 
         } catch (\Throwable $e) {
-            // Graceful fallback bei Translation-Fehlern
+            // Graceful fallback
             $data['current_locale'] = 'de';
-            $data['available_locales'] = ['de' => 'Deutsch'];
-            $data['trans'] = function (string $key, array $parameters = []) {
-                return $key; // Fallback: Return key as-is
-            };
+            $data['available_locales'] = ['de', 'en'];
+            $data['trans'] = fn(string $key, array $params = []) => $key;
         }
 
         return $data;
     }
 
     /**
-     * Injiziert Security-Services
+     * Security Services injizieren
      */
     private function injectSecurityServices(array $data): array
     {
         try {
-            // CSRF Token für Forms
             if (!isset($data['csrf_token'])) {
-                $data['csrf_token'] = $this->csrf->getToken();
+                $data['csrf_token'] = $this->csrf->generateToken();
             }
 
-            // CSRF Token Field für HTML Forms
-            if (!isset($data['csrf_token_field'])) {
-                $data['csrf_token_field'] = $this->csrf->getTokenField();
-            }
-
-            // CSRF Meta Tag für JavaScript
-            if (!isset($data['csrf_meta_tag'])) {
-                $data['csrf_meta_tag'] = $this->csrf->getTokenMeta();
+            if (!isset($data['csrf_field'])) {
+                $data['csrf_field'] = '<input type="hidden" name="_token" value="' .
+                    htmlspecialchars($data['csrf_token'], ENT_QUOTES) . '">';
             }
 
         } catch (\Throwable $e) {
-            // Graceful fallback bei CSRF-Fehlern
-            $data['csrf_token'] = '';
-            $data['csrf_token_field'] = '<!-- CSRF not available -->';
-            $data['csrf_meta_tag'] = '<!-- CSRF meta not available -->';
+            // Graceful fallback
+            $data['csrf_token'] = 'dev-token-' . uniqid();
+            $data['csrf_field'] = '<input type="hidden" name="_token" value="' . $data['csrf_token'] . '">';
         }
 
         return $data;
     }
 
     /**
-     * Injiziert globale Template-Variablen
-     */
-    private function injectGlobalVariables(array $data): array
-    {
-        // Framework-Information
-        if (!isset($data['framework_version'])) {
-            $data['framework_version'] = '2.0.0';
-        }
-
-        if (!isset($data['framework_name'])) {
-            $data['framework_name'] = 'KickersCup Framework';
-        }
-
-        // Environment-Information
-        if (!isset($data['environment'])) {
-            $data['environment'] = $_ENV['APP_ENV'] ?? 'production';
-        }
-
-        // Timestamp für Cache-Busting
-        if (!isset($data['build_timestamp'])) {
-            $data['build_timestamp'] = time();
-        }
-
-        // Request-Information
-        if (!isset($data['request_uri'])) {
-            $data['request_uri'] = $_SERVER['REQUEST_URI'] ?? '/';
-        }
-
-        if (!isset($data['request_method'])) {
-            $data['request_method'] = $_SERVER['REQUEST_METHOD'] ?? 'GET';
-        }
-
-        // Template-Helper-Functions
-        $data = $this->injectHelperFunctions($data);
-
-        return $data;
-    }
-
-    /**
-     * Injiziert Helper-Functions für Templates
-     */
-    private function injectHelperFunctions(array $data): array
-    {
-        // URL-Helper
-        if (!isset($data['url'])) {
-            $data['url'] = function (string $path = '') {
-                return $this->generateUrl($path);
-            };
-        }
-
-        // Asset-Helper
-        if (!isset($data['asset'])) {
-            $data['asset'] = function (string $path) {
-                return $this->generateAssetUrl($path);
-            };
-        }
-
-        // Route-Helper
-        if (!isset($data['route'])) {
-            $data['route'] = function (string $name, array $parameters = []) {
-                return $this->generateRoute($name, $parameters);
-            };
-        }
-
-        // Date-Helper
-        if (!isset($data['date_format'])) {
-            $data['date_format'] = function (string $date, string $format = 'Y-m-d H:i:s') {
-                return date($format, strtotime($date));
-            };
-        }
-
-        // Number-Helper
-        if (!isset($data['number_format'])) {
-            $data['number_format'] = function (float $number, int $decimals = 0) {
-                return number_format($number, $decimals, ',', '.');
-            };
-        }
-
-        return $data;
-    }
-
-    /**
-     * URL-Helper-Funktionen
-     */
-    private function generateUrl(string $path = ''): string
-    {
-        $baseUrl = $_ENV['APP_URL'] ?? 'http://localhost';
-        return rtrim($baseUrl, '/') . '/' . ltrim($path, '/');
-    }
-
-    private function generateAssetUrl(string $path): string
-    {
-        $baseUrl = $_ENV['APP_URL'] ?? 'http://localhost';
-        $assetPath = '/assets/' . ltrim($path, '/');
-
-        // Cache-Busting in Production
-        if (($_ENV['APP_ENV'] ?? 'production') === 'production') {
-            $assetPath .= '?v=' . filemtime(public_path($assetPath));
-        }
-
-        return rtrim($baseUrl, '/') . $assetPath;
-    }
-
-    private function generateRoute(string $name, array $parameters = []): string
-    {
-        // Simplified route generation
-        // In einer echten Implementierung würde hier der Router verwendet
-        $routes = [
-            'home' => '/',
-            'team.overview' => '/team',
-            'test.templates' => '/test/templates',
-            'test.filters' => '/test/filters'
-        ];
-
-        $path = $routes[$name] ?? '/';
-
-        // Replace parameters in path
-        foreach ($parameters as $key => $value) {
-            $path = str_replace('{' . $key . '}', $value, $path);
-        }
-
-        return $this->generateUrl($path);
-    }
-
-    /**
-     * Post-Processing des gerenderten Contents
+     * Content Post-Processing
      */
     private function postProcessContent(string $content, array $data): string
     {
-        // CSRF Meta Tag in HTML Head injizieren
-        $content = $this->injectCsrfMeta($content, $data);
+        // Meta-Tags für CSRF in <head> einfügen
+        if (isset($data['csrf_token']) && stripos($content, '</head>') !== false) {
+            $csrfMeta = '<meta name="csrf-token" content="' .
+                htmlspecialchars($data['csrf_token'], ENT_QUOTES) . '">';
 
-        // Performance-Optimierungen
-        $content = $this->optimizeHtml($content);
-
-        // Debug-Informationen hinzufügen (nur in Development)
-        if (($data['environment'] ?? '') === 'development') {
-            $content = $this->addDebugInfo($content, $data);
+            $content = preg_replace(
+                '/(<\/head\s*>)/i',
+                "\n{$csrfMeta}\n$1",
+                $content,
+                1
+            );
         }
 
         return $content;
     }
 
     /**
-     * Injiziert CSRF Meta Tag in HTML Head
-     */
-    private function injectCsrfMeta(string $content, array $data): string
-    {
-        // Check if CSRF meta tag already present
-        if (str_contains($content, 'name="csrf-token"')) {
-            return $content;
-        }
-
-        // Check if we have a head section
-        if (!str_contains($content, '<head>')) {
-            return $content;
-        }
-
-        // Get CSRF meta tag
-        $csrfMeta = $data['csrf_meta_tag'] ?? '';
-        if (empty($csrfMeta) || str_contains($csrfMeta, 'not available')) {
-            return $content;
-        }
-
-        // Inject after <head> tag
-        $content = str_replace(
-            '<head>',
-            "<head>\n    " . $csrfMeta,
-            $content
-        );
-
-        return $content;
-    }
-
-    /**
-     * HTML-Optimierungen
-     */
-    private function optimizeHtml(string $content): string
-    {
-        // Remove unnecessary whitespace (nur in Production)
-        if (($_ENV['APP_ENV'] ?? 'production') === 'production') {
-            // Remove comments
-            $content = preg_replace('/<!--.*?-->/s', '', $content);
-
-            // Remove excessive whitespace
-            $content = preg_replace('/\s+/', ' ', $content);
-
-            // Remove whitespace around tags
-            $content = preg_replace('/>\s+</', '><', $content);
-        }
-
-        return $content;
-    }
-
-    /**
-     * Debug-Informationen hinzufügen
-     */
-    private function addDebugInfo(string $content, array $data): string
-    {
-        $debugInfo = "<!-- \n";
-        $debugInfo .= "Template rendered at: " . date('Y-m-d H:i:s') . "\n";
-        $debugInfo .= "Environment: " . ($data['environment'] ?? 'unknown') . "\n";
-        $debugInfo .= "Request URI: " . ($data['request_uri'] ?? 'unknown') . "\n";
-        $debugInfo .= "Template Engine: SRP-konforme TemplateEngine v2.0\n";
-        $debugInfo .= "-->\n";
-
-        // Add before </body> tag
-        if (str_contains($content, '</body>')) {
-            $content = str_replace('</body>', $debugInfo . '</body>', $content);
-        } else {
-            $content .= $debugInfo;
-        }
-
-        return $content;
-    }
-
-    /**
-     * Error-Handling für Template-Rendering
+     * Error Handling für Template-Rendering
      */
     private function handleRenderError(
         \Throwable $e,
-        string     $template,
-        array      $data,
+        string $template,
+        array $data,
         HttpStatus $status,
-        array      $headers
-    ): Response
-    {
-        // Log the error
-        error_log("ViewRenderer Error: " . $e->getMessage() . " in template: " . $template);
-
-        // In Development: Detaillierte Fehlermeldung
-        if (($_ENV['APP_ENV'] ?? 'production') === 'development') {
-            $errorContent = $this->renderErrorPage($e, $template, $data);
-            $headers['Content-Type'] = 'text/html; charset=UTF-8';
-            return new Response(HttpStatus::INTERNAL_SERVER_ERROR, $headers, $errorContent);
+        array $headers
+    ): Response {
+        if ($_ENV['APP_DEBUG'] === 'true') {
+            return $this->renderDebugError($e, $template);
         }
 
-        // In Production: Generische Fehlermeldung
-        $errorContent = $this->renderProductionError();
-        $headers['Content-Type'] = 'text/html; charset=UTF-8';
-        return new Response(HttpStatus::INTERNAL_SERVER_ERROR, $headers, $errorContent);
+        return $this->renderProductionError();
     }
 
     /**
-     * Detaillierte Fehlerseite für Development
+     * Debug Error Page
      */
-    private function renderErrorPage(\Throwable $e, string $template, array $data): string
+    private function renderDebugError(\Throwable $e, string $template): Response
     {
         $errorHtml = '<!DOCTYPE html>
-        <html>
+        <html lang=de>
         <head>
             <meta charset="UTF-8">
-            <title>Template Rendering Error</title>
+            <title>Template Error</title>
             <style>
-                body { font-family: monospace; margin: 20px; background: #f5f5f5; }
-                .error-container { background: white; padding: 20px; border-radius: 5px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+                body { font-family: Arial, sans-serif; background: #f5f5f5; margin: 0; padding: 20px; }
+                .error-container { background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 20px rgba(0,0,0,0.1); }
                 .error-title { color: #e74c3c; font-size: 24px; margin-bottom: 20px; }
-                .error-message { background: #ffebee; padding: 15px; border-left: 4px solid #e74c3c; margin: 10px 0; }
-                .error-details { background: #f8f9fa; padding: 15px; border-radius: 3px; margin: 10px 0; }
-                .stack-trace { background: #2d3748; color: #e2e8f0; padding: 15px; border-radius: 3px; overflow-x: auto; }
-                pre { margin: 0; white-space: pre-wrap; }
+                .error-message { background: #f8f9fa; padding: 15px; border-left: 4px solid #e74c3c; margin: 20px 0; }
+                .error-details { margin: 20px 0; font-size: 14px; }
+                .stack-trace { background: #2c3e50; color: #ecf0f1; padding: 20px; border-radius: 5px; overflow: auto; }
+                pre { margin: 0; font-size: 12px; }
             </style>
         </head>
         <body>
             <div class="error-container">
-                <div class="error-title">⚠️ Template Rendering Error</div>
+                <div class="error-title">🚫 Template Rendering Error</div>
                 
                 <div class="error-message">
-                    <strong>Error:</strong> ' . htmlspecialchars($e->getMessage()) . '
+                    ' . htmlspecialchars($e->getMessage()) . '
                 </div>
                 
                 <div class="error-details">
                     <strong>Template:</strong> ' . htmlspecialchars($template) . '<br>
                     <strong>File:</strong> ' . htmlspecialchars($e->getFile()) . '<br>
                     <strong>Line:</strong> ' . $e->getLine() . '<br>
-                    <strong>Template Engine:</strong> SRP-konforme TemplateEngine v2.0
+                    <strong>Template Engine:</strong> KickersCup Framework v2.0
                 </div>
                 
                 <div class="stack-trace">
@@ -437,22 +326,22 @@ readonly class ViewRenderer
         </body>
         </html>';
 
-        return $errorHtml;
+        return new Response(HttpStatus::INTERNAL_SERVER_ERROR, [], $errorHtml);
     }
 
     /**
-     * Generische Fehlerseite für Production
+     * Production Error Page
      */
-    private function renderProductionError(): string
+    private function renderProductionError(): Response
     {
-        return '<!DOCTYPE html>
-        <html>
+        $errorHtml = '<!DOCTYPE html>
+        <html lang=de>
         <head>
             <meta charset="UTF-8">
             <title>Server Error</title>
             <style>
                 body { font-family: Arial, sans-serif; text-align: center; padding: 50px; background: #f5f5f5; }
-                .error-container { background: white; padding: 40px; border-radius: 10px; box-shadow: 0 2px 20px rgba(0,0,0,0.1); max-width: 600px; margin: 0 auto; }
+                .error-container { background: white; padding: 40px; border-radius: 10px; box-shadow: 0 2px20px rgba(0,0,0,0.1); max-width: 600px; margin: 0 auto; }
                 .error-title { color: #e74c3c; font-size: 36px; margin-bottom: 20px; }
                 .error-message { color: #666; font-size: 18px; margin-bottom: 30px; }
                 .error-button { background: #3498db; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; display: inline-block; }
@@ -470,47 +359,7 @@ readonly class ViewRenderer
             </div>
         </body>
         </html>';
+
+        return new Response(HttpStatus::INTERNAL_SERVER_ERROR, [], $errorHtml);
     }
-}
-
-// =============================================================================
-// HELPER FUNCTIONS - Für bessere Template-Integration
-// =============================================================================
-
-/**
- * Global Helper Function für Asset-URLs
- */
-function asset(string $path): string
-{
-    $baseUrl = $_ENV['APP_URL'] ?? 'http://localhost';
-    return rtrim($baseUrl, '/') . '/assets/' . ltrim($path, '/');
-}
-
-/**
- * Global Helper Function für Public-Path
- */
-function public_path(string $path = ''): string
-{
-    return __DIR__ . '/../../public/' . ltrim($path, '/');
-}
-
-/**
- * Global Helper Function für Route-URLs
- */
-function route(string $name, array $parameters = []): string
-{
-    $routes = [
-        'home' => '/',
-        'team.overview' => '/team',
-        'test.templates' => '/test/templates',
-        'test.filters' => '/test/filters'
-    ];
-
-    $path = $routes[$name] ?? '/';
-
-    foreach ($parameters as $key => $value) {
-        $path = str_replace('{' . $key . '}', $value, $path);
-    }
-
-    return $path;
 }
