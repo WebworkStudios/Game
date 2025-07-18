@@ -77,7 +77,7 @@ class TeamOverviewAction
             // JavaScript-Konfiguration für Frontend
             'js_config' => $this->getJavaScriptConfiguration(),
             // Debug-Informationen
-            'app_debug' => ($_ENV['APP_DEBUG'] ?? 'false') === 'true'
+            'app_debug' => true
         ];
     }
 

@@ -336,6 +336,44 @@ readonly class Request
         return $contentType && str_contains($contentType, 'application/json');
     }
 
+
+    /**
+     * NEU: Prüft ob Request JSON-Response erwartet
+     *
+     * Basiert auf:
+     * - Accept Header enthält application/json
+     * - Content-Type ist application/json
+     * - X-Requested-With: XMLHttpRequest (AJAX)
+     * - Spezielle JSON-Endpoints
+     */
+    public function expectsJson(): bool
+    {
+        // 1. Accept Header prüfen (primäre Methode)
+        $accept = $this->getHeader('accept');
+        if ($accept && str_contains($accept, 'application/json')) {
+            return true;
+        }
+
+        // 2. Content-Type ist JSON (API-Request)
+        if ($this->isJson()) {
+            return true;
+        }
+
+        // 3. AJAX-Request über XMLHttpRequest
+        $requestedWith = $this->getHeader('x-requested-with');
+        if ($requestedWith && strtolower($requestedWith) === 'xmlhttprequest') {
+            return true;
+        }
+
+        // 4. API-Pfad-Pattern (für explizite API-Endpoints)
+        $path = $this->getPath();
+        if (str_starts_with($path, '/api/') || str_ends_with($path, '.json')) {
+            return true;
+        }
+
+        return false;
+    }
+
     /**
      * VERBESSERT: Header-Zugriff mit Case-Insensitive
      */

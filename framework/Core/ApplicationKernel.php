@@ -11,13 +11,13 @@ use Framework\Routing\Router;
 use Throwable;
 
 /**
- * ApplicationKernel - Schlanke Hauptklasse des Frameworks
+ * ApplicationKernel - VERBESSERT: Robustere Debug-Konfiguration
  *
- * Verantwortlichkeiten:
- * - Framework Bootstrap orchestrieren
- * - HTTP Request Handling
- * - Error Handling
- * - Container Access (minimal)
+ * FIXES:
+ * ✅ Debug-Config wird früher geladen
+ * ✅ Fallback-Config-Loading ohne ConfigManager
+ * ✅ Besseres Exception-Handling
+ * ✅ Debug-Logging für Troubleshooting
  */
 class ApplicationKernel
 {
@@ -38,31 +38,67 @@ class ApplicationKernel
     }
 
     /**
-     * Bootstrap Framework - Orchestriert alle Manager
+     * Bootstrap Framework - VERBESSERT: Debug-Config zuerst laden
      */
     private function bootstrap(): void
     {
-        // 1. Environment Setup
+        // 1. DEBUG-CONFIG ZUERST LADEN (FIX)
+        $this->loadDebugConfigEarly();
+
+        // 2. Environment Setup
         $environmentManager = new EnvironmentManager();
         $environmentManager->setup();
 
-        // 2. Core Services registrieren
+        // 3. Core Services registrieren
         $coreRegistrar = new CoreServiceRegistrar($this->container, $this->basePath);
         $coreRegistrar->registerAll($this);
 
-        // 3. App-Config laden und Environment anpassen
+        // 4. Vollständige App-Config laden (mit ConfigManager)
         $this->loadApplicationConfig();
 
-        // 4. Service Provider registrieren
+        // 5. Service Provider registrieren
         $providerRegistry = new ServiceProviderRegistry($this->container, $this);
         $providerRegistry->registerAll();
 
-        // 5. Router Setup
+        // 6. Router Setup
         $this->setupRouter();
     }
 
     /**
-     * Lädt Application Config und passt Environment an
+     * NEUE METHODE: Lädt Debug-Config früh und robust
+     */
+    private function loadDebugConfigEarly(): void
+    {
+        try {
+            // Direktes Config-Loading ohne ConfigManager Dependency
+            $configPath = $this->basePath . '/app/Config/app.php';
+
+            if (file_exists($configPath)) {
+                $config = require $configPath;
+
+                if (is_array($config) && isset($config['debug'])) {
+                    $this->setDebug((bool) $config['debug']);
+
+                    // Debug-Logging falls Debug aktiv
+                    if ($this->debug) {
+                        error_log("✅ Debug-Modus aktiviert aus: {$configPath}");
+                    }
+                } else {
+                    error_log("⚠️ Debug-Key nicht gefunden in app.php - verwende default (false)");
+                }
+            } else {
+                error_log("⚠️ app/Config/app.php nicht gefunden - Debug bleibt false");
+            }
+
+        } catch (Throwable $e) {
+            // Robustes Fallback bei jedem Fehler
+            error_log("❌ Fehler beim frühen Debug-Config-Loading: " . $e->getMessage());
+            $this->setDebug(false); // Explizit auf false setzen
+        }
+    }
+
+    /**
+     * VERBESSERT: Lädt vollständige App-Config mit besserer Exception-Behandlung
      */
     private function loadApplicationConfig(): void
     {
@@ -71,8 +107,17 @@ class ApplicationKernel
             $configManager = $this->container->get(ConfigManager::class);
             $config = $configManager->get('app/Config/app.php');
 
-            // Debug-Modus setzen
-            $this->setDebug($config['debug'] ?? false);
+            // Debug-Modus erneut setzen (falls ConfigManager andere Werte liefert)
+            if (isset($config['debug'])) {
+                $debugValue = (bool) $config['debug'];
+
+                if ($debugValue !== $this->debug) {
+                    if ($this->debug) {
+                        error_log("🔄 Debug-Modus geändert: früh={$this->debug}, ConfigManager={$debugValue}");
+                    }
+                    $this->setDebug($debugValue);
+                }
+            }
 
             // Environment anpassen falls nötig
             if (isset($config['timezone']) || isset($config['charset']) || isset($config['memory_limit'])) {
@@ -80,9 +125,17 @@ class ApplicationKernel
                 $environmentManager->setup($config);
             }
 
-        } catch (\Exception) {
-            // Config nicht gefunden - Default-Werte verwenden
-            // Das ist normal beim ersten Start oder in Tests
+        } catch (ConfigNotFoundException $e) {
+            // Spezifische Behandlung für fehlende Config-Datei
+            error_log("❌ Config-Datei nicht gefunden: " . $e->getMessage());
+
+        } catch (Throwable $e) {
+            // Generische Exception-Behandlung mit besserer Information
+            error_log("❌ Fehler beim Config-Loading: " . $e->getMessage());
+            error_log("   Klasse: " . get_class($e));
+            error_log("   Datei: " . $e->getFile() . ":" . $e->getLine());
+
+            // Debug-Status beibehalten (wurde bereits früh gesetzt)
         }
     }
 
@@ -118,10 +171,17 @@ class ApplicationKernel
     }
 
     /**
-     * Exception-Handler
+     * VERBESSERT: Exception-Handler mit besserem Debug-Logging
      */
     private function handleException(Throwable $e, Request $request): Response
     {
+        // Debug-Logging der Exception
+        if ($this->debug) {
+            error_log("🚨 Exception in handleRequest: " . $e->getMessage());
+            error_log("   URI: " . $request->getUri());
+            error_log("   Method: " . $request->getMethod()->value);
+        }
+
         // Custom Error Handler falls vorhanden
         if ($this->errorHandler) {
             $handler = $this->errorHandler;
@@ -132,7 +192,7 @@ class ApplicationKernel
             }
         }
 
-        // Default Error Response
+        // Default Error Response - mit Debug-Info wenn Debug aktiv
         $message = $this->debug ?
             $e->getMessage() . "\n\n" . $e->getTraceAsString() :
             'Internal Server Error';
@@ -153,12 +213,33 @@ class ApplicationKernel
     }
 
     /**
-     * Setzt Debug-Modus
+     * VERBESSERT: Setzt Debug-Modus mit Logging
      */
     public function setDebug(bool $debug): self
     {
+        $oldDebug = $this->debug;
         $this->debug = $debug;
+
+        // Logging nur wenn sich der Wert ändert
+        if ($oldDebug !== $debug) {
+            error_log("🔧 Debug-Modus geändert: {$oldDebug} → {$debug}");
+        }
+
         return $this;
+    }
+
+    /**
+     * NEUE METHODE: Debug-Status für Troubleshooting
+     */
+    public function getDebugInfo(): array
+    {
+        return [
+            'debug_mode' => $this->debug,
+            'base_path' => $this->basePath,
+            'config_file_exists' => file_exists($this->basePath . '/app/Config/app.php'),
+            'container_has_services' => $this->container->has(Router::class) && $this->container->has(ConfigManager::class),
+            'error_handler_set' => $this->errorHandler !== null,
+        ];
     }
 
     /**

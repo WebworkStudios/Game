@@ -94,10 +94,7 @@ class JavaScriptAssetServiceProvider extends AbstractServiceProvider
 
             JavaScriptFilterRegistrar::register($filterManager, $assetManager);
         } catch (\Throwable $e) {
-            // FilterManager nicht verfügbar - Skip
-            if ($_ENV['APP_DEBUG'] ?? false) {
-                error_log("JavaScript filters could not be registered: " . $e->getMessage());
-            }
+            throw new \RuntimeException("Failed to register JavaScript filters: " . $e->getMessage());
         }
     }
 
@@ -117,7 +114,7 @@ class JavaScriptAssetServiceProvider extends AbstractServiceProvider
         return [
             'public_path' => 'public/js/',
             'base_url' => '/js/',
-            'debug_mode' => ($_ENV['APP_DEBUG'] ?? 'false') === 'true'
+            'debug_mode' => true
         ];
     }
 }
