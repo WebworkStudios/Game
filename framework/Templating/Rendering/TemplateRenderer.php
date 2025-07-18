@@ -9,7 +9,7 @@ use Framework\Templating\Tokens\{ControlToken, TemplateToken, VariableToken};
 /**
  * TemplateRenderer - Konvertiert ParsedTemplate zu String
  *
- * KORRIGIERT: Key-Value For-Loop Support hinzugefügt
+ * BEREINIGT: Debug-Logging komplett entfernt
  */
 class TemplateRenderer
 {
@@ -85,17 +85,13 @@ class TemplateRenderer
         $value = $this->variableResolver->resolve($token->getVariable());
 
         // Apply filters
-        foreach ($token->getFilters() as $filter) {
-            $value = $this->filterManager->apply(
-                $filter['name'],
-                $value,
-                $filter['parameters'] ?? []
-            );
+        if (!empty($token->getFilters())) {
+            $value = $this->filterManager->applyPipeline($value, $token->getFilters());
         }
 
-        // Auto-escape
+        // Auto-escape unless raw filter was applied
         if ($token->shouldEscape()) {
-            $value = htmlspecialchars((string)$value, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+            return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8');
         }
 
         return (string)$value;
@@ -108,6 +104,7 @@ class TemplateRenderer
             'for' => $this->renderFor($token),
             'block' => $this->renderBlock($token),
             'include' => $this->renderInclude($token),
+            'extends' => '', // Handled by inheritance system
             default => ''
         };
     }
@@ -115,8 +112,9 @@ class TemplateRenderer
     private function renderIf(ControlToken $token): string
     {
         $condition = $token->getMetadata()['condition'] ?? '';
+        $result = $this->variableResolver->evaluateCondition($condition);
 
-        if ($this->variableResolver->evaluateCondition($condition)) {
+        if ($result) {
             return $this->renderTokens($token->getChildren());
         } elseif ($token->hasElse()) {
             return $this->renderTokens($token->getElseChildren());
@@ -125,70 +123,27 @@ class TemplateRenderer
         return '';
     }
 
-    /**
-     * Rendert For-Loops mit Key-Value Support
-     *
-     * KORRIGIERT: Unterstützt sowohl:
-     * - {% for item in items %} (Value-only)
-     * - {% for key, value in items %} (Key-Value)
-     */
     private function renderFor(ControlToken $token): string
     {
-        $metadata = $token->getMetadata();
-        $variable = $metadata['variable'] ?? '';
-        $iterable = $metadata['iterable'] ?? '';
-
-        // DEBUG: Enhanced logging
-        if ($_ENV['APP_DEBUG'] ?? false) {
-            error_log("=== FOR LOOP DEBUG (Enhanced) ===");
-            error_log("Variable: " . $variable);
-            error_log("Iterable: " . $iterable);
-            error_log("Metadata: " . json_encode($metadata));
-        }
+        $variable = $token->getMetadata()['variable'] ?? '';
+        $iterable = $token->getMetadata()['iterable'] ?? '';
 
         $items = $this->variableResolver->resolve($iterable);
 
-        if ($_ENV['APP_DEBUG'] ?? false) {
-            error_log("Items resolved: " . (is_array($items) ? count($items) : 'not array'));
-            error_log("Items type: " . gettype($items));
-            if (is_array($items)) {
-                error_log("Items keys: " . json_encode(array_keys($items)));
-                error_log("First item: " . json_encode(reset($items)));
-            }
+        if (!is_iterable($items) || empty($items)) {
+            return $token->hasElse() ? $this->renderTokens($token->getElseChildren()) : '';
         }
 
-        $output = '';
-
-        if (is_iterable($items) && !empty($items)) {
-            // KORRIGIERT: Check if variable contains comma (Key-Value syntax)
-            if (str_contains($variable, ',')) {
-                // Key-Value For-Loop: {% for key, value in items %}
-                $output = $this->renderKeyValueForLoop($token, $variable, $items);
-            } else {
-                // Value-only For-Loop: {% for item in items %}
-                $output = $this->renderValueOnlyForLoop($token, $variable, $items);
-            }
-        } elseif ($token->hasElse()) {
-            if ($_ENV['APP_DEBUG'] ?? false) {
-                error_log("Using else branch");
-            }
-            $output = $this->renderTokens($token->getElseChildren());
+        // Check if variable contains comma (Key-Value syntax)
+        if (str_contains($variable, ',')) {
+            return $this->renderKeyValueForLoop($token, $variable, $items);
         } else {
-            if ($_ENV['APP_DEBUG'] ?? false) {
-                error_log("No items and no else branch");
-            }
+            return $this->renderValueOnlyForLoop($token, $variable, $items);
         }
-
-        if ($_ENV['APP_DEBUG'] ?? false) {
-            error_log("Final output length: " . strlen($output));
-            error_log("=== END FOR LOOP DEBUG ===");
-        }
-
-        return $output;
     }
 
     /**
-     * NEUE METHODE: Rendert Key-Value For-Loops
+     * Rendert Key-Value For-Loops
      * Für: {% for position, players in players_by_position %}
      */
     private function renderKeyValueForLoop(ControlToken $token, string $variable, iterable $items): string
@@ -201,90 +156,35 @@ class TemplateRenderer
 
         [$keyVariable, $valueVariable] = $variableParts;
         $output = '';
-        $itemIndex = 0;
-
-        if ($_ENV['APP_DEBUG'] ?? false) {
-            error_log("Key-Value For-Loop detected:");
-            error_log("Key variable: '{$keyVariable}'");
-            error_log("Value variable: '{$valueVariable}'");
-        }
 
         foreach ($items as $key => $value) {
-            if ($_ENV['APP_DEBUG'] ?? false) {
-                error_log("Processing item {$itemIndex}: key='{$key}', value type=" . gettype($value));
-                if (is_array($value)) {
-                    error_log("Value is array with " . count($value) . " items");
-                }
-            }
-
-            // KORRIGIERT: Push BOTH key and value to loop context
+            // Push BOTH key and value to loop context
             $this->variableResolver->pushLoopContext($keyVariable, $key);
             $this->variableResolver->pushLoopContext($valueVariable, $value);
 
-            // DEBUG: Verify variable resolution
-            if ($_ENV['APP_DEBUG'] ?? false) {
-                $keyResolution = $this->variableResolver->resolve($keyVariable);
-                $valueResolution = $this->variableResolver->resolve($valueVariable);
-                error_log("Key '{$keyVariable}' resolves to: " . json_encode($keyResolution));
-                error_log("Value '{$valueVariable}' resolves to: " . (is_array($valueResolution) ? "array(" . count($valueResolution) . ")" : json_encode($valueResolution)));
-            }
-
             // Render child tokens
-            $childOutput = $this->renderTokens($token->getChildren());
+            $output .= $this->renderTokens($token->getChildren());
 
-            if ($_ENV['APP_DEBUG'] ?? false) {
-                error_log("Child output length: " . strlen($childOutput));
-            }
-
-            $output .= $childOutput;
-
-            // KORRIGIERT: Pop BOTH variables (in reverse order)
+            // Pop BOTH variables (in reverse order)
             $this->variableResolver->popLoopContext(); // Pop value
             $this->variableResolver->popLoopContext(); // Pop key
-
-            $itemIndex++;
         }
 
         return $output;
     }
 
     /**
-     * NEUE METHODE: Rendert Value-only For-Loops
+     * Rendert Value-only For-Loops
      * Für: {% for player in players %}
      */
     private function renderValueOnlyForLoop(ControlToken $token, string $variable, iterable $items): string
     {
         $output = '';
-        $itemIndex = 0;
-
-        if ($_ENV['APP_DEBUG'] ?? false) {
-            error_log("Value-only For-Loop detected:");
-            error_log("Variable: '{$variable}'");
-        }
 
         foreach ($items as $item) {
-            if ($_ENV['APP_DEBUG'] ?? false) {
-                error_log("Processing item {$itemIndex}: " . json_encode($item));
-            }
-
             $this->variableResolver->pushLoopContext($variable, $item);
-
-            // DEBUG: Test variable resolution
-            if ($_ENV['APP_DEBUG'] ?? false) {
-                $testResolution = $this->variableResolver->resolve($variable);
-                error_log("Variable '{$variable}' resolves to: " . json_encode($testResolution));
-            }
-
-            $childOutput = $this->renderTokens($token->getChildren());
-
-            if ($_ENV['APP_DEBUG'] ?? false) {
-                error_log("Child output: " . $childOutput);
-            }
-
-            $output .= $childOutput;
+            $output .= $this->renderTokens($token->getChildren());
             $this->variableResolver->popLoopContext();
-
-            $itemIndex++;
         }
 
         return $output;

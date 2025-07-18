@@ -10,7 +10,7 @@ use InvalidArgumentException;
 /**
  * JavaScript Asset Filters für Template Engine
  *
- * KORRIGIERT: Bessere Null-Handling und Debugging
+ * BEREINIGT: Debug-Logging komplett entfernt
  */
 class JavaScriptFilters
 {
@@ -23,21 +23,11 @@ class JavaScriptFilters
 
     /**
      * Filter: JavaScript-Datei hinzufügen
-     *
-     * KORRIGIERT: Robuste Validierung und bessere Fehlermeldungen
      */
     public function jsScript(mixed $filename, string $loadType = 'defer'): string
     {
-        // DEBUG: Log what we actually received
-        if ($_ENV['APP_DEBUG'] ?? false) {
-            error_log("jsScript called with: " . var_export($filename, true) . " (type: " . gettype($filename) . ")");
-        }
-
-        // KORRIGIERT: Handle null and empty values gracefully
+        // Handle null and empty values gracefully
         if ($filename === null) {
-            if ($_ENV['APP_DEBUG'] ?? false) {
-                error_log("jsScript: Received null filename - skipping script registration");
-            }
             return ''; // Graceful degradation
         }
 
@@ -55,9 +45,6 @@ class JavaScriptFilters
 
         // Validate string is not empty
         if (trim($filename) === '') {
-            if ($_ENV['APP_DEBUG'] ?? false) {
-                error_log("jsScript: Empty filename provided - skipping script registration");
-            }
             return ''; // Graceful degradation
         }
 
@@ -75,22 +62,12 @@ class JavaScriptFilters
 
     /**
      * Filter: ES6 Module hinzufügen
-     *
-     * KORRIGIERT: Robuste Validierung
      */
     public function jsModule(mixed $filename): string
     {
-        // DEBUG: Log what we actually received
-        if ($_ENV['APP_DEBUG'] ?? false) {
-            error_log("jsModule called with: " . var_export($filename, true) . " (type: " . gettype($filename) . ")");
-        }
-
         // Handle null gracefully
         if ($filename === null) {
-            if ($_ENV['APP_DEBUG'] ?? false) {
-                error_log("jsModule: Received null filename - skipping module registration");
-            }
-            return '';
+            return ''; // Graceful degradation
         }
 
         // Convert to string if possible
@@ -105,8 +82,9 @@ class JavaScriptFilters
             }
         }
 
+        // Validate string is not empty
         if (trim($filename) === '') {
-            return '';
+            return ''; // Graceful degradation
         }
 
         $this->assetManager->addModule($filename);
@@ -114,115 +92,46 @@ class JavaScriptFilters
     }
 
     /**
-     * Filter: Inline JavaScript
-     *
-     * KORRIGIERT: Robuste Validierung
+     * Filter: Script-URL generieren
      */
-    public function jsInline(mixed $content): string
+    public function scriptUrl(mixed $filename): string
     {
-        if ($content === null) {
+        // Handle null gracefully
+        if ($filename === null) {
             return '';
         }
 
-        if (!is_string($content)) {
-            if (is_scalar($content)) {
-                $content = (string) $content;
-            } else {
-                throw new InvalidArgumentException(
-                    "jsInline(): \$content must be a string or convertible to string, " .
-                    gettype($content) . " given"
-                );
-            }
-        }
-
-        if (trim($content) === '') {
-            return '';
-        }
-
-        $this->assetManager->addInlineScript($content);
-        return '';
-    }
-
-    /**
-     * Filter: Script-URL generieren (ohne Asset Manager)
-     *
-     * KORRIGIERT: Robuste Validierung
-     */
-    public function jsUrl(mixed $filename): string
-    {
-        if ($filename === null || (is_string($filename) && trim($filename) === '')) {
-            return '';
-        }
-
+        // Convert to string if possible
         if (!is_string($filename)) {
             if (is_scalar($filename)) {
                 $filename = (string) $filename;
             } else {
-                throw new InvalidArgumentException(
-                    "jsUrl(): \$filename must be a string or convertible to string, " .
-                    gettype($filename) . " given"
-                );
+                return ''; // Graceful fallback
             }
         }
 
-        $publicPath = 'public/js/' . $filename;
-        $baseUrl = '/js/' . $filename;
-
-        if (file_exists($publicPath)) {
-            $version = filemtime($publicPath);
-            return $baseUrl . '?v=' . $version;
+        // Validate string is not empty
+        if (trim($filename) === '') {
+            return '';
         }
 
-        return $baseUrl;
+        return $this->generateScriptUrl($filename);
     }
 
     /**
-     * Filter: Script-Tag direkt ausgeben (für spezielle Fälle)
-     *
-     * KORRIGIERT: Robuste Validierung
+     * Sichere Script-URL Generierung
      */
-    public function jsTag(mixed $filename, string $attributes = 'defer'): string
+    private function generateScriptUrl(string $file): string
     {
-        if ($filename === null || (is_string($filename) && trim($filename) === '')) {
-            return '';
+        $fullPath = 'public/js/' . $file;
+
+        // Sichere Überprüfung der Datei-Existenz
+        if (file_exists($fullPath)) {
+            $version = filemtime($fullPath);
+            return "/js/{$file}?v={$version}";
         }
 
-        if (!is_string($filename)) {
-            if (is_scalar($filename)) {
-                $filename = (string) $filename;
-            } else {
-                return ''; // Graceful degradation for complex types
-            }
-        }
-
-        $url = $this->jsUrl($filename);
-        if (empty($url)) {
-            return '';
-        }
-
-        $attrs = $this->buildAttributeString($attributes);
-        return "<script src=\"{$url}\"{$attrs}></script>";
-    }
-
-    /**
-     * Helper: Attribute-String aus String erstellen
-     */
-    private function buildAttributeString(string $attributes): string
-    {
-        if (empty($attributes)) {
-            return '';
-        }
-
-        $attrs = [];
-        $attributeList = explode(' ', $attributes);
-
-        foreach ($attributeList as $attr) {
-            $attr = trim($attr);
-            if ($attr) {
-                $attrs[] = $attr;
-            }
-        }
-
-        return empty($attrs) ? '' : ' ' . implode(' ', $attrs);
+        // Fallback ohne Versionierung
+        return "/js/{$file}";
     }
 }
