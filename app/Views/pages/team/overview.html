@@ -1,11 +1,11 @@
 {% extends 'layouts/base' %}
 
-{% block title %}{{ team_info.name }} - Kaderübersicht{% endblock %}
+{% block title %}{{ team_info.name }} - Team Übersicht{% endblock %}
 
 {% block content %}
 <div class="team-overview">
-    <!-- Team Header Information -->
-    <header class="team-header">
+    <!-- Team Header -->
+    <section class="team-header">
         <div class="team-info-card">
             <div class="team-logo">
                 <img src="{{ team_info.logo_url }}" alt="{{ team_info.name }} Logo" class="logo-image">
@@ -13,46 +13,54 @@
             <div class="team-details">
                 <h1>{{ team_info.name }}</h1>
                 <div class="team-meta">
-                    <span class="league">{{ team_info.league }}</span>
-                    <span class="season">{{ team_info.season }}</span>
-                    <span class="manager">{{ team_info.manager }}</span>
+                    <span>{{ team_info.league }}</span>
+                    <span>{{ team_info.season }}</span>
+                    <span>{{ team_info.manager }}</span>
                 </div>
                 <div class="team-quick-stats">
-                    <span class="stat">{{ team_info.squad_size }} Spieler</span>
-                    <span class="stat">⌀ {{ team_info.average_age }} Jahre</span>
-                    <span class="stat">{{ team_info.total_market_value|currency }}</span>
+                    <span>{{ team_info.squad_size }} Spieler</span>
+                    <span>⌀ {{ team_info.average_age }} Jahre</span>
+                    <span>{{ team_info.total_market_value }} EUR</span>
                 </div>
             </div>
-            <div class="team-formation">
+            <div class="formation-info">
                 <div class="formation-display">{{ team_info.formation }}</div>
                 <div class="stadium">{{ team_info.stadium }}</div>
             </div>
         </div>
-    </header>
+    </section>
 
-    <!-- Squad Statistics Overview -->
+    <!-- Squad Statistics -->
     <section class="squad-overview">
         <h2>📊 Kader-Statistiken</h2>
         <div class="stats-grid">
             <div class="stat-card">
                 <span class="stat-value">{{ squad_stats.total_players }}</span>
-                <span class="stat-label">Spieler gesamt</span>
+                <span class="stat-label">Gesamtgröße</span>
             </div>
             <div class="stat-card">
+                <span class="stat-value">{{ squad_stats.goalkeepers }}</span>
+                <span class="stat-label">Torhüter</span>
+            </div>
+            <div class="stat-card">
+                <span class="stat-value">{{ squad_stats.defenders }}</span>
+                <span class="stat-label">Verteidiger</span>
+            </div>
+            <div class="stat-card">
+                <span class="stat-value">{{ squad_stats.midfielders }}</span>
+                <span class="stat-label">Mittelfeld</span>
+            </div>
+            <div class="stat-card">
+                <span class="stat-value">{{ squad_stats.forwards }}</span>
+                <span class="stat-label">Stürmer</span>
+            </div>
+            <div class="stat-card injured">
                 <span class="stat-value">{{ squad_stats.injured_players }}</span>
-                <span class="stat-label">Verletzte</span>
+                <span class="stat-label">Verletzt</span>
             </div>
             <div class="stat-card">
-                <span class="stat-value">{{ squad_stats.avg_market_value|currency }}</span>
-                <span class="stat-label">⌀ Marktwert</span>
-            </div>
-            <div class="stat-card">
-                <span class="stat-value">{{ squad_stats.contract_expiring }}</span>
-                <span class="stat-label">Verträge auslaufend</span>
-            </div>
-            <div class="stat-card">
-                <span class="stat-value">{{ squad_stats.foreign_players }}</span>
-                <span class="stat-label">Ausländer</span>
+                <span class="stat-value">{{ squad_stats.players_over_30 }}</span>
+                <span class="stat-label">Über 30</span>
             </div>
             <div class="stat-card">
                 <span class="stat-value">{{ squad_stats.youth_players }}</span>
@@ -98,126 +106,287 @@
         </div>
     </section>
 
-    <!-- JavaScript Configuration für Frontend -->
-    {{ js_config|json|js_inline }}
+    <!-- JavaScript Configuration -->
+    <script type="application/json" id="js-config">
+        {{ js_config|json|raw }}
+    </script>
 
-    <!-- Players by Position -->
+    <!-- Players by Position - ULTRA-KOMPATIBEL (keine problematischen Filter) -->
     <section class="players-overview">
         <h2>👥 Kader nach Positionen</h2>
 
         <div class="players-grid">
-            {% for position, players in players_by_position %}
-            <div class="position-section" data-position="{{ position }}" id="position-{{ position }}">
+            <!-- Goalkeepers -->
+            {% if players_by_position.goalkeepers %}
+            <div class="position-section" data-position="goalkeepers" id="position-goalkeepers">
                 <h3 class="position-title">
-                    {% if position == 'goalkeepers' %}🥅 Torhüter
-                    {% elseif position == 'defenders' %}🛡️ Verteidiger
-                    {% elseif position == 'midfielders' %}⚽ Mittelfeld
-                    {% elseif position == 'forwards' %}⚡ Stürmer
-                    {% endif %}
-                    <span class="player-count">({{ players|length }})</span>
+                    🥅 Torhüter
+                    <span class="player-count">({{ players_by_position.goalkeepers|length }})</span>
                 </h3>
 
-                {% if players|length > 0 %}
                 <div class="position-players">
-                    {% for player in players %}
+                    {% for player in players_by_position.goalkeepers %}
                     <div class="player-card"
-                         data-position="{{ position }}"
+                         data-player-id="{{ player.id }}"
+                         data-position="goalkeepers"
                          data-age="{{ player.age }}"
-                         data-status="{% if player.injury_status %}injured{% else %}available{% endif %}"
-                         data-player-id="{{ player.id }}">
+                         data-status="{% if player.injury_status %}{{ player.injury_status }}{% else %}available{% endif %}">
+
                         <div class="player-header">
-                            <div class="player-basic-info">
-                                <h4 class="player-name">{{ player.name }}</h4>
-                                <div class="player-meta">
-                                    <span class="age">{{ player.age }} Jahre</span>
-                                    <span class="nationality">{{ player.nationality }}</span>
-                                    {% if player.injury_status %}
-                                    <span class="injury-status">
-                                            🏥 {% if player.injury_status == 'minor_injury' %}Leicht verletzt
-                                               {% elseif player.injury_status == 'long_term_injury' %}Langzeitverletzt
-                                               {% else %}Verletzt{% endif %}
-                                        </span>
-                                    {% endif %}
-                                </div>
-                            </div>
-                            <div class="player-value">
-                                <span class="market-value">{{ player.market_value|currency }}</span>
+                            <h4 class="player-name">{{ player.name }}</h4>
+                            <div class="player-meta">
+                                <span class="age">{{ player.age }} Jahre</span>
+                                <span class="nationality">{{ player.nationality }}</span>
                             </div>
                         </div>
 
                         <div class="player-stats">
                             <div class="stats-row">
                                 <div class="stat-item">
-                                    <span class="stat-value">{{ player.goals }}</span>
-                                    <span class="stat-label">Tore</span>
+                                    <span class="stat-label">Marktwert</span>
+                                    <span class="stat-value">{{ player.market_value }} EUR</span>
                                 </div>
                                 <div class="stat-item">
-                                    <span class="stat-value">{{ player.assists }}</span>
-                                    <span class="stat-label">Assists</span>
+                                    <span class="stat-label">Vertrag bis</span>
+                                    <span class="stat-value">{{ player.contract_until }}</span>
                                 </div>
                                 <div class="stat-item">
-                                    <span class="stat-value">{{ player.yellow_cards }}</span>
-                                    <span class="stat-label">🟨</span>
+                                    <span class="stat-label">Zu Null</span>
+                                    <span class="stat-value">{{ player.clean_sheets }}</span>
                                 </div>
                                 <div class="stat-item">
-                                    <span class="stat-value">{{ player.minutes_played }}</span>
                                     <span class="stat-label">Minuten</span>
+                                    <span class="stat-value">{{ player.minutes_played }}</span>
                                 </div>
                             </div>
-                        </div>
 
-                        <div class="player-contract">
-                            <span class="contract-info">Vertrag bis {{ player.contract_until|date('d.m.Y') }}</span>
-                            {% if position == 'goalkeepers' and player.clean_sheets is defined %}
-                            <span class="clean-sheets">{{ player.clean_sheets }} Clean Sheets</span>
+                            {% if player.injury_status %}
+                            <div class="injury-status">
+                                <span class="injury-badge">🏥 {{ player.injury_status|upper }}</span>
+                            </div>
                             {% endif %}
+
+                            <div class="additional-stats">
+                                <span class="cards">
+                                    {% if player.yellow_cards > 0 %}🟨{{ player.yellow_cards }}{% endif %}
+                                    {% if player.red_cards > 0 %}🟥{{ player.red_cards }}{% endif %}
+                                </span>
+                            </div>
                         </div>
                     </div>
                     {% endfor %}
                 </div>
-                {% else %}
-                <div class="no-players">
-                    <p>Keine Spieler in dieser Position</p>
-                </div>
-                {% endif %}
             </div>
-            {% endfor %}
-        </div>
-    </section>
+            {% endif %}
 
-    <!-- Development/Debug Section (nur im Debug-Modus) -->
-    {% if js_config.debug_mode %}
-    <section class="debug-section" id="debug-section">
-        <h3>🔧 Development Tools</h3>
-        <div class="debug-controls">
-            <button type="button" id="debug-info-btn" class="debug-btn">
-                Debug Info anzeigen
-            </button>
-            <button type="button" id="test-filters-btn" class="debug-btn">
-                Filter testen
-            </button>
-            <button type="button" id="player-stats-btn" class="debug-btn">
-                Spieler-Statistiken
-            </button>
+            <!-- Defenders -->
+            {% if players_by_position.defenders %}
+            <div class="position-section" data-position="defenders" id="position-defenders">
+                <h3 class="position-title">
+                    🛡️ Verteidiger
+                    <span class="player-count">({{ players_by_position.defenders|length }})</span>
+                </h3>
+
+                <div class="position-players">
+                    {% for player in players_by_position.defenders %}
+                    <div class="player-card"
+                         data-player-id="{{ player.id }}"
+                         data-position="defenders"
+                         data-age="{{ player.age }}"
+                         data-status="{% if player.injury_status %}{{ player.injury_status }}{% else %}available{% endif %}">
+
+                        <div class="player-header">
+                            <h4 class="player-name">{{ player.name }}</h4>
+                            <div class="player-meta">
+                                <span class="age">{{ player.age }} Jahre</span>
+                                <span class="nationality">{{ player.nationality }}</span>
+                            </div>
+                        </div>
+
+                        <div class="player-stats">
+                            <div class="stats-row">
+                                <div class="stat-item">
+                                    <span class="stat-label">Marktwert</span>
+                                    <span class="stat-value">{{ player.market_value }} EUR</span>
+                                </div>
+                                <div class="stat-item">
+                                    <span class="stat-label">Vertrag bis</span>
+                                    <span class="stat-value">{{ player.contract_until }}</span>
+                                </div>
+                                <div class="stat-item">
+                                    <span class="stat-label">Tore</span>
+                                    <span class="stat-value">{{ player.goals }}</span>
+                                </div>
+                                <div class="stat-item">
+                                    <span class="stat-label">Assists</span>
+                                    <span class="stat-value">{{ player.assists }}</span>
+                                </div>
+                            </div>
+
+                            {% if player.injury_status %}
+                            <div class="injury-status">
+                                <span class="injury-badge">🏥 {{ player.injury_status|upper }}</span>
+                            </div>
+                            {% endif %}
+
+                            <div class="additional-stats">
+                                <span class="minutes">{{ player.minutes_played }}min</span>
+                                <span class="cards">
+                                    {% if player.yellow_cards > 0 %}🟨{{ player.yellow_cards }}{% endif %}
+                                    {% if player.red_cards > 0 %}🟥{{ player.red_cards }}{% endif %}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Midfielders -->
+            {% if players_by_position.midfielders %}
+            <div class="position-section" data-position="midfielders" id="position-midfielders">
+                <h3 class="position-title">
+                    ⚽ Mittelfeld
+                    <span class="player-count">({{ players_by_position.midfielders|length }})</span>
+                </h3>
+
+                <div class="position-players">
+                    {% for player in players_by_position.midfielders %}
+                    <div class="player-card"
+                         data-player-id="{{ player.id }}"
+                         data-position="midfielders"
+                         data-age="{{ player.age }}"
+                         data-status="{% if player.injury_status %}{{ player.injury_status }}{% else %}available{% endif %}">
+
+                        <div class="player-header">
+                            <h4 class="player-name">{{ player.name }}</h4>
+                            <div class="player-meta">
+                                <span class="age">{{ player.age }} Jahre</span>
+                                <span class="nationality">{{ player.nationality }}</span>
+                            </div>
+                        </div>
+
+                        <div class="player-stats">
+                            <div class="stats-row">
+                                <div class="stat-item">
+                                    <span class="stat-label">Marktwert</span>
+                                    <span class="stat-value">{{ player.market_value }} EUR</span>
+                                </div>
+                                <div class="stat-item">
+                                    <span class="stat-label">Vertrag bis</span>
+                                    <span class="stat-value">{{ player.contract_until }}</span>
+                                </div>
+                                <div class="stat-item">
+                                    <span class="stat-label">Tore</span>
+                                    <span class="stat-value">{{ player.goals }}</span>
+                                </div>
+                                <div class="stat-item">
+                                    <span class="stat-label">Assists</span>
+                                    <span class="stat-value">{{ player.assists }}</span>
+                                </div>
+                            </div>
+
+                            {% if player.injury_status %}
+                            <div class="injury-status">
+                                <span class="injury-badge">🏥 {{ player.injury_status|upper }}</span>
+                            </div>
+                            {% endif %}
+
+                            <div class="additional-stats">
+                                <span class="minutes">{{ player.minutes_played }}min</span>
+                                <span class="cards">
+                                    {% if player.yellow_cards > 0 %}🟨{{ player.yellow_cards }}{% endif %}
+                                    {% if player.red_cards > 0 %}🟥{{ player.red_cards }}{% endif %}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Forwards -->
+            {% if players_by_position.forwards %}
+            <div class="position-section" data-position="forwards" id="position-forwards">
+                <h3 class="position-title">
+                    🎯 Stürmer
+                    <span class="player-count">({{ players_by_position.forwards|length }})</span>
+                </h3>
+
+                <div class="position-players">
+                    {% for player in players_by_position.forwards %}
+                    <div class="player-card"
+                         data-player-id="{{ player.id }}"
+                         data-position="forwards"
+                         data-age="{{ player.age }}"
+                         data-status="{% if player.injury_status %}{{ player.injury_status }}{% else %}available{% endif %}">
+
+                        <div class="player-header">
+                            <h4 class="player-name">{{ player.name }}</h4>
+                            <div class="player-meta">
+                                <span class="age">{{ player.age }} Jahre</span>
+                                <span class="nationality">{{ player.nationality }}</span>
+                            </div>
+                        </div>
+
+                        <div class="player-stats">
+                            <div class="stats-row">
+                                <div class="stat-item">
+                                    <span class="stat-label">Marktwert</span>
+                                    <span class="stat-value">{{ player.market_value }} EUR</span>
+                                </div>
+                                <div class="stat-item">
+                                    <span class="stat-label">Vertrag bis</span>
+                                    <span class="stat-value">{{ player.contract_until }}</span>
+                                </div>
+                                <div class="stat-item">
+                                    <span class="stat-label">Tore</span>
+                                    <span class="stat-value">{{ player.goals }}</span>
+                                </div>
+                                <div class="stat-item">
+                                    <span class="stat-label">Assists</span>
+                                    <span class="stat-value">{{ player.assists }}</span>
+                                </div>
+                            </div>
+
+                            {% if player.injury_status %}
+                            <div class="injury-status">
+                                <span class="injury-badge">🏥 {{ player.injury_status|upper }}</span>
+                            </div>
+                            {% endif %}
+
+                            <div class="additional-stats">
+                                <span class="minutes">{{ player.minutes_played }}min</span>
+                                <span class="cards">
+                                    {% if player.yellow_cards > 0 %}🟨{{ player.yellow_cards }}{% endif %}
+                                    {% if player.red_cards > 0 %}🟥{{ player.red_cards }}{% endif %}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
         </div>
-        <div id="debug-output" class="debug-output"></div>
     </section>
-    {% endif %}
 
     <!-- Financial Overview -->
     <section class="financial-overview">
         <h2>💰 Finanzübersicht</h2>
         <div class="financial-stats">
             <div class="stat-card">
-                <span class="stat-value">{{ financial_overview.total_market_value|currency }}</span>
+                <span class="stat-value">{{ financial_overview.total_market_value }} EUR</span>
                 <span class="stat-label">Gesamter Marktwert</span>
             </div>
             <div class="stat-card">
-                <span class="stat-value">{{ financial_overview.transfer_budget|currency }}</span>
+                <span class="stat-value">{{ financial_overview.transfer_budget }} EUR</span>
                 <span class="stat-label">Transfer-Budget</span>
             </div>
             <div class="stat-card">
-                <span class="stat-value">{{ financial_overview.wage_budget_remaining|currency }}</span>
+                <span class="stat-value">{{ financial_overview.wage_budget_remaining }} EUR</span>
                 <span class="stat-label">Lohnbudget verfügbar</span>
             </div>
             <div class="stat-card">
@@ -228,15 +397,18 @@
     </section>
 </div>
 
-<!-- JavaScript Asset Manager Integration via Template Filters -->
-{{ 'team/player-filters.js'|js_script }}
-{{ 'team/team-overview.js'|js_script }}
-{% if js_config.debug_mode %}
-{{ 'team/debug-tools.js'|js_script }}
-{% endif %}
+<!-- JavaScript Integration -->
+<script src="/js/team/player-filters.js" defer></script>
+<script src="/js/team/team-overview.js" defer></script>
+
+<!-- JavaScript Configuration -->
+<script>
+    window.js_config = {{ js_config|json|raw }};
+    console.log('Team Overview loaded with config:', window.js_config);
+</script>
 
 <style>
-    /* Team Overview Styling - Komplett wie im Original */
+    /* Complete Team Overview Styling */
     .team-overview {
         padding: 20px;
         max-width: 1200px;
@@ -312,8 +484,8 @@
 
     .stats-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-        gap: 20px;
+        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+        gap: 15px;
         margin-bottom: 20px;
     }
 
@@ -323,18 +495,21 @@
         border-radius: 10px;
         text-align: center;
         box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        border: 1px solid #e1e5e9;
+        border-left: 4px solid #3498db;
         transition: transform 0.2s;
     }
 
     .stat-card:hover {
         transform: translateY(-2px);
-        box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+    }
+
+    .stat-card.injured {
+        border-left-color: #e74c3c;
     }
 
     .stat-value {
         display: block;
-        font-size: 1.8rem;
+        font-size: 2rem;
         font-weight: 700;
         color: #2c3e50;
         margin-bottom: 5px;
@@ -342,23 +517,22 @@
 
     .stat-label {
         font-size: 0.9rem;
-        color: #666;
+        color: #7f8c8d;
         text-transform: uppercase;
         letter-spacing: 0.5px;
     }
 
     /* Player Filters */
     .player-filters {
+        margin-bottom: 30px;
         background: #f8f9fa;
         padding: 25px;
         border-radius: 10px;
-        margin-bottom: 30px;
-        border: 1px solid #e1e5e9;
     }
 
     .player-filters h2 {
         margin-bottom: 20px;
-        color: #333;
+        color: #2c3e50;
     }
 
     .filter-controls {
@@ -376,243 +550,185 @@
 
     .filter-group label {
         font-weight: 600;
-        color: #555;
+        color: #34495e;
         font-size: 0.9rem;
     }
 
     .filter-group select {
-        padding: 10px 12px;
+        padding: 10px;
         border: 2px solid #ddd;
         border-radius: 6px;
-        font-size: 0.95rem;
+        font-size: 1rem;
         background: white;
         transition: border-color 0.2s;
     }
 
     .filter-group select:focus {
         outline: none;
-        border-color: #667eea;
-        box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        border-color: #3498db;
     }
 
     .filter-reset {
-        background: #6c757d;
+        padding: 10px 20px;
+        background: #e74c3c;
         color: white;
         border: none;
-        padding: 10px 20px;
         border-radius: 6px;
         cursor: pointer;
-        font-size: 0.9rem;
         font-weight: 600;
         transition: background-color 0.2s;
-        height: fit-content;
     }
 
     .filter-reset:hover {
-        background: #5a6268;
+        background: #c0392b;
     }
 
-    /* Players Overview */
+    /* Players Grid */
+    .players-overview {
+        margin-bottom: 30px;
+    }
+
     .players-overview h2 {
-        margin-bottom: 25px;
-        color: #333;
+        margin-bottom: 30px;
+        color: #2c3e50;
     }
 
     .players-grid {
-        display: flex;
-        flex-direction: column;
+        display: grid;
         gap: 30px;
     }
 
     .position-section {
         background: white;
         border-radius: 12px;
-        padding: 25px;
-        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        border: 1px solid #e1e5e9;
-        transition: opacity 0.3s ease;
-    }
-
-    .position-section.hidden {
-        display: none;
+        overflow: hidden;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
     }
 
     .position-title {
+        background: linear-gradient(135deg, #34495e 0%, #2c3e50 100%);
+        color: white;
+        padding: 20px;
+        margin: 0;
         font-size: 1.3rem;
-        font-weight: 700;
-        margin-bottom: 20px;
-        color: #2c3e50;
         display: flex;
+        justify-content: space-between;
         align-items: center;
-        gap: 10px;
     }
 
     .player-count {
+        background: rgba(255,255,255,0.2);
+        padding: 4px 12px;
+        border-radius: 20px;
         font-size: 0.9rem;
-        font-weight: 500;
-        color: #666;
     }
 
     .position-players {
         display: grid;
         grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
         gap: 20px;
+        padding: 20px;
     }
 
     .player-card {
         background: #f8f9fa;
-        border: 2px solid #e1e5e9;
         border-radius: 10px;
         padding: 20px;
         transition: all 0.3s ease;
+        border: 2px solid transparent;
+        cursor: pointer;
     }
 
     .player-card:hover {
         transform: translateY(-2px);
-        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-        border-color: #667eea;
+        box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+        border-color: #3498db;
     }
 
-    .player-card.hidden {
-        display: none;
+    .player-card[data-status="injured"] {
+        border-color: #e74c3c;
+        background: #fdf2f2;
     }
 
     .player-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: flex-start;
         margin-bottom: 15px;
     }
 
     .player-name {
-        font-size: 1.1rem;
+        font-size: 1.2rem;
         font-weight: 700;
-        margin: 0 0 8px 0;
         color: #2c3e50;
+        margin: 0 0 8px 0;
     }
 
     .player-meta {
         display: flex;
         gap: 15px;
         font-size: 0.9rem;
-        color: #666;
-    }
-
-    .injury-status {
-        background: #ff6b6b;
-        color: white;
-        padding: 5px 10px;
-        border-radius: 20px;
-        font-size: 0.8rem;
-        display: flex;
-        align-items: center;
-        gap: 5px;
+        color: #7f8c8d;
     }
 
     .stats-row {
         display: grid;
-        grid-template-columns: repeat(4, 1fr);
-        gap: 10px;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 12px;
+        margin-bottom: 15px;
     }
 
     .stat-item {
+        background: white;
+        padding: 10px;
+        border-radius: 6px;
         text-align: center;
-        padding: 8px;
-        background: #f8f9fa;
-        border-radius: 8px;
-    }
-
-    .stat-item .stat-value {
-        display: block;
-        font-size: 1.2rem;
-        font-weight: 700;
-        margin-bottom: 2px;
     }
 
     .stat-item .stat-label {
+        display: block;
         font-size: 0.8rem;
-        color: #666;
+        color: #7f8c8d;
+        margin-bottom: 4px;
     }
 
-    .player-contract {
-        margin-top: 15px;
-        padding-top: 15px;
-        border-top: 1px solid #e1e5e9;
+    .stat-item .stat-value {
+        font-weight: 600;
+        color: #2c3e50;
+    }
+
+    .injury-status {
+        margin-bottom: 10px;
+    }
+
+    .injury-badge {
+        background: #e74c3c;
+        color: white;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 0.8rem;
+        font-weight: 600;
+    }
+
+    .additional-stats {
         display: flex;
         justify-content: space-between;
         font-size: 0.9rem;
-        color: #666;
-    }
-
-    .market-value {
-        font-weight: 600;
-        color: #28a745;
+        color: #7f8c8d;
     }
 
     .no-players {
-        text-align: center;
-        color: #666;
-        font-style: italic;
         padding: 40px;
-    }
-
-    /* Debug Section */
-    .debug-section {
-        background: #fff3cd;
-        padding: 20px;
-        margin: 20px 0;
-        border-radius: 8px;
-        border: 1px solid #ffeaa7;
-    }
-
-    .debug-section h3 {
-        margin-bottom: 15px;
-        color: #856404;
-    }
-
-    .debug-controls {
-        display: flex;
-        gap: 10px;
-        margin-bottom: 15px;
-        flex-wrap: wrap;
-    }
-
-    .debug-btn {
-        background: #ffc107;
-        color: #212529;
-        border: none;
-        padding: 8px 15px;
-        border-radius: 4px;
-        cursor: pointer;
-        font-size: 0.9rem;
-        font-weight: 500;
-        transition: background-color 0.2s;
-    }
-
-    .debug-btn:hover {
-        background: #e0a800;
-    }
-
-    .debug-output {
-        background: white;
-        padding: 15px;
-        border-radius: 4px;
-        border: 1px solid #dee2e6;
-        font-family: monospace;
-        font-size: 0.85rem;
-        max-height: 300px;
-        overflow-y: auto;
-        white-space: pre-wrap;
+        text-align: center;
+        color: #7f8c8d;
+        font-style: italic;
     }
 
     /* Financial Overview */
     .financial-overview {
-        margin-top: 40px;
+        margin-bottom: 30px;
     }
 
     .financial-overview h2 {
         margin-bottom: 20px;
-        color: #333;
+        color: #2c3e50;
     }
 
     .financial-stats {
@@ -621,21 +737,16 @@
         gap: 20px;
     }
 
+    .financial-stats .stat-card {
+        border-left-color: #27ae60;
+    }
+
     /* Responsive Design */
     @media (max-width: 768px) {
         .team-info-card {
             grid-template-columns: 1fr;
             text-align: center;
             gap: 20px;
-        }
-
-        .team-meta {
-            flex-direction: column;
-            gap: 10px;
-        }
-
-        .stats-grid {
-            grid-template-columns: repeat(2, 1fr);
         }
 
         .filter-controls {
@@ -647,36 +758,18 @@
         }
 
         .stats-row {
-            grid-template-columns: repeat(2, 1fr);
-        }
-
-        .debug-controls {
-            flex-direction: column;
-        }
-    }
-
-    @media (max-width: 480px) {
-        .team-overview {
-            padding: 15px;
-        }
-
-        .stats-grid {
             grid-template-columns: 1fr;
-        }
-
-        .team-details h1 {
-            font-size: 2rem;
-        }
-
-        .player-contract {
-            flex-direction: column;
-            gap: 5px;
         }
 
         .financial-stats {
-            grid-template-columns: 1fr;
+            grid-template-columns: repeat(2, 1fr);
         }
     }
-</style>
 
+    /* Hidden Elements for JavaScript Filter */
+    .search-hidden,
+    .filter-hidden {
+        display: none !important;
+    }
+</style>
 {% endblock %}

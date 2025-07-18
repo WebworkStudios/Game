@@ -1,6 +1,6 @@
 <?php
 // Auto-generated route cache file
-// Generated: 2025-07-18 16:28:39
+// Generated: 2025-07-18 19:01:28
 
 return array (
   0 => 
@@ -52,22 +52,6 @@ return array (
     ),
   ),
   3 => 
-  array (
-    'pattern' => '#^/team/overview$#',
-    'methods' => 
-    array (
-      0 => 'GET',
-    ),
-    'action' => 'App\\Actions\\TeamOverviewAction',
-    'middlewares' => 
-    array (
-    ),
-    'name' => 'team.overview.full',
-    'parameters' => 
-    array (
-    ),
-  ),
-  4 => 
   array (
     'pattern' => '#^/test/templates$#',
     'methods' => 

@@ -10,9 +10,7 @@ use InvalidArgumentException;
 /**
  * JavaScript Asset Filters für Template Engine
  *
- * Ermöglicht die Verwendung von JavaScript-Assets direkt in Templates:
- * {{ 'main.js'|js_script }}
- * {{ 'matchday.js'|js_module }}
+ * KORRIGIERT: Bessere Null-Handling und Debugging
  */
 class JavaScriptFilters
 {
@@ -26,13 +24,41 @@ class JavaScriptFilters
     /**
      * Filter: JavaScript-Datei hinzufügen
      *
-     * Verwendung: {{ 'main.js'|js_script }}
-     * Verwendung: {{ 'analytics.js'|js_script('async') }}
+     * KORRIGIERT: Robuste Validierung und bessere Fehlermeldungen
      */
-    public function jsScript(string $filename, string $loadType = 'defer'): string
+    public function jsScript(mixed $filename, string $loadType = 'defer'): string
     {
-        if (!is_string($filename) || trim($filename) === '') {
-            throw new InvalidArgumentException("jsScript(): \$filename must be a non-empty string");
+        // DEBUG: Log what we actually received
+        if ($_ENV['APP_DEBUG'] ?? false) {
+            error_log("jsScript called with: " . var_export($filename, true) . " (type: " . gettype($filename) . ")");
+        }
+
+        // KORRIGIERT: Handle null and empty values gracefully
+        if ($filename === null) {
+            if ($_ENV['APP_DEBUG'] ?? false) {
+                error_log("jsScript: Received null filename - skipping script registration");
+            }
+            return ''; // Graceful degradation
+        }
+
+        // Convert to string if possible
+        if (!is_string($filename)) {
+            if (is_scalar($filename)) {
+                $filename = (string) $filename;
+            } else {
+                throw new InvalidArgumentException(
+                    "jsScript(): \$filename must be a string or convertible to string, " .
+                    gettype($filename) . " given"
+                );
+            }
+        }
+
+        // Validate string is not empty
+        if (trim($filename) === '') {
+            if ($_ENV['APP_DEBUG'] ?? false) {
+                error_log("jsScript: Empty filename provided - skipping script registration");
+            }
+            return ''; // Graceful degradation
         }
 
         $attributes = match($loadType) {
@@ -47,14 +73,42 @@ class JavaScriptFilters
         return '';
     }
 
-
     /**
      * Filter: ES6 Module hinzufügen
      *
-     * Verwendung: {{ 'app.js'|js_module }}
+     * KORRIGIERT: Robuste Validierung
      */
-    public function jsModule(string $filename): string
+    public function jsModule(mixed $filename): string
     {
+        // DEBUG: Log what we actually received
+        if ($_ENV['APP_DEBUG'] ?? false) {
+            error_log("jsModule called with: " . var_export($filename, true) . " (type: " . gettype($filename) . ")");
+        }
+
+        // Handle null gracefully
+        if ($filename === null) {
+            if ($_ENV['APP_DEBUG'] ?? false) {
+                error_log("jsModule: Received null filename - skipping module registration");
+            }
+            return '';
+        }
+
+        // Convert to string if possible
+        if (!is_string($filename)) {
+            if (is_scalar($filename)) {
+                $filename = (string) $filename;
+            } else {
+                throw new InvalidArgumentException(
+                    "jsModule(): \$filename must be a string or convertible to string, " .
+                    gettype($filename) . " given"
+                );
+            }
+        }
+
+        if (trim($filename) === '') {
+            return '';
+        }
+
         $this->assetManager->addModule($filename);
         return '';
     }
@@ -62,10 +116,29 @@ class JavaScriptFilters
     /**
      * Filter: Inline JavaScript
      *
-     * Verwendung: {{ 'console.log("Hello");'|js_inline }}
+     * KORRIGIERT: Robuste Validierung
      */
-    public function jsInline(string $content): string
+    public function jsInline(mixed $content): string
     {
+        if ($content === null) {
+            return '';
+        }
+
+        if (!is_string($content)) {
+            if (is_scalar($content)) {
+                $content = (string) $content;
+            } else {
+                throw new InvalidArgumentException(
+                    "jsInline(): \$content must be a string or convertible to string, " .
+                    gettype($content) . " given"
+                );
+            }
+        }
+
+        if (trim($content) === '') {
+            return '';
+        }
+
         $this->assetManager->addInlineScript($content);
         return '';
     }
@@ -73,11 +146,25 @@ class JavaScriptFilters
     /**
      * Filter: Script-URL generieren (ohne Asset Manager)
      *
-     * Verwendung: {{ 'main.js'|js_url }}
-     * Output: /js/main.js?v=1234567890
+     * KORRIGIERT: Robuste Validierung
      */
-    public function jsUrl(string $filename): string
+    public function jsUrl(mixed $filename): string
     {
+        if ($filename === null || (is_string($filename) && trim($filename) === '')) {
+            return '';
+        }
+
+        if (!is_string($filename)) {
+            if (is_scalar($filename)) {
+                $filename = (string) $filename;
+            } else {
+                throw new InvalidArgumentException(
+                    "jsUrl(): \$filename must be a string or convertible to string, " .
+                    gettype($filename) . " given"
+                );
+            }
+        }
+
         $publicPath = 'public/js/' . $filename;
         $baseUrl = '/js/' . $filename;
 
@@ -92,14 +179,28 @@ class JavaScriptFilters
     /**
      * Filter: Script-Tag direkt ausgeben (für spezielle Fälle)
      *
-     * Verwendung: {{ 'main.js'|js_tag }}
-     * Output: <script src="/js/main.js?v=123" defer></script>
+     * KORRIGIERT: Robuste Validierung
      */
-    public function jsTag(string $filename, string $attributes = 'defer'): string
+    public function jsTag(mixed $filename, string $attributes = 'defer'): string
     {
-        $url = $this->jsUrl($filename);
-        $attrs = $this->buildAttributeString($attributes);
+        if ($filename === null || (is_string($filename) && trim($filename) === '')) {
+            return '';
+        }
 
+        if (!is_string($filename)) {
+            if (is_scalar($filename)) {
+                $filename = (string) $filename;
+            } else {
+                return ''; // Graceful degradation for complex types
+            }
+        }
+
+        $url = $this->jsUrl($filename);
+        if (empty($url)) {
+            return '';
+        }
+
+        $attrs = $this->buildAttributeString($attributes);
         return "<script src=\"{$url}\"{$attrs}></script>";
     }
 
@@ -125,4 +226,3 @@ class JavaScriptFilters
         return empty($attrs) ? '' : ' ' . implode(' ', $attrs);
     }
 }
-
