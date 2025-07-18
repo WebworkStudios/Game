@@ -1,5 +1,4 @@
 <?php
-
 namespace Framework\Templating\Filters;
 
 use Framework\Assets\JavaScriptAssetManager;
@@ -19,15 +18,15 @@ class JavaScriptFilterRegistrar
     {
         $jsFilters = new JavaScriptFilters($assetManager);
 
-        // Script-Filter registrieren
-        $filterManager->addFilter('js_script', [$jsFilters, 'jsScript']);
-        $filterManager->addFilter('js_module', [$jsFilters, 'jsModule']);
-        $filterManager->addFilter('js_inline', [$jsFilters, 'jsInline']);
-        $filterManager->addFilter('js_url', [$jsFilters, 'jsUrl']);
-        $filterManager->addFilter('js_tag', [$jsFilters, 'jsTag']);
+        // Script-Filter registrieren - KORRIGIERT: register() statt addFilter()
+        $filterManager->register('js_script', [$jsFilters, 'jsScript']);
+        $filterManager->register('js_module', [$jsFilters, 'jsModule']);
+        $filterManager->register('js_inline', [$jsFilters, 'jsInline']);
+        $filterManager->register('js_url', [$jsFilters, 'jsUrl']);
+        $filterManager->register('js_tag', [$jsFilters, 'jsTag']);
 
-        // Alias für bessere Lesbarkeit
-        $filterManager->addFilter('script', [$jsFilters, 'jsScript']);
-        $filterManager->addFilter('module', [$jsFilters, 'jsModule']);
+        // Alias für bessere Lesbarkeit - KORRIGIERT: register() statt addFilter()
+        $filterManager->register('script', [$jsFilters, 'jsScript']);
+        $filterManager->register('module', [$jsFilters, 'jsModule']);
     }
 }

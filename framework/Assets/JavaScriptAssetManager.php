@@ -19,7 +19,7 @@ class JavaScriptAssetManager
 {
     private array $scripts = [];
     private string $publicPath;
-    private bool $debugMode;
+    public bool $debugMode;
     private string $baseUrl;
 
     public function __construct(

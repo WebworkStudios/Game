@@ -5,6 +5,7 @@ declare(strict_types=1);
 
 namespace Framework\Core;
 
+use Framework\Assets\JavaScriptAssetServiceProvider;
 use Framework\Database\DatabaseServiceProvider;
 use Framework\Localization\LocalizationServiceProvider;
 use Framework\Security\SecurityServiceProvider;
@@ -32,6 +33,7 @@ class ServiceProviderRegistry
         ValidationServiceProvider::class,
         LocalizationServiceProvider::class,
         TemplatingServiceProvider::class,
+        JavaScriptAssetServiceProvider::class,
     ];
 
     /** @var array<string> Zusätzliche App-spezifische Provider */

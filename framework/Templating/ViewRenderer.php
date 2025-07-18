@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Framework\Templating;
 
 use Framework\Assets\JavaScriptAssetManager;
+use Framework\Core\ConfigManager;
 use Framework\Http\HttpStatus;
 use Framework\Http\Response;
 use Framework\Localization\Translator;
@@ -14,40 +15,105 @@ use Framework\Templating\Filters\JavaScriptFilterRegistrar;
 /**
  * ViewRenderer - Erweitert um JavaScript Asset Management
  *
- * NEUE FEATURES:
+ * KORRIGIERT: Readonly-konforme Implementierung
  * - Automatische JavaScript-Asset Integration
  * - Script-Injection am Ende des HTML-Body
  * - Filter-basierte Script-Registrierung in Templates
  */
 readonly class ViewRenderer
 {
-    private JavaScriptAssetManager $assetManager;
-
+    // KORRIGIERT: Nur genutzte Properties über Constructor Property Promotion
     public function __construct(
         private TemplateEngine $engine,
-        private ?Translator    $translator = null,
-        private ?Csrf          $csrf = null,
-        ?JavaScriptAssetManager $assetManager = null
+        private ?Translator $translator = null,
+        private ?Csrf $csrf = null,
+        private JavaScriptAssetManager $assetManager = new JavaScriptAssetManager(),
+        private array $appConfig = []
     ) {
-        // JavaScript Asset Manager initialisieren
-        $this->assetManager = $assetManager ?? new JavaScriptAssetManager(
-            publicPath: 'public/js/',
-            baseUrl: '/js/',
-            debugMode: ($_ENV['APP_DEBUG'] ?? 'false') === 'true'
-        );
-
-        // JavaScript-Filter in der Template-Engine registrieren
+        // JavaScript-Filter registrieren
         $this->registerJavaScriptFilters();
     }
+
+    /**
+     * Alternative statische Factory-Methode mit Konfiguration
+     */
+    public static function create(
+        TemplateEngine $engine,
+        ?Translator $translator = null,
+        ?Csrf $csrf = null,
+        ?JavaScriptAssetManager $assetManager = null,
+        ?ConfigManager $configManager = null
+    ): self {
+        // Konfigurationen laden
+        $appConfig = self::loadAppConfig($configManager);
+
+        // Asset Manager mit korrekter Debug-Konfiguration
+        $assetManager = $assetManager ?? new JavaScriptAssetManager(
+            publicPath: 'public/js/',
+            baseUrl: '/js/',
+            debugMode: $appConfig['debug'] ?? false
+        );
+
+        return new self(
+            engine: $engine,
+            translator: $translator,
+            csrf: $csrf,
+            assetManager: $assetManager,
+            appConfig: $appConfig
+        );
+    }
+
+    /**
+     * App-Konfiguration laden (statisch)
+     */
+    private static function loadAppConfig(?ConfigManager $configManager): array
+    {
+        if ($configManager === null) {
+            return [
+                'name' => 'KickersCup Manager',
+                'version' => '2.0.0',
+                'debug' => false,
+                'timezone' => 'UTC',
+                'locale' => 'de',
+                'url' => 'http://localhost:8000',
+            ];
+        }
+
+        try {
+            return $configManager->get('app/Config/app.php', function () {
+                return [
+                    'name' => 'KickersCup Manager',
+                    'version' => '2.0.0',
+                    'debug' => false,
+                    'timezone' => 'UTC',
+                    'locale' => 'de',
+                    'url' => 'http://localhost:8000',
+                ];
+            });
+        } catch (\Throwable) {
+            return [
+                'name' => 'KickersCup Manager',
+                'version' => '2.0.0',
+                'debug' => false,
+                'timezone' => 'UTC',
+                'locale' => 'de',
+                'url' => 'http://localhost:8000',
+            ];
+        }
+    }
+
+    /**
+     * Templating-Konfiguration laden (statisch) - ENTFERNT: Wird nicht verwendet
+     */
 
     /**
      * Rendert Template zu HTTP Response mit JavaScript-Asset Integration
      */
     public function render(
-        string     $template,
-        array      $data = [],
+        string $template,
+        array $data = [],
         HttpStatus $status = HttpStatus::OK,
-        array      $headers = []
+        array $headers = []
     ): Response {
         try {
             // Asset Manager für Template verfügbar machen
@@ -124,7 +190,9 @@ readonly class ViewRenderer
         }
 
         // Asset Manager für nächste Anfrage zurücksetzen
-        $this->assetManager->clear();
+        if (method_exists($this->assetManager, 'clear')) {
+            $this->assetManager->clear();
+        }
 
         return $content;
     }
@@ -134,32 +202,41 @@ readonly class ViewRenderer
      */
     private function registerJavaScriptFilters(): void
     {
-        // Filter-Manager aus Engine holen (falls verfügbar)
-        $reflection = new \ReflectionClass($this->engine);
-
         try {
-            $filterManagerProperty = $reflection->getProperty('filterManager');
-            $filterManagerProperty->setAccessible(true);
-            $filterManager = $filterManagerProperty->getValue($this->engine);
-
-            if ($filterManager instanceof \Framework\Templating\FilterManager) {
-                JavaScriptFilterRegistrar::register($filterManager, $this->assetManager);
+            // Prüfen ob TemplateEngine eine öffentliche getFilterManager() Methode hat
+            if (method_exists($this->engine, 'getFilterManager')) {
+                $filterManager = $this->engine->getFilterManager();
+                if ($filterManager instanceof FilterManager) {
+                    JavaScriptFilterRegistrar::register($filterManager, $this->assetManager);
+                }
             }
-        } catch (\ReflectionException $e) {
-            // Filter-Manager nicht verfügbar - Filter können manuell registriert werden
+        } catch (\Throwable $e) {
+            // Filter-Manager nicht verfügbar - graceful fallback
+            if ($this->getDebugMode()) {
+                error_log("JavaScript filters could not be registered: " . $e->getMessage());
+            }
         }
     }
 
     /**
-     * Framework-Services in Template-Daten injizieren (erweitert)
+     * Debug-Modus aus Konfiguration ermitteln
+     */
+    private function getDebugMode(): bool
+    {
+        return $this->appConfig['debug'] ?? false;
+    }
+
+    /**
+     * Framework-Services in Template-Daten injizieren
      */
     private function injectFrameworkServices(array $data): array
     {
-        // Bestehende Service-Injection
+        // Translation Services
         if ($this->translator !== null) {
             $data = $this->injectTranslationServices($data);
         }
 
+        // Security Services
         if ($this->csrf !== null) {
             $data = $this->injectSecurityServices($data);
         }
@@ -168,25 +245,42 @@ readonly class ViewRenderer
         $data['js_helpers'] = [
             'add_script' => fn(string $file) => $this->assetManager->addScript($file),
             'add_module' => fn(string $file) => $this->assetManager->addModule($file),
-            'script_url' => fn(string $file) => '/js/' . $file . '?v=' . filemtime('public/js/' . $file),
+            'script_url' => fn(string $file) => $this->generateScriptUrl($file),
         ];
 
         return $data;
     }
 
     /**
-     * Global Template Variables injizieren (erweitert)
+     * Sichere Script-URL Generierung
+     */
+    private function generateScriptUrl(string $file): string
+    {
+        $fullPath = 'public/js/' . $file;
+
+        // Sichere Überprüfung der Datei-Existenz
+        if (file_exists($fullPath)) {
+            $version = filemtime($fullPath);
+            return "/js/{$file}?v={$version}";
+        }
+
+        // Fallback ohne Versionierung
+        return "/js/{$file}";
+    }
+
+    /**
+     * Global Template Variables injizieren
      */
     private function injectGlobalVariables(array $data): array
     {
-        // App-Informationen
-        $data['app_name'] = $_ENV['APP_NAME'] ?? 'KickersCup Manager';
-        $data['app_version'] = $_ENV['APP_VERSION'] ?? '1.0.0';
-        $data['app_env'] = $_ENV['APP_ENV'] ?? 'production';
-        $data['app_debug'] = ($_ENV['APP_DEBUG'] ?? 'false') === 'true';
+        // App-Informationen aus Config - KORRIGIERT: Verwendet appConfig Property
+        $data['app_name'] = $this->appConfig['name'] ?? 'KickersCup Manager';
+        $data['app_version'] = $this->appConfig['version'] ?? '2.0.0';
+        $data['app_debug'] = $this->appConfig['debug'] ?? false;
+        $data['app_locale'] = $this->appConfig['locale'] ?? 'de';
 
-        // Asset-URLs
-        $data['asset_url'] = $_ENV['ASSET_URL'] ?? '/assets';
+        // Asset-URLs - statische Werte für das KickersCup Framework
+        $data['asset_url'] = '/assets';
         $data['js_url'] = '/js';
         $data['css_url'] = '/css';
 
@@ -212,8 +306,8 @@ readonly class ViewRenderer
             $this->translator->translate($key, $params);
 
         } catch (\Throwable $e) {
-            // Graceful fallback
-            $data['current_locale'] = 'de';
+            // Graceful fallback mit Config-Werten
+            $data['current_locale'] = $this->appConfig['locale'] ?? 'de';
             $data['available_locales'] = ['de', 'en'];
             $data['trans'] = fn(string $key, array $params = []) => $key;
         }
@@ -276,11 +370,11 @@ readonly class ViewRenderer
         HttpStatus $status,
         array $headers
     ): Response {
-        if ($_ENV['APP_DEBUG'] === 'true') {
+        if ($this->getDebugMode()) {
             return $this->renderDebugError($e, $template);
         }
 
-        return $this->renderProductionError();
+        return $this->renderProductionError($status, $headers);
     }
 
     /**
@@ -289,7 +383,7 @@ readonly class ViewRenderer
     private function renderDebugError(\Throwable $e, string $template): Response
     {
         $errorHtml = '<!DOCTYPE html>
-        <html lang=de>
+        <html lang="de">
         <head>
             <meta charset="UTF-8">
             <title>Template Error</title>
@@ -314,52 +408,48 @@ readonly class ViewRenderer
                 <div class="error-details">
                     <strong>Template:</strong> ' . htmlspecialchars($template) . '<br>
                     <strong>File:</strong> ' . htmlspecialchars($e->getFile()) . '<br>
-                    <strong>Line:</strong> ' . $e->getLine() . '<br>
-                    <strong>Template Engine:</strong> KickersCup Framework v2.0
+                    <strong>Line:</strong> ' . $e->getLine() . '
                 </div>
                 
                 <div class="stack-trace">
-                    <strong>Stack Trace:</strong><br>
                     <pre>' . htmlspecialchars($e->getTraceAsString()) . '</pre>
                 </div>
             </div>
         </body>
         </html>';
 
-        return new Response(HttpStatus::INTERNAL_SERVER_ERROR, [], $errorHtml);
+        return new Response(
+            HttpStatus::INTERNAL_SERVER_ERROR,
+            ['Content-Type' => 'text/html; charset=UTF-8'],
+            $errorHtml
+        );
     }
 
     /**
      * Production Error Page
      */
-    private function renderProductionError(): Response
+    private function renderProductionError(HttpStatus $status, array $headers): Response
     {
         $errorHtml = '<!DOCTYPE html>
-        <html lang=de>
+        <html lang="de">
         <head>
             <meta charset="UTF-8">
             <title>Server Error</title>
             <style>
-                body { font-family: Arial, sans-serif; text-align: center; padding: 50px; background: #f5f5f5; }
-                .error-container { background: white; padding: 40px; border-radius: 10px; box-shadow: 0 2px20px rgba(0,0,0,0.1); max-width: 600px; margin: 0 auto; }
-                .error-title { color: #e74c3c; font-size: 36px; margin-bottom: 20px; }
-                .error-message { color: #666; font-size: 18px; margin-bottom: 30px; }
-                .error-button { background: #3498db; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; display: inline-block; }
-                .error-button:hover { background: #2980b9; }
+                body { font-family: Arial, sans-serif; text-align: center; padding: 50px; }
+                h1 { color: #e74c3c; }
             </style>
         </head>
         <body>
-            <div class="error-container">
-                <div class="error-title">🚫 Server Error</div>
-                <div class="error-message">
-                    Es tut uns leid, aber es ist ein unerwarteter Fehler aufgetreten.<br>
-                    Bitte versuchen Sie es später erneut.
-                </div>
-                <a href="/" class="error-button">Zur Startseite</a>
-            </div>
+            <h1>Oops! Something went wrong.</h1>
+            <p>We are working to fix this issue. Please try again later.</p>
         </body>
         </html>';
 
-        return new Response(HttpStatus::INTERNAL_SERVER_ERROR, [], $errorHtml);
+        return new Response(
+            HttpStatus::INTERNAL_SERVER_ERROR,
+            ['Content-Type' => 'text/html; charset=UTF-8'],
+            $errorHtml
+        );
     }
 }
