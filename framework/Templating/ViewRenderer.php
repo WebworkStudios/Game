@@ -223,7 +223,7 @@ readonly class ViewRenderer
      */
     private function getDebugMode(): bool
     {
-        return $this->appConfig['debug'] ?? false;
+        return true;
     }
 
     /**

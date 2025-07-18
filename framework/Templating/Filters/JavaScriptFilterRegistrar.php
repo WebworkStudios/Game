@@ -2,6 +2,7 @@
 namespace Framework\Templating\Filters;
 
 use Framework\Assets\JavaScriptAssetManager;
+use Framework\Templating\FilterManager;
 
 /**
  * JavaScript Filter Registration für FilterManager
@@ -12,7 +13,7 @@ class JavaScriptFilterRegistrar
      * Registriert alle JavaScript-Filter im FilterManager
      */
     public static function register(
-        \Framework\Templating\FilterManager $filterManager,
+        FilterManager $filterManager,
         JavaScriptAssetManager              $assetManager
     ): void
     {

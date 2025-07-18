@@ -1,6 +1,5 @@
 <?php
 
-
 declare(strict_types=1);
 
 namespace Framework\Core;
@@ -16,9 +15,12 @@ use RuntimeException;
 /**
  * ServiceProviderRegistry - Orchestriert alle Service Provider
  *
+ * ERWEITERT: Boot-Methoden Support für Filter-Registrierung
+ *
  * Verantwortlichkeiten:
  * - Service Provider in korrekter Reihenfolge registrieren
  * - Provider-Abhängigkeiten verwalten
+ * - Boot-Methoden nach Registration aufrufen
  * - Provider-Registry erweitern können
  */
 class ServiceProviderRegistry
@@ -33,11 +35,14 @@ class ServiceProviderRegistry
         ValidationServiceProvider::class,
         LocalizationServiceProvider::class,
         TemplatingServiceProvider::class,
-        JavaScriptAssetServiceProvider::class,
+        JavaScriptAssetServiceProvider::class, // JavaScript-Filter werden hier registriert
     ];
 
     /** @var array<string> Zusätzliche App-spezifische Provider */
     private array $appProviders = [];
+
+    /** @var array<AbstractServiceProvider> Registrierte Provider-Instanzen */
+    private array $registeredProviders = [];
 
     public function __construct(ServiceContainer $container, ApplicationKernel $app)
     {
@@ -46,9 +51,21 @@ class ServiceProviderRegistry
     }
 
     /**
-     * Registriert alle Service Provider
+     * Registriert alle Service Provider UND ruft Boot-Methoden auf
      */
     public function registerAll(): void
+    {
+        // Phase 1: Alle Provider registrieren
+        $this->registerProviders();
+
+        // Phase 2: Boot-Methoden aufrufen (für Filter-Registrierung etc.)
+        $this->bootProviders();
+    }
+
+    /**
+     * Phase 1: Registriert alle Service Provider
+     */
+    private function registerProviders(): void
     {
         // Framework Provider zuerst
         foreach ($this->providers as $providerClass) {
@@ -58,6 +75,25 @@ class ServiceProviderRegistry
         // App Provider danach
         foreach ($this->appProviders as $providerClass) {
             $this->registerProvider($providerClass);
+        }
+    }
+
+    /**
+     * Phase 2: Ruft Boot-Methoden aller Provider auf
+     */
+    private function bootProviders(): void
+    {
+        foreach ($this->registeredProviders as $provider) {
+            if (method_exists($provider, 'boot')) {
+                try {
+                    $provider->boot();
+                } catch (\Throwable $e) {
+                    // Boot-Fehler loggen, aber nicht Framework stoppen
+                    if (($_ENV['APP_DEBUG'] ?? false) === 'true') {
+                        error_log("Provider boot failed: " . get_class($provider) . " - " . $e->getMessage());
+                    }
+                }
+            }
         }
     }
 
@@ -76,7 +112,11 @@ class ServiceProviderRegistry
             throw new RuntimeException("Provider must extend AbstractServiceProvider: {$providerClass}");
         }
 
+        // Provider registrieren
         $provider->register();
+
+        // Provider-Instanz für Boot-Phase speichern
+        $this->registeredProviders[] = $provider;
     }
 
     /**
@@ -142,6 +182,16 @@ class ServiceProviderRegistry
     }
 
     /**
+     * Gibt registrierte Provider-Instanzen zurück (für Debug)
+     *
+     * @return array<AbstractServiceProvider>
+     */
+    public function getRegisteredProviders(): array
+    {
+        return $this->registeredProviders;
+    }
+
+    /**
      * Lädt Provider aus Config-Datei
      *
      * Erwartet Config-Format:
@@ -159,5 +209,39 @@ class ServiceProviderRegistry
         if (isset($config['app']) && is_array($config['app'])) {
             $this->appProviders = array_merge($this->appProviders, $config['app']);
         }
+    }
+
+    /**
+     * Prüft ob alle kritischen Provider registriert sind
+     */
+    public function validateRegistration(): array
+    {
+        $missing = [];
+        $requiredProviders = [
+            SecurityServiceProvider::class,
+            TemplatingServiceProvider::class,
+        ];
+
+        foreach ($requiredProviders as $required) {
+            if (!in_array($required, $this->providers)) {
+                $missing[] = $required;
+            }
+        }
+
+        return $missing;
+    }
+
+    /**
+     * Debug-Informationen über Provider-Registrierung
+     */
+    public function getDebugInfo(): array
+    {
+        return [
+            'framework_providers' => $this->providers,
+            'app_providers' => $this->appProviders,
+            'registered_count' => count($this->registeredProviders),
+            'registered_classes' => array_map(fn($p) => get_class($p), $this->registeredProviders),
+            'missing_providers' => $this->validateRegistration()
+        ];
     }
 }

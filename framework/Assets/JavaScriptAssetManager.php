@@ -1,6 +1,5 @@
 <?php
 
-
 declare(strict_types=1);
 
 namespace Framework\Assets;
@@ -14,6 +13,7 @@ namespace Framework\Assets;
  * - Script-Attribute (defer, type="module")
  * - Dev-Mode Fallback für fehlende Dateien
  * - Performance-optimierte Ausgabe
+ * - File-Existenz Caching für bessere Performance
  */
 class JavaScriptAssetManager
 {
@@ -22,10 +22,13 @@ class JavaScriptAssetManager
     public bool $debugMode;
     private string $baseUrl;
 
+    // NEUE Performance-Optimierung: File-Cache
+    private array $fileCache = [];
+
     public function __construct(
         string $publicPath = 'public/js/',
         string $baseUrl = '/js/',
-        bool   $debugMode = false
+        bool   $debugMode = true
     )
     {
         $this->publicPath = rtrim($publicPath, '/') . '/';
@@ -117,7 +120,7 @@ class JavaScriptAssetManager
         $filename = $script['filename'];
         $attributes = $script['attributes'] ?? [];
 
-        // Datei-Überprüfung
+        // Datei-Überprüfung mit Caching
         if (!$this->fileExists($filename)) {
             if ($this->debugMode) {
                 return "<!-- ERROR: JavaScript file '{$filename}' not found in {$this->publicPath} -->";
@@ -182,11 +185,35 @@ class JavaScriptAssetManager
     }
 
     /**
-     * Überprüfen ob JavaScript-Datei existiert
+     * OPTIMIERT: Überprüfen ob JavaScript-Datei existiert (mit Caching)
+     *
+     * Performance-Verbesserung: Caching für wiederholte file_exists() Aufrufe
+     * Besonders wichtig bei mehrfachen Renderzyklen oder komplexen Templates
      */
     private function fileExists(string $filename): bool
     {
-        return file_exists($this->publicPath . $filename);
+        // Cache-Hit: Rückgabe ohne file_exists() Call
+        if (isset($this->fileCache[$filename])) {
+            return $this->fileCache[$filename];
+        }
+
+        // Cache-Miss: Prüfen und cachen
+        $fullPath = $this->publicPath . $filename;
+        $exists = file_exists($fullPath);
+
+        // Ergebnis cachen für weitere Aufrufe
+        $this->fileCache[$filename] = $exists;
+
+        return $exists;
+    }
+
+    /**
+     * Cache für File-Existenz leeren (z.B. bei Development-Builds)
+     */
+    public function clearFileCache(): self
+    {
+        $this->fileCache = [];
+        return $this;
     }
 
     /**
@@ -195,6 +222,8 @@ class JavaScriptAssetManager
     public function clear(): self
     {
         $this->scripts = [];
+        // Optional: File-Cache auch leeren
+        // $this->fileCache = [];
         return $this;
     }
 
@@ -242,76 +271,5 @@ class JavaScriptAssetManager
 
         return $this;
     }
-}
 
-// =============================================================================
-// Template Helper Functions
-// =============================================================================
-
-/**
- * Global Template Helper für JavaScript Assets
- */
-function js_asset(string $filename, array $attributes = ['defer' => true]): void
-{
-    global $jsAssetManager;
-
-    if (!isset($jsAssetManager)) {
-        $jsAssetManager = new JavaScriptAssetManager(
-            publicPath: 'public/js/',
-            baseUrl: '/js/',
-            debugMode: ($_ENV['APP_DEBUG'] ?? false) === 'true'
-        );
-    }
-
-    $jsAssetManager->addScript($filename, $attributes);
-}
-
-/**
- * Global Template Helper für Module Scripts
- */
-function js_module(string $filename, int $priority = 100): void
-{
-    global $jsAssetManager;
-
-    if (!isset($jsAssetManager)) {
-        $jsAssetManager = new JavaScriptAssetManager(
-            publicPath: 'public/js/',
-            baseUrl: '/js/',
-            debugMode: ($_ENV['APP_DEBUG'] ?? false) === 'true'
-        );
-    }
-
-    $jsAssetManager->addModule($filename, $priority);
-}
-
-/**
- * Global Template Helper für Inline Scripts
- */
-function js_inline(string $content, int $priority = 50): void
-{
-    global $jsAssetManager;
-
-    if (!isset($jsAssetManager)) {
-        $jsAssetManager = new JavaScriptAssetManager(
-            publicPath: 'public/js/',
-            baseUrl: '/js/',
-            debugMode: ($_ENV['APP_DEBUG'] ?? false) === 'true'
-        );
-    }
-
-    $jsAssetManager->addInlineScript($content, $priority);
-}
-
-/**
- * Template Helper - Alle Scripts rendern
- */
-function render_js_assets(): string
-{
-    global $jsAssetManager;
-
-    if (!isset($jsAssetManager)) {
-        return '';
-    }
-
-    return $jsAssetManager->render();
 }

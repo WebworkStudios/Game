@@ -57,9 +57,6 @@ class JavaScriptAssetServiceProvider extends AbstractServiceProvider
                 assetManager: $assetManager
             );
         });
-
-        // BESSER: Keine globalen Funktionen
-        // JavaScript-Assets werden über Dependency Injection oder Template-Filter verwaltet
     }
 
     /**

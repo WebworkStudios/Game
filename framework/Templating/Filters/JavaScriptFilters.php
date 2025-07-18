@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Framework\Templating\Filters;
 
 use Framework\Assets\JavaScriptAssetManager;
+use InvalidArgumentException;
 
 /**
  * JavaScript Asset Filters für Template Engine
@@ -30,6 +31,10 @@ class JavaScriptFilters
      */
     public function jsScript(string $filename, string $loadType = 'defer'): string
     {
+        if (!is_string($filename) || trim($filename) === '') {
+            throw new InvalidArgumentException("jsScript(): \$filename must be a non-empty string");
+        }
+
         $attributes = match($loadType) {
             'async' => ['async' => true],
             'defer' => ['defer' => true],
@@ -39,10 +44,9 @@ class JavaScriptFilters
         };
 
         $this->assetManager->addScript($filename, $attributes);
-
-        // Return empty string - Scripts werden später gerendert
         return '';
     }
+
 
     /**
      * Filter: ES6 Module hinzufügen
