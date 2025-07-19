@@ -20,13 +20,7 @@ class JsonUtility
      */
     public static function isValid(string $json): bool
     {
-        if (function_exists('json_validate')) {
-            return json_validate($json);
-        }
-
-        // Fallback für PHP < 8.3
-        json_decode($json);
-        return json_last_error() === JSON_ERROR_NONE;
+        return json_validate($json);
     }
 
     /**

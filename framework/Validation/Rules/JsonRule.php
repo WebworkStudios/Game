@@ -16,14 +16,7 @@ class JsonRule implements RuleInterface
             return false;
         }
 
-        // PHP 8.3+ json_validate() wenn verfügbar, sonst Fallback
-        if (function_exists('json_validate')) {
-            return json_validate($value);
-        }
-
-        // Fallback für ältere PHP-Versionen
-        json_decode($value);
-        return json_last_error() === JSON_ERROR_NONE;
+        return json_validate($value);
     }
 
     public function message(string $field, mixed $value, array $parameters): string
