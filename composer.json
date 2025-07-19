@@ -12,7 +12,10 @@
     "ext-fileinfo": "*",
     "ext-pdo": "*",
     "ext-ctype": "*",
-    "ext-intl": "*"
+    "ext-intl": "*",
+    "ext-apcu": "*",
+    "ext-redis": "*",
+    "ext-memcached": "*"
   },
   "autoload": {
     "psr-4": {

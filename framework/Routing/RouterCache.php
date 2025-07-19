@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Framework\Routing;
 
+use Framework\Core\CacheDriverDetector;
 use Framework\Http\HttpMethod;
 
 /**
@@ -72,6 +73,27 @@ readonly class RouterCache
      */
     private function loadFromCache(): array
     {
+        // NEU: Versuche zuerst APCu Cache
+        $driver = CacheDriverDetector::detectOptimalDriver();
+
+        if ($driver === 'apcu') {
+            $cacheData = apcu_fetch('kickerscup_routes', $success);
+            if ($success && is_array($cacheData)) {
+                // Konvertiere Cache-Arrays zurück zu RouteEntry-Objekten
+                return array_map(function (array $data) {
+                    return new RouteEntry(
+                        pattern: $data['pattern'],
+                        methods: array_map(fn(string $method) => HttpMethod::from($method), $data['methods']),
+                        action: $data['action'],
+                        middlewares: $data['middlewares'],
+                        name: $data['name'],
+                        parameters: $data['parameters'],
+                    );
+                }, $cacheData);
+            }
+        }
+
+        // FALLBACK: File-Cache (bestehende Logik unverändert)
         if (!file_exists($this->cacheFile)) {
             return [];
         }
@@ -93,6 +115,7 @@ readonly class RouterCache
             );
         }, $cacheData);
     }
+
 
     /**
      * Erstellt Named Routes Array aus RouteEntry-Array
@@ -124,13 +147,13 @@ readonly class RouterCache
      */
     private function saveToCache(array $routes): void
     {
-        // Erstelle Cache-Verzeichnis falls nötig
+        // Erstelle Cache-Verzeichnis falls nötig (bleibt unverändert)
         $cacheDir = dirname($this->cacheFile);
         if (!is_dir($cacheDir)) {
             mkdir($cacheDir, 0755, true);
         }
 
-        // Konvertiere RouteEntry-Objekte zu Arrays
+        // Konvertiere RouteEntry-Objekte zu Arrays (bleibt unverändert)
         $cacheData = array_map(function (RouteEntry $route) {
             return [
                 'pattern' => $route->pattern,
@@ -142,7 +165,15 @@ readonly class RouterCache
             ];
         }, $routes);
 
-        // Generiere Cache-Datei
+        // NEU: Intelligente Cache-Driver Detection
+        $driver = CacheDriverDetector::detectOptimalDriver();
+
+        // NEU: APCu Cache für ultra-schnelle Route-Lookups
+        if ($driver === 'apcu') {
+            apcu_store('kickerscup_routes', $cacheData, 3600); // 1 Stunde
+        }
+
+        // BLEIBT: File-Cache als Fallback (bestehende Logik unverändert)
         $cacheContent = "<?php\n" .
             "// Auto-generated route cache file\n" .
             "// Generated: " . date('Y-m-d H:i:s') . "\n\n" .
@@ -156,12 +187,22 @@ readonly class RouterCache
      */
     public function clear(): bool
     {
-        if (file_exists($this->cacheFile)) {
-            return unlink($this->cacheFile);
+        $success = true;
+
+        // NEU: APCu Cache löschen
+        $driver = CacheDriverDetector::detectOptimalDriver();
+        if ($driver === 'apcu') {
+            apcu_delete('kickerscup_routes');
         }
 
-        return true;
+        // BLEIBT: File-Cache löschen
+        if (file_exists($this->cacheFile)) {
+            $success = unlink($this->cacheFile);
+        }
+
+        return $success;
     }
+
 
     /**
      * Holt Cache-Datei-Pfad

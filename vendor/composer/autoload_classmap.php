@@ -15,6 +15,8 @@ return array(
     'Framework\\Assets\\JavaScriptAssetServiceProvider' => $baseDir . '/framework/Assets/JavaScriptAssetServiceProvider.php',
     'Framework\\Core\\AbstractServiceProvider' => $baseDir . '/framework/Core/AbstractServiceProvider.php',
     'Framework\\Core\\ApplicationKernel' => $baseDir . '/framework/Core/ApplicationKernel.php',
+    'Framework\\Core\\CacheDebugInfo' => $baseDir . '/framework/Core/CacheDebugInfo.php',
+    'Framework\\Core\\CacheDriverDetector' => $baseDir . '/framework/Core/CacheDriverDetector.php',
     'Framework\\Core\\ConfigManager' => $baseDir . '/framework/Core/ConfigManager.php',
     'Framework\\Core\\ConfigNotFoundException' => $baseDir . '/framework/Core/ConfigNotFoundException.php',
     'Framework\\Core\\ConfigValidation' => $baseDir . '/framework/Core/ConfigValidation.php',

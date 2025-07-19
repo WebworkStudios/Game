@@ -38,6 +38,8 @@ class ComposerStaticInit76c9304563798f214bebb069e4a2ab06
         'Framework\\Assets\\JavaScriptAssetServiceProvider' => __DIR__ . '/../..' . '/framework/Assets/JavaScriptAssetServiceProvider.php',
         'Framework\\Core\\AbstractServiceProvider' => __DIR__ . '/../..' . '/framework/Core/AbstractServiceProvider.php',
         'Framework\\Core\\ApplicationKernel' => __DIR__ . '/../..' . '/framework/Core/ApplicationKernel.php',
+        'Framework\\Core\\CacheDebugInfo' => __DIR__ . '/../..' . '/framework/Core/CacheDebugInfo.php',
+        'Framework\\Core\\CacheDriverDetector' => __DIR__ . '/../..' . '/framework/Core/CacheDriverDetector.php',
         'Framework\\Core\\ConfigManager' => __DIR__ . '/../..' . '/framework/Core/ConfigManager.php',
         'Framework\\Core\\ConfigNotFoundException' => __DIR__ . '/../..' . '/framework/Core/ConfigNotFoundException.php',
         'Framework\\Core\\ConfigValidation' => __DIR__ . '/../..' . '/framework/Core/ConfigValidation.php',
