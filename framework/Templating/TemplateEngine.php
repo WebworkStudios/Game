@@ -16,7 +16,7 @@ class TemplateEngine
     public function __construct(
         private readonly TemplatePathResolver $pathResolver,
         private readonly TemplateCache        $cache,
-        private readonly FilterManager        $filterManager
+        FilterManager                         $filterManager  // ✅ KORREKTUR: Kein Property mehr
     )
     {
         // Parser-Pipeline erstellen
@@ -26,6 +26,7 @@ class TemplateEngine
 
         // Renderer-Pipeline erstellen
         $variableResolver = new TemplateVariableResolver();
+        // ✅ FilterManager direkt verwenden, nicht speichern
         $this->renderer = new TemplateRenderer($variableResolver, $filterManager, $pathResolver);
     }
 
