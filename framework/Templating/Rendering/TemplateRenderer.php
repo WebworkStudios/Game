@@ -1,15 +1,16 @@
 <?php
+declare(strict_types=1);
 
 namespace Framework\Templating\Rendering;
 
 use Framework\Templating\FilterManager;
 use Framework\Templating\Parsing\{ParsedTemplate, TemplateParser, TemplatePathResolver};
-use Framework\Templating\Tokens\{ControlToken, TemplateToken, VariableToken};
+use Framework\Templating\Tokens\{ControlToken, TemplateToken, TokenType, VariableToken};
 
 /**
  * TemplateRenderer - Konvertiert ParsedTemplate zu String
  *
- * BEREINIGT: Debug-Logging komplett entfernt
+ * UPDATED: Nutzt TokenType Enum für type-safe Token-Handling
  */
 class TemplateRenderer
 {
@@ -17,8 +18,7 @@ class TemplateRenderer
         private readonly TemplateVariableResolver $variableResolver,
         private readonly FilterManager            $filterManager,
         private readonly TemplatePathResolver     $pathResolver
-    )
-    {
+    ) {
     }
 
     public function render(ParsedTemplate $template, array $data): string
@@ -70,13 +70,15 @@ class TemplateRenderer
         return $output;
     }
 
+    /**
+     * UPDATED: Nutzt TokenType Enum für type-safe Token-Rendering
+     */
     private function renderToken(TemplateToken $token): string
     {
-        return match ($token->getType()) {
-            'text' => $token->getContent(),
-            'variable' => $this->renderVariable($token instanceof VariableToken ? $token : throw new \LogicException('Expected VariableToken')),
-            'control' => $this->renderControl($token instanceof ControlToken ? $token : throw new \LogicException('Expected ControlToken')),
-            default => ''
+        return match ($token->getTokenType()) {
+            TokenType::TEXT => $token->getContent(),
+            TokenType::VARIABLE => $this->renderVariable($token instanceof VariableToken ? $token : throw new \LogicException('Expected VariableToken')),
+            TokenType::CONTROL => $this->renderControl($token instanceof ControlToken ? $token : throw new \LogicException('Expected ControlToken')),
         };
     }
 

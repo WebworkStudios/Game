@@ -5,6 +5,8 @@ namespace Framework\Templating\Tokens;
 
 /**
  * VariableToken - Repräsentiert {{ variable }} Ausdrücke
+ *
+ * UPDATED: Nutzt TokenType Enum für type-safe Token-Handling
  */
 class VariableToken implements TemplateToken
 {
@@ -12,8 +14,7 @@ class VariableToken implements TemplateToken
         private readonly string $variable,
         private readonly array  $filters = [],
         private readonly bool   $shouldEscape = true
-    )
-    {
+    ) {
     }
 
     public static function fromArray(array $data): self
@@ -76,9 +77,12 @@ class VariableToken implements TemplateToken
         return false;
     }
 
-    public function getType(): string
+    /**
+     * Type-safe Token-Type-Zugriff
+     */
+    public function getTokenType(): TokenType
     {
-        return 'variable';
+        return TokenType::VARIABLE;
     }
 
     public function getVariable(): string
@@ -99,7 +103,7 @@ class VariableToken implements TemplateToken
     public function toArray(): array
     {
         return [
-            'type' => 'variable',
+            'type' => $this->getTokenType()->value,
             'variable' => $this->variable,
             'filters' => $this->filters,
             'should_escape' => $this->shouldEscape

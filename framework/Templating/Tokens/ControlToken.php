@@ -5,6 +5,8 @@ namespace Framework\Templating\Tokens;
 
 /**
  * ControlToken - Repräsentiert {% control %} Ausdrücke
+ *
+ * UPDATED: Nutzt TokenType Enum für type-safe Token-Handling
  */
 class ControlToken implements TemplateToken
 {
@@ -14,8 +16,7 @@ class ControlToken implements TemplateToken
         private readonly array  $children = [],
         private readonly array  $elseChildren = [],
         private readonly array  $metadata = []
-    )
-    {
+    ) {
     }
 
     public static function fromArray(array $data): self
@@ -62,9 +63,12 @@ class ControlToken implements TemplateToken
         return new self($command, $args, [], [], $metadata);
     }
 
-    public function getType(): string
+    /**
+     * Type-safe Token-Type-Zugriff
+     */
+    public function getTokenType(): TokenType
     {
-        return 'control';
+        return TokenType::CONTROL;
     }
 
     public function getCommand(): string
@@ -110,7 +114,7 @@ class ControlToken implements TemplateToken
     public function toArray(): array
     {
         return [
-            'type' => 'control',
+            'type' => $this->getTokenType()->value,
             'command' => $this->command,
             'expression' => $this->expression,
             'children' => array_map(fn($child) => $child->toArray(), $this->children),
