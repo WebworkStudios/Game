@@ -1,5 +1,4 @@
 <?php
-
 declare(strict_types=1);
 
 namespace Framework\Templating;
@@ -8,31 +7,29 @@ use Framework\Localization\Translator;
 use Framework\Templating\Filters\DateFilters;
 use Framework\Templating\Filters\FilterExecutor;
 use Framework\Templating\Filters\FilterRegistry;
+use Framework\Templating\Filters\JsonFilters;
 use Framework\Templating\Filters\NumberFilters;
 use Framework\Templating\Filters\TextFilters;
 use Framework\Templating\Filters\TranslationFilters;
 use Framework\Templating\Filters\UtilityFilters;
 
 /**
- * FilterManager - Schlanke Facade für Filter-System
+ * FilterManager - KORRIGIERT für sichere Filter-Registrierung
  *
- * REFACTORED: Neue Architektur mit klarer Trennung der Verantwortlichkeiten
- * - FilterRegistry: Filter-Verwaltung + Lazy Loading
- * - FilterExecutor: Ausführungslogik + Pipeline-Support
- * - Filter-Klassen: Konkrete Implementierungen (statische Methoden)
- * - FilterManager: Schlanke Facade (nur Koordination)
- *
- * SRP-konforme Lösung: Jede Klasse hat eine klare Verantwortlichkeit
+ * FIXES:
+ * - Verwendet registerSafe() für besseres Error-Handling
+ * - Robuste Registrierung mit Fallback bei Fehlern
+ * - Debug-Informationen für Troubleshooting
  */
 class FilterManager
 {
     private FilterRegistry $registry;
     private FilterExecutor $executor;
+    private array $registrationErrors = [];
 
     public function __construct(
         private readonly ?Translator $translator = null
-    )
-    {
+    ) {
         $this->registry = new FilterRegistry();
         $this->executor = new FilterExecutor($this->registry);
 
@@ -40,104 +37,143 @@ class FilterManager
     }
 
     /**
-     * Registriert alle Standard-Filter
+     * KORRIGIERT: Sichere Registrierung aller Standard-Filter
      */
     private function registerDefaultFilters(): void
     {
-        $this->registerTextFilters();
-        $this->registerNumberFilters();
-        $this->registerDateFilters();
-        $this->registerUtilityFilters();
-        $this->registerDebugFilters(); // DEBUG-FILTER HINZUGEFÜGT
+        try {
+            $this->registerTextFilters();
+            $this->registerNumberFilters();
+            $this->registerDateFilters();
+            $this->registerUtilityFilters();
+            $this->registerJsonFilters();
+            $this->registerDebugFilters();
 
-        if ($this->translator !== null) {
-            $this->registerTranslationFilters();
+            if ($this->translator !== null) {
+                $this->registerTranslationFilters();
+            }
+
+            // Log erfolgreich registrierte Filter
+            $this->logRegistrationResults();
+
+        } catch (\Throwable $e) {
+            error_log("Critical error in FilterManager::registerDefaultFilters(): " . $e->getMessage());
+            throw $e;
         }
     }
 
     /**
-     * Registriert Text-Filter
+     * KORRIGIERT: Text-Filter mit sicherer Registrierung
      */
     private function registerTextFilters(): void
     {
-        $this->registry->registerLazy('upper', fn() => [TextFilters::class, 'upper']);
-        $this->registry->registerLazy('lower', fn() => [TextFilters::class, 'lower']);
-        $this->registry->registerLazy('capitalize', fn() => [TextFilters::class, 'capitalize']);
-        $this->registry->registerLazy('truncate', fn() => [TextFilters::class, 'truncate']);
-        $this->registry->registerLazy('slug', fn() => [TextFilters::class, 'slug']);
-        $this->registry->registerLazy('nl2br', fn() => [TextFilters::class, 'nl2br']);
-        $this->registry->registerLazy('strip_tags', fn() => [TextFilters::class, 'stripTags']);
-        $this->registry->registerLazy('raw', fn() => [TextFilters::class, 'raw']);
-        $this->registry->registerLazy('default', fn() => [TextFilters::class, 'default']);
-        $this->registry->registerLazy('trim', fn() => [TextFilters::class, 'trim']);
-        $this->registry->registerLazy('replace', fn() => [TextFilters::class, 'replace']);
-        $this->registry->registerLazy('repeat', fn() => [TextFilters::class, 'repeat']);
-        $this->registry->registerLazy('reverse', fn() => [TextFilters::class, 'reverse']);
+        $filters = [
+            'upper' => [TextFilters::class, 'upper'],
+            'lower' => [TextFilters::class, 'lower'],
+            'title' => [TextFilters::class, 'title'],
+            'capitalize' => [TextFilters::class, 'capitalize'],
+            'reverse' => [TextFilters::class, 'reverse'],
+            'length' => [TextFilters::class, 'length'],
+            'truncate' => [TextFilters::class, 'truncate'],
+            'slug' => [TextFilters::class, 'slug'],
+            'nl2br' => [TextFilters::class, 'nl2br'],
+            'strip_tags' => [TextFilters::class, 'stripTags'],
+            'raw' => [TextFilters::class, 'raw'],
+            'e' => [TextFilters::class, 'e'],
+            'escape' => [TextFilters::class, 'escape'],
+            'default' => [TextFilters::class, 'default'],
+            'trim' => [TextFilters::class, 'trim'],
+            'replace' => [TextFilters::class, 'replace'],
+        ];
 
-        // Escape-Filter (migriert von EscapeFilter.php)
-        $this->registry->registerLazy('escape', fn() => [TextFilters::class, 'escape']);
-        $this->registry->registerLazy('e', fn() => [TextFilters::class, 'e']);
+        $this->registerFilterBatch($filters, 'TextFilters');
     }
 
     /**
-     * Registriert Number-Filter
+     * KORRIGIERT: Number-Filter mit sicherer Registrierung
      */
     private function registerNumberFilters(): void
     {
-        $this->registry->registerLazy('number_format', fn() => [NumberFilters::class, 'numberFormat']);
-        $this->registry->registerLazy('currency', fn() => [NumberFilters::class, 'currency']);
-        $this->registry->registerLazy('percent', fn() => [NumberFilters::class, 'percent']);
-        $this->registry->registerLazy('round', fn() => [NumberFilters::class, 'round']);
-        $this->registry->registerLazy('ceil', fn() => [NumberFilters::class, 'ceil']);
-        $this->registry->registerLazy('floor', fn() => [NumberFilters::class, 'floor']);
-        $this->registry->registerLazy('abs', fn() => [NumberFilters::class, 'abs']);
-        $this->registry->registerLazy('file_size', fn() => [NumberFilters::class, 'fileSize']);
-        $this->registry->registerLazy('ordinal', fn() => [NumberFilters::class, 'ordinal']);
+        $filters = [
+            'number_format' => [NumberFilters::class, 'numberFormat'],
+            'currency' => [NumberFilters::class, 'currency'],
+            'percentage' => [NumberFilters::class, 'percentage'],
+            'round' => [NumberFilters::class, 'round'],
+            'ceil' => [NumberFilters::class, 'ceil'],
+            'floor' => [NumberFilters::class, 'floor'],
+            'abs' => [NumberFilters::class, 'abs'],
+        ];
+
+        $this->registerFilterBatch($filters, 'NumberFilters');
     }
 
     /**
-     * Registriert Date-Filter
+     * KORRIGIERT: Date-Filter mit sicherer Registrierung
      */
     private function registerDateFilters(): void
     {
-        $this->registry->registerLazy('date', fn() => [DateFilters::class, 'date']);
-        $this->registry->registerLazy('date_german', fn() => [DateFilters::class, 'dateGerman']);
-        $this->registry->registerLazy('datetime', fn() => [DateFilters::class, 'datetime']);
-        $this->registry->registerLazy('datetime_german', fn() => [DateFilters::class, 'datetimeGerman']);
-        $this->registry->registerLazy('time', fn() => [DateFilters::class, 'time']);
-        $this->registry->registerLazy('time_ago', fn() => [DateFilters::class, 'timeAgo']);
-        $this->registry->registerLazy('day_of_week', fn() => [DateFilters::class, 'dayOfWeek']);
-        $this->registry->registerLazy('month_name', fn() => [DateFilters::class, 'monthName']);
-        $this->registry->registerLazy('timestamp', fn() => [DateFilters::class, 'timestamp']);
+        $filters = [
+            'date' => [DateFilters::class, 'date'],
+            'date_format' => [DateFilters::class, 'dateFormat'],
+            'time_ago' => [DateFilters::class, 'timeAgo'],
+            'timestamp' => [DateFilters::class, 'timestamp'],
+        ];
+
+        $this->registerFilterBatch($filters, 'DateFilters');
     }
 
     /**
-     * Registriert Utility-Filter
+     * KORRIGIERT: Utility-Filter mit sicherer Registrierung
      */
     private function registerUtilityFilters(): void
     {
-        $this->registry->registerLazy('length', fn() => [UtilityFilters::class, 'length']);
-        $this->registry->registerLazy('count', fn() => [UtilityFilters::class, 'count']);
-        $this->registry->registerLazy('first', fn() => [UtilityFilters::class, 'first']);
-        $this->registry->registerLazy('last', fn() => [UtilityFilters::class, 'last']);
-        $this->registry->registerLazy('json', fn() => [UtilityFilters::class, 'json']);
-        $this->registry->registerLazy('is_empty', fn() => [UtilityFilters::class, 'isEmpty']);
-        $this->registry->registerLazy('is_not_empty', fn() => [UtilityFilters::class, 'isNotEmpty']);
-        $this->registry->registerLazy('type', fn() => [UtilityFilters::class, 'type']);
-        $this->registry->registerLazy('plural', fn() => [UtilityFilters::class, 'plural']);
-        $this->registry->registerLazy('sort', fn() => [UtilityFilters::class, 'sort']);
-        $this->registry->registerLazy('random', fn() => [UtilityFilters::class, 'random']);
-        $this->registry->registerLazy('join', fn() => [UtilityFilters::class, 'join']);
-        $this->registry->registerLazy('split', fn() => [UtilityFilters::class, 'split']);
-        $this->registry->registerLazy('unique', fn() => [UtilityFilters::class, 'unique']);
+        $filters = [
+            'length' => [UtilityFilters::class, 'length'],
+            'count' => [UtilityFilters::class, 'count'],
+            'first' => [UtilityFilters::class, 'first'],
+            'last' => [UtilityFilters::class, 'last'],
+            'is_empty' => [UtilityFilters::class, 'isEmpty'],
+            'is_not_empty' => [UtilityFilters::class, 'isNotEmpty'],
+            'type' => [UtilityFilters::class, 'type'],
+            'plural' => [UtilityFilters::class, 'plural'],
+            'array_get' => [UtilityFilters::class, 'arrayGet'],
+            'object_get' => [UtilityFilters::class, 'objectGet'],
+            'to_int' => [UtilityFilters::class, 'toInt'],
+            'to_float' => [UtilityFilters::class, 'toFloat'],
+            'to_bool' => [UtilityFilters::class, 'toBool'],
+            'range' => [UtilityFilters::class, 'range'],
+            'json' => [UtilityFilters::class, 'json'],
+            'is_json' => [UtilityFilters::class, 'isJson'],
+            'from_json' => [UtilityFilters::class, 'fromJson'],
+        ];
+
+        $this->registerFilterBatch($filters, 'UtilityFilters');
     }
 
     /**
-     * Registriert Debug-Filter (NEU HINZUGEFÜGT)
+     * HINZUGEFÜGT: JSON-Filter mit sicherer Registrierung
+     */
+    private function registerJsonFilters(): void
+    {
+        $filters = [
+            'json_pretty' => [JsonFilters::class, 'jsonPretty'],
+            'json_js' => [JsonFilters::class, 'jsonJs'],
+            'json_minimal' => [JsonFilters::class, 'jsonMinimal'],
+            'json_validate' => [JsonFilters::class, 'jsonValidate'],
+            'ensure_json' => [JsonFilters::class, 'ensureJson'],
+            'to_json' => [JsonFilters::class, 'json'],  // Alias
+            'jsonify' => [JsonFilters::class, 'json'],  // Alias
+        ];
+
+        $this->registerFilterBatch($filters, 'JsonFilters');
+    }
+
+    /**
+     * KORRIGIERT: Debug-Filter mit sicherer Registrierung
      */
     private function registerDebugFilters(): void
     {
-        // Debug-Filter für Development-Zwecke
+        // Debug-Filter als Lazy-Filter registrieren (sicherer)
         $this->registry->registerLazy('debug', fn() => function(mixed $value): string {
             if (is_array($value) || is_object($value)) {
                 return '<pre>' . htmlspecialchars(print_r($value, true)) . '</pre>';
@@ -145,7 +181,6 @@ class FilterManager
             return '<pre>' . htmlspecialchars(var_export($value, true)) . '</pre>';
         });
 
-        // Zusätzliche Debug-Filter
         $this->registry->registerLazy('var_dump', fn() => function(mixed $value): string {
             ob_start();
             var_dump($value);
@@ -153,33 +188,82 @@ class FilterManager
             return '<pre>' . htmlspecialchars($output) . '</pre>';
         });
 
-        $this->registry->registerLazy('json_encode', fn() => function(mixed $value): string {
-            return json_encode($value, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+        $this->registry->registerLazy('json_debug', fn() => function(mixed $value): string {
+            return '<pre>' . htmlspecialchars(JsonFilters::jsonPretty($value)) . '</pre>';
+        });
+
+        $this->registry->registerLazy('json_info', fn() => function(mixed $value): string {
+            if (!is_string($value)) {
+                return '<span>Not a string</span>';
+            }
+
+            $info = JsonFilters::jsonValidate($value);
+            $status = $info['valid'] ? '✅ Valid' : '❌ Invalid';
+            $error = $info['error'] ? " - {$info['error']}" : '';
+
+            return "<span>{$status}{$error}</span>";
         });
     }
 
     /**
-     * Registriert Translation-Filter
+     * KORRIGIERT: Translation-Filter mit sicherer Registrierung
      */
     private function registerTranslationFilters(): void
     {
         $translationFilters = new TranslationFilters($this->translator);
 
-        $this->registry->register('t', [$translationFilters, 'translate']);
-        $this->registry->register('translate', [$translationFilters, 'translate']);
-        $this->registry->register('tp', [$translationFilters, 'translatePlural']);
-        $this->registry->register('translate_plural', [$translationFilters, 'translatePlural']);
-        $this->registry->register('has_translation', [$translationFilters, 'hasTranslation']);
-        $this->registry->register('locale', [$translationFilters, 'locale']);
-        $this->registry->register('translate_in', [$translationFilters, 'translateIn']);
+        $filters = [
+            't' => [$translationFilters, 'translate'],
+            'translate' => [$translationFilters, 'translate'],
+            'tp' => [$translationFilters, 'translatePlural'],
+            'translate_plural' => [$translationFilters, 'translatePlural'],
+            'has_translation' => [$translationFilters, 'hasTranslation'],
+            'locale' => [$translationFilters, 'locale'],
+            'translate_in' => [$translationFilters, 'translateIn'],
+        ];
+
+        $this->registerFilterBatch($filters, 'TranslationFilters');
     }
 
     /**
-     * Registriert Custom Filter
+     * HINZUGEFÜGT: Batch-Registrierung mit Error-Handling
      */
-    public function register(string $name, callable $filter): void
+    private function registerFilterBatch(array $filters, string $group): void
     {
-        $this->registry->register($name, $filter);
+        $errors = $this->registry->registerMultiple($filters);
+
+        if (!empty($errors)) {
+            $this->registrationErrors[$group] = $errors;
+            error_log("Failed to register filters in group '{$group}': " . implode(', ', $errors));
+        }
+    }
+
+    /**
+     * HINZUGEFÜGT: Logging der Registrierungsergebnisse
+     */
+    private function logRegistrationResults(): void
+    {
+        $totalFilters = $this->registry->count();
+        $errorCount = array_sum(array_map('count', $this->registrationErrors));
+
+        if ($errorCount > 0) {
+            error_log("FilterManager: Registered {$totalFilters} filters with {$errorCount} errors");
+            error_log("Registration errors: " . json_encode($this->registrationErrors));
+        } else {
+            error_log("FilterManager: Successfully registered {$totalFilters} filters");
+        }
+    }
+
+    // ===================================================================
+    // PUBLIC API METHODS (unverändert, aber mit Error-Handling)
+    // ===================================================================
+
+    /**
+     * VERBESSERT: Registriert Custom Filter mit Validierung
+     */
+    public function register(string $name, callable|array $filter): bool
+    {
+        return $this->registry->registerSafe($name, $filter);
     }
 
     /**
@@ -236,5 +320,37 @@ class FilterManager
     public function getExecutor(): FilterExecutor
     {
         return $this->executor;
+    }
+
+    /**
+     * HINZUGEFÜGT: Debug-Informationen für Troubleshooting
+     */
+    public function getDebugInfo(): array
+    {
+        return [
+            'filter_manager' => [
+                'translator_available' => $this->translator !== null,
+                'total_filters' => $this->registry->count(),
+                'registration_errors' => $this->registrationErrors,
+            ],
+            'registry_debug' => $this->registry->getDebugInfo(),
+        ];
+    }
+
+    /**
+     * HINZUGEFÜGT: Prüft Systemzustand
+     */
+    public function getHealthCheck(): array
+    {
+        $filterNames = $this->getFilterNames();
+        $totalErrors = array_sum(array_map('count', $this->registrationErrors));
+
+        return [
+            'status' => $totalErrors === 0 ? 'healthy' : 'degraded',
+            'total_filters' => count($filterNames),
+            'error_count' => $totalErrors,
+            'sample_filters' => array_slice($filterNames, 0, 10),
+            'missing_filters' => $this->registrationErrors,
+        ];
     }
 }

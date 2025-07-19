@@ -5,12 +5,15 @@ namespace Framework\Http;
 
 use Framework\Templating\TemplateEngine;
 use Framework\Templating\ViewRenderer;
+use Framework\Templating\Utils\JsonUtility;
 use InvalidArgumentException;
 use JsonException;
 use Throwable;
 
 /**
- * ResponseFactory - Factory für Response-Objekte mit PHP 8.4 Features
+ * ResponseFactory - Modernisiert mit JsonUtility Integration
+ *
+ * UPDATED: Erweiterte JSON-Response-Funktionalität und Template-Integration
  */
 readonly class ResponseFactory
 {
@@ -22,7 +25,7 @@ readonly class ResponseFactory
     }
 
     // ===================================================================
-    // Standard Response Methods
+    // STANDARD RESPONSE METHODS (bestehend)
     // ===================================================================
 
     public function response(string $body = '', HttpStatus $status = HttpStatus::OK, array $headers = []): Response
@@ -48,7 +51,7 @@ readonly class ResponseFactory
     {
         return new Response(
             $status,
-            [...$headers, 'Content-Type' => 'text/html; charset=UTF-8'], // MODERNISIERT
+            [...$headers, 'Content-Type' => 'text/html; charset=UTF-8'],
             $content
         );
     }
@@ -59,241 +62,402 @@ readonly class ResponseFactory
     }
 
     // ===================================================================
-    // Success Responses
+    // MODERNISIERTE JSON RESPONSE METHODS
     // ===================================================================
 
-    public function created(string $body = 'Created', array $headers = []): Response
+    /**
+     * MODERNISIERT: Standard JSON Response mit JsonUtility (keine Duplikate)
+     */
+    public function json(
+        array|object $data,
+        HttpStatus   $status = HttpStatus::OK,
+        array        $headers = [],
+        int          $flags = JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR
+    ): Response
     {
-        return new Response(HttpStatus::CREATED, $headers, $body);
+        try {
+            $json = JsonUtility::encode($data, $flags);
+            return new Response(
+                $status,
+                [...$headers, 'Content-Type' => 'application/json; charset=utf-8'],
+                $json
+            );
+        } catch (JsonException $e) {
+            throw new InvalidArgumentException('Failed to encode JSON: ' . $e->getMessage(), previous: $e);
+        }
     }
 
-    public function noContent(array $headers = []): Response
+    /**
+     * HINZUGEFÜGT: Pretty JSON für Debug/Development
+     */
+    public function jsonPretty(array|object $data, HttpStatus $status = HttpStatus::OK): Response
     {
-        return new Response(HttpStatus::NO_CONTENT, $headers);
+        try {
+            $json = JsonUtility::prettyEncode($data);
+            return new Response(
+                $status,
+                ['Content-Type' => 'application/json; charset=utf-8'],
+                $json
+            );
+        } catch (JsonException $e) {
+            throw new InvalidArgumentException('Failed to encode pretty JSON: ' . $e->getMessage(), previous: $e);
+        }
     }
 
-    public function permanentRedirect(string $url): Response
+    /**
+     * HINZUGEFÜGT: API-Standard Response Format
+     */
+    public function apiResponse(
+        mixed      $data = null,
+        string     $message = '',
+        HttpStatus $status = HttpStatus::OK,
+        array      $meta = []
+    ): Response
     {
-        return $this->redirect($url, HttpStatus::MOVED_PERMANENTLY);
+        $response = [
+            'success' => $status->isSuccessful(),
+            'status' => $status->value,
+        ];
+
+        if ($message) {
+            $response['message'] = $message;
+        }
+
+        if ($data !== null) {
+            $response['data'] = $data;
+        }
+
+        if (!empty($meta)) {
+            $response['meta'] = $meta;
+        }
+
+        return $this->json($response, $status);
+    }
+
+    /**
+     * HINZUGEFÜGT: Success Responses
+     */
+    public function success(mixed $data = null, string $message = 'Success'): Response
+    {
+        return $this->apiResponse($data, $message, HttpStatus::OK);
+    }
+
+    public function created(mixed $data = null, string $message = 'Created'): Response
+    {
+        return $this->apiResponse($data, $message, HttpStatus::CREATED);
+    }
+
+    public function accepted(mixed $data = null, string $message = 'Accepted'): Response
+    {
+        return $this->apiResponse($data, $message, HttpStatus::ACCEPTED);
+    }
+
+    public function noContent(): Response
+    {
+        return new Response(HttpStatus::NO_CONTENT);
     }
 
     // ===================================================================
-    // Redirect Responses - MODERNISIERT
+    // ERROR RESPONSE METHODS (erweitert)
+    // ===================================================================
+
+    /**
+     * MODERNISIERT: Error Response mit JsonUtility
+     */
+    public function error(
+        string     $message,
+        HttpStatus $status = HttpStatus::BAD_REQUEST,
+        array      $errors = [],
+        mixed      $code = null
+    ): Response
+    {
+        $response = [
+            'success' => false,
+            'error' => $message,
+            'status' => $status->value
+        ];
+
+        if (!empty($errors)) {
+            $response['errors'] = $errors;
+        }
+
+        if ($code !== null) {
+            $response['code'] = $code;
+        }
+
+        return $this->json($response, $status);
+    }
+
+    public function badRequest(string $message = 'Bad Request', array $errors = []): Response
+    {
+        return $this->error($message, HttpStatus::BAD_REQUEST, $errors, 'BAD_REQUEST');
+    }
+
+    public function unauthorized(string $message = 'Unauthorized'): Response
+    {
+        return $this->error($message, HttpStatus::UNAUTHORIZED, [], 'UNAUTHORIZED');
+    }
+
+    public function forbidden(string $message = 'Forbidden'): Response
+    {
+        return $this->error($message, HttpStatus::FORBIDDEN, [], 'FORBIDDEN');
+    }
+
+    public function notFound(string $message = 'Resource not found'): Response
+    {
+        return $this->error($message, HttpStatus::NOT_FOUND, [], 'NOT_FOUND');
+    }
+
+    public function methodNotAllowed(string $message = 'Method not allowed'): Response
+    {
+        return $this->error($message, HttpStatus::METHOD_NOT_ALLOWED, [], 'METHOD_NOT_ALLOWED');
+    }
+
+    public function unprocessableEntity(string $message = 'Validation failed', array $errors = []): Response
+    {
+        return $this->error($message, HttpStatus::UNPROCESSABLE_ENTITY, $errors, 'VALIDATION_ERROR');
+    }
+
+    public function internalServerError(string $message = 'Internal server error'): Response
+    {
+        return $this->error($message, HttpStatus::INTERNAL_SERVER_ERROR, [], 'INTERNAL_ERROR');
+    }
+
+    // ===================================================================
+    // VALIDATION & FORM RESPONSES
+    // ===================================================================
+
+    /**
+     * HINZUGEFÜGT: Validation Error Response
+     */
+    public function validationError(array $errors, string $message = 'Validation failed'): Response
+    {
+        return $this->unprocessableEntity($message, $errors);
+    }
+
+    /**
+     * HINZUGEFÜGT: Form Response (HTML oder JSON basierend auf Request)
+     */
+    public function formResponse(
+        Request    $request,
+        string     $template,
+        array      $data = [],
+        array      $errors = [],
+        HttpStatus $status = HttpStatus::OK
+    ): Response
+    {
+        if ($request->expectsJson()) {
+            if (!empty($errors)) {
+                return $this->validationError($errors);
+            }
+            return $this->apiResponse($data, '', $status);
+        }
+
+        // HTML Response
+        $templateData = [
+            ...$data,
+            'errors' => $errors,
+            'old_input' => $request->all()
+        ];
+
+        return $this->view($template, $templateData, $status);
+    }
+
+    // ===================================================================
+    // REDIRECT RESPONSES
     // ===================================================================
 
     public function redirect(string $url, HttpStatus $status = HttpStatus::FOUND): Response
     {
-        if (!$status->isRedirect()) {
-            throw new InvalidArgumentException(
-                "Status code {$status->value} is not a redirect status"
-            );
-        }
-
         return new Response($status, ['Location' => $url]);
     }
 
-    public function temporaryRedirect(string $url): Response
+    public function redirectBack(Request $request, string $fallback = '/'): Response
     {
-        return $this->redirect($url, HttpStatus::TEMPORARY_REDIRECT);
+        $referer = $request->getReferer() ?? $fallback;
+        return $this->redirect($referer);
     }
 
     /**
-     * NEU: Redirect mit Flash Message Support
+     * HINZUGEFÜGT: Redirect mit Flash-Messages (für Session-basierte Apps)
      */
-    public function redirectWithMessage(string $url, string $message, string $type = 'info'): Response
+    public function redirectWithMessage(
+        string $url,
+        string $message,
+        string $type = 'success'
+    ): Response
     {
-        // Hier könnte Session-Flash Integration hinzugefügt werden
+        // TODO: Session Flash implementierung hinzufügen wenn Session-System verfügbar
         return $this->redirect($url);
     }
 
-    public function badRequest(string $body = 'Bad Request', array $headers = []): Response
-    {
-        return new Response(HttpStatus::BAD_REQUEST, $headers, $body);
-    }
-
     // ===================================================================
-    // Error Responses - ERWEITERT
+    // FILE & DOWNLOAD RESPONSES
     // ===================================================================
 
-    public function unauthorized(string $body = 'Unauthorized', array $headers = []): Response
-    {
-        return new Response(HttpStatus::UNAUTHORIZED, $headers, $body);
-    }
-
-    public function forbidden(string $body = 'Forbidden', array $headers = []): Response
-    {
-        return new Response(HttpStatus::FORBIDDEN, $headers, $body);
-    }
-
-    public function notFound(string $body = 'Not Found', array $headers = []): Response
-    {
-        return new Response(HttpStatus::NOT_FOUND, $headers, $body);
-    }
-
-    public function methodNotAllowed(string $body = 'Method Not Allowed', array $headers = []): Response
-    {
-        return new Response(HttpStatus::METHOD_NOT_ALLOWED, $headers, $body);
-    }
-
-    public function unprocessableEntity(string $body = 'Unprocessable Entity', array $headers = []): Response
-    {
-        return new Response(HttpStatus::UNPROCESSABLE_ENTITY, $headers, $body);
-    }
-
-    /**
-     * NEU: Too Many Requests Response
-     */
-    public function tooManyRequests(string $body = 'Too Many Requests', array $headers = []): Response
-    {
-        return new Response(HttpStatus::TOO_MANY_REQUESTS, $headers, $body);
-    }
-
-    public function serverError(string $body = 'Internal Server Error', array $headers = []): Response
-    {
-        return new Response(HttpStatus::INTERNAL_SERVER_ERROR, $headers, $body);
-    }
-
-    /**
-     * NEU: Service Unavailable Response
-     */
-    public function serviceUnavailable(string $body = 'Service Unavailable', array $headers = []): Response
-    {
-        return new Response(HttpStatus::SERVICE_UNAVAILABLE, $headers, $body);
-    }
-
-    /**
-     * NEU: File Download Response
-     */
     public function download(
         string $content,
         string $filename,
         string $contentType = 'application/octet-stream'
     ): Response
     {
-        return new Response(HttpStatus::OK, [
-            'Content-Type' => $contentType,
-            'Content-Disposition' => 'attachment; filename="' . addslashes($filename) . '"',
-            'Content-Length' => (string)strlen($content),
-            'Cache-Control' => 'no-cache, no-store, must-revalidate',
-            'Pragma' => 'no-cache',
-            'Expires' => '0',
-        ], $content);
-    }
-
-    // ===================================================================
-    // Special Responses - NEU
-    // ===================================================================
-
-    /**
-     * NEU: Stream Response für große Dateien
-     */
-    public function stream(
-        callable   $callback,
-        HttpStatus $status = HttpStatus::OK,
-        array      $headers = []
-    ): Response
-    {
-        $headers = [...$headers, 'Content-Type' => 'application/octet-stream'];
-
-        ob_start();
-        $callback();
-        $content = ob_get_clean();
-
-        return new Response($status, $headers, $content ?: '');
-    }
-
-    /**
-     * NEU: XML Response
-     */
-    public function xml(string $content, HttpStatus $status = HttpStatus::OK, array $headers = []): Response
-    {
         return new Response(
-            $status,
-            [...$headers, 'Content-Type' => 'application/xml; charset=UTF-8'],
+            HttpStatus::OK,
+            [
+                'Content-Type' => $contentType,
+                'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+                'Content-Length' => (string)strlen($content),
+                'Cache-Control' => 'must-revalidate',
+                'Pragma' => 'public',
+            ],
             $content
         );
     }
 
     /**
-     * NEU: Plain Text Response
+     * HINZUGEFÜGT: JSON-File Download
      */
-    public function text(string $content, HttpStatus $status = HttpStatus::OK, array $headers = []): Response
+    public function jsonDownload(array|object $data, string $filename = 'data.json'): Response
     {
-        return new Response(
-            $status,
-            [...$headers, 'Content-Type' => 'text/plain; charset=UTF-8'],
-            $content
-        );
+        $json = JsonUtility::prettyEncode($data);
+        return $this->download($json, $filename, 'application/json');
     }
 
+    // ===================================================================
+    // API-SPECIFIC RESPONSES
+    // ===================================================================
+
     /**
-     * NEU: API Error Response mit standardisiertem Format
+     * HINZUGEFÜGT: Paginated API Response
      */
-    public function apiError(
-        string     $message,
-        HttpStatus $status = HttpStatus::BAD_REQUEST,
-        array      $errors = [],
-        ?string    $code = null
+    public function paginated(
+        array  $items,
+        int    $total,
+        int    $page,
+        int    $perPage,
+        string $message = ''
     ): Response
     {
-        $data = [
-            'success' => false,
-            'message' => $message,
-            'status' => $status->value,
+        $totalPages = (int)ceil($total / $perPage);
+
+        $meta = [
+            'pagination' => [
+                'total' => $total,
+                'per_page' => $perPage,
+                'current_page' => $page,
+                'total_pages' => $totalPages,
+                'from' => ($page - 1) * $perPage + 1,
+                'to' => min($page * $perPage, $total),
+                'has_more' => $page < $totalPages
+            ]
         ];
 
-        if (!empty($errors)) {
-            $data['errors'] = $errors;
-        }
-
-        if ($code !== null) {
-            $data['code'] = $code;
-        }
-
-        return $this->json($data, $status);
+        return $this->apiResponse($items, $message, HttpStatus::OK, $meta);
     }
 
     /**
-     * MODERNISIERT: JSON Response mit besserer Fehlerbehandlung
+     * HINZUGEFÜGT: API Resource Response
      */
-    public function json(
-        mixed      $data,
-        HttpStatus $status = HttpStatus::OK,
-        array      $headers = [],
-        int        $flags = JSON_THROW_ON_ERROR
-    ): Response
+    public function resource(mixed $resource, string $type = 'resource'): Response
     {
-        try {
-            $json = json_encode($data, $flags);
-            return new Response(
-                $status,
-                [...$headers, 'Content-Type' => 'application/json'], // MODERNISIERT
-                $json
-            );
-        } catch (JsonException $e) {
-            throw new InvalidArgumentException('Failed to encode JSON: ' . $e->getMessage());
-        }
+        return $this->apiResponse($resource, '', HttpStatus::OK, ['type' => $type]);
     }
 
     /**
-     * NEU: API Success Response mit standardisiertem Format
+     * HINZUGEFÜGT: API Collection Response
      */
-    public function apiSuccess(
-        mixed      $data = null,
-        string     $message = 'Success',
+    public function collection(array $items, string $type = 'collection'): Response
+    {
+        return $this->apiResponse($items, '', HttpStatus::OK, [
+            'type' => $type,
+            'count' => count($items)
+        ]);
+    }
+
+    // ===================================================================
+    // TEMPLATE-SPECIFIC METHODS
+    // ===================================================================
+
+    /**
+     * HINZUGEFÜGT: Template mit JSON-Daten für JavaScript
+     */
+    public function viewWithJson(
+        string     $template,
+        array      $data = [],
+        array      $jsonData = [],
         HttpStatus $status = HttpStatus::OK
     ): Response
     {
-        $response = [
-            'success' => true,
-            'message' => $message,
-            'status' => $status->value,
-        ];
-
-        if ($data !== null) {
-            $response['data'] = $data;
+        // JSON-Daten für JavaScript-Integration vorbereiten
+        $processedJsonData = [];
+        foreach ($jsonData as $key => $value) {
+            $processedJsonData[$key] = JsonUtility::encodeForJavaScript($value);
         }
 
-        return $this->json($response, $status);
+        $templateData = [
+            ...$data,
+            'json_data' => $processedJsonData
+        ];
+
+        return $this->view($template, $templateData, $status);
+    }
+
+    /**
+     * HINZUGEFÜGT: Debug-Template für Development
+     */
+    public function debug(array $data, string $title = 'Debug Information'): Response
+    {
+        $debugData = [
+            'title' => $title,
+            'data' => $data,
+            'json_data' => JsonUtility::prettyEncode($data),
+            'debug_info' => [
+                'timestamp' => date('Y-m-d H:i:s'),
+                'memory_usage' => memory_get_usage(true),
+                'execution_time' => microtime(true) - $_SERVER['REQUEST_TIME_FLOAT']
+            ]
+        ];
+
+        return $this->json($debugData);
+    }
+
+    // ===================================================================
+    // CONDITIONAL RESPONSES
+    // ===================================================================
+
+    /**
+     * HINZUGEFÜGT: Conditional Response basierend auf Request-Type
+     */
+    public function conditional(
+        Request    $request,
+        string     $template,
+        array      $data,
+        HttpStatus $status = HttpStatus::OK
+    ): Response
+    {
+        if ($request->expectsJson()) {
+            return $this->apiResponse($data, '', $status);
+        }
+
+        return $this->view($template, $data, $status);
+    }
+
+    /**
+     * HINZUGEFÜGT: CORS-enabled JSON Response
+     */
+    public function jsonWithCors(
+        array|object $data,
+        HttpStatus   $status = HttpStatus::OK,
+        array        $corsOptions = []
+    ): Response
+    {
+        $defaults = [
+            'Access-Control-Allow-Origin' => '*',
+            'Access-Control-Allow-Methods' => 'GET, POST, PUT, DELETE, OPTIONS',
+            'Access-Control-Allow-Headers' => 'Content-Type, Authorization, X-Requested-With',
+        ];
+
+        $headers = [...$defaults, ...$corsOptions];
+        return $this->json($data, $status, $headers);
     }
 }

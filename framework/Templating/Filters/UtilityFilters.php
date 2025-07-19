@@ -1,12 +1,14 @@
 <?php
-
 declare(strict_types=1);
 
 namespace Framework\Templating\Filters;
 
+use Framework\Templating\Utils\JsonUtility;
+
 /**
- * UtilityFilters - Utility/Helper Filter
+ * UtilityFilters - Modernisierte Utility/Helper Filter
  *
+ * UPDATED: Nutzt JsonUtility für moderne JSON-Verarbeitung
  * Alle Filter sind NULL-safe
  */
 class UtilityFilters
@@ -76,16 +78,35 @@ class UtilityFilters
     }
 
     /**
-     * Konvertiert zu JSON
+     * MODERNISIERT: JSON-Konvertierung mit JsonUtility
      */
-    public static function json(mixed $value, int $flags = JSON_UNESCAPED_UNICODE): string
+    public static function json(mixed $value, bool $prettyPrint = false): string
     {
-        if ($value === null) {
-            return 'null';
+        return JsonUtility::forTemplate($value, $prettyPrint);
+    }
+
+    /**
+     * HINZUGEFÜGT: JSON-Validierung
+     */
+    public static function isJson(mixed $value): bool
+    {
+        if (!is_string($value)) {
+            return false;
         }
 
-        $json = json_encode($value, $flags);
-        return $json !== false ? $json : 'null';
+        return JsonUtility::isValid($value);
+    }
+
+    /**
+     * HINZUGEFÜGT: JSON zu Array/Object
+     */
+    public static function fromJson(mixed $value, mixed $fallback = []): mixed
+    {
+        if (!is_string($value)) {
+            return $fallback;
+        }
+
+        return JsonUtility::safedecode($value, $fallback);
     }
 
     /**
@@ -113,7 +134,7 @@ class UtilityFilters
     }
 
     /**
-     * Pluralisierung (einfache deutsche Regel)
+     * ERWEITERT: Pluralisierung mit besserer deutscher Grammatik
      */
     public static function plural(mixed $value, mixed $count, string $pluralSuffix = 'e'): string
     {
@@ -128,112 +149,100 @@ class UtilityFilters
             return $singular;
         }
 
-        // Einfache deutsche Pluralregeln
-        if (str_ends_with($singular, 'e')) {
-            return $singular . 'n';
-        }
-
-        if (str_ends_with($singular, 'er')) {
-            return $singular;
-        }
-
-        if (str_ends_with($singular, 'el')) {
-            return $singular;
-        }
-
-        return $singular . $pluralSuffix;
+        // Verbesserte deutsche Pluralregeln
+        return match (true) {
+            str_ends_with($singular, 'e') => $singular . 'n',
+            str_ends_with($singular, 'er') => $singular,
+            str_ends_with($singular, 'el') => $singular,
+            str_ends_with($singular, 's') => $singular,
+            str_ends_with($singular, 'x') => $singular,
+            str_ends_with($singular, 'z') => $singular,
+            default => $singular . $pluralSuffix
+        };
     }
 
     /**
-     * Sortiert Array
+     * HINZUGEFÜGT: Sicherer Array-Zugriff
      */
-    public static function sort(mixed $value, bool $reverse = false): array
+    public static function arrayGet(mixed $array, string $key, mixed $default = null): mixed
     {
-        if (!is_array($value)) {
-            return [];
+        if (!is_array($array)) {
+            return $default;
         }
 
-        $sorted = $value;
-
-        if ($reverse) {
-            rsort($sorted);
-        } else {
-            sort($sorted);
-        }
-
-        return $sorted;
+        return $array[$key] ?? $default;
     }
 
     /**
-     * Gibt zufälliges Element zurück
+     * HINZUGEFÜGT: Objekt-Property-Zugriff
      */
-    public static function random(mixed $value): mixed
+    public static function objectGet(mixed $object, string $property, mixed $default = null): mixed
+    {
+        if (!is_object($object)) {
+            return $default;
+        }
+
+        return $object->$property ?? $default;
+    }
+
+    /**
+     * HINZUGEFÜGT: Type-safe Casting
+     */
+    public static function toInt(mixed $value, int $default = 0): int
     {
         if ($value === null) {
-            return null;
+            return $default;
         }
 
-        if (is_array($value)) {
-            if (empty($value)) {
-                return null;
-            }
-            return $value[array_rand($value)];
+        if (is_numeric($value)) {
+            return (int)$value;
         }
 
+        return $default;
+    }
+
+    /**
+     * HINZUGEFÜGT: Type-safe Float-Casting
+     */
+    public static function toFloat(mixed $value, float $default = 0.0): float
+    {
+        if ($value === null) {
+            return $default;
+        }
+
+        if (is_numeric($value)) {
+            return (float)$value;
+        }
+
+        return $default;
+    }
+
+    /**
+     * HINZUGEFÜGT: Type-safe Boolean-Casting
+     */
+    public static function toBool(mixed $value): bool
+    {
+        if ($value === null) {
+            return false;
+        }
+
+        // Spezielle String-Behandlung für Templates
         if (is_string($value)) {
-            $length = mb_strlen($value);
-            if ($length === 0) {
-                return '';
-            }
-            return mb_substr($value, random_int(0, $length - 1), 1);
+            return !in_array(strtolower($value), ['false', '0', '', 'no', 'off', 'null']);
         }
 
-        return $value;
+        return (bool)$value;
     }
 
     /**
-     * Verbindet Array-Elemente mit Separator
+     * HINZUGEFÜGT: Range-Funktion für Templates
      */
-    public static function join(mixed $value, string $separator = ', '): string
+    public static function range(int $start, int $end, int $step = 1): array
     {
-        if ($value === null) {
-            return '';
-        }
-
-        if (is_array($value)) {
-            return implode($separator, $value);
-        }
-
-        return (string)$value;
-    }
-
-    /**
-     * Teilt String in Array auf
-     */
-    public static function split(mixed $value, string $separator = ','): array
-    {
-        if ($value === null) {
+        if ($step <= 0) {
             return [];
         }
 
-        $stringValue = (string)$value;
-
-        if ($stringValue === '') {
-            return [];
-        }
-
-        return explode($separator, $stringValue);
-    }
-
-    /**
-     * Entfernt Duplikate aus Array
-     */
-    public static function unique(mixed $value): array
-    {
-        if (!is_array($value)) {
-            return [];
-        }
-
-        return array_unique($value);
+        return range($start, $end, $step);
     }
 }

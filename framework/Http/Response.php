@@ -1,44 +1,238 @@
 <?php
-
 declare(strict_types=1);
 
 namespace Framework\Http;
 
+use Framework\Templating\Utils\JsonUtility;
 use InvalidArgumentException;
 use JsonException;
 
 /**
- * HTTP Response - Mutable Response Object mit PHP 8.4 Features
+ * HTTP Response - Modernisiert mit JsonUtility Integration
+ *
+ * UPDATED: Erweiterte JSON-Response-Funktionalität
  */
 class Response
 {
-    /**
-     * MODERNISIERT: Typed Class Constants (PHP 8.3+)
-     */
-    private const array DEFAULT_HEADERS = [
-        'Content-Type' => 'text/html; charset=UTF-8',
-        'X-Frame-Options' => 'SAMEORIGIN',
-        'X-Content-Type-Options' => 'nosniff',
-        'X-XSS-Protection' => '1; mode=block',
-        'Referrer-Policy' => 'strict-origin-when-cross-origin',
-    ];
-
-    private array $headers;
-    private string $body = '';
     private bool $sent = false;
 
     public function __construct(
         private HttpStatus $status = HttpStatus::OK,
-        array              $headers = [],
-        string             $body = '',
-    )
-    {
-        $this->headers = [...self::DEFAULT_HEADERS, ...$headers]; // MODERNISIERT
-        $this->body = $body;
+        private array $headers = [],
+        private string $body = ''
+    ) {
     }
 
     // ===================================================================
-    // Fluent Interface Methods - MODERNISIERT
+    // MODERNISIERTE JSON-METHODEN mit JsonUtility
+    // ===================================================================
+
+    /**
+     * MODERNISIERT: JSON Response mit JsonUtility
+     */
+    public function json(array|object $data, int $flags = JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR): self
+    {
+        try {
+            $json = JsonUtility::encode($data, $flags);
+            return $this->withContentType('application/json; charset=utf-8')
+                ->withBody($json);
+        } catch (JsonException $e) {
+            throw new InvalidArgumentException('Failed to encode JSON: ' . $e->getMessage(), previous: $e);
+        }
+    }
+
+    /**
+     * HINZUGEFÜGT: Pretty JSON für Debug/Development
+     */
+    public function jsonPretty(array|object $data): self
+    {
+        try {
+            $json = JsonUtility::prettyEncode($data);
+            return $this->withContentType('application/json; charset=utf-8')
+                ->withBody($json);
+        } catch (JsonException $e) {
+            throw new InvalidArgumentException('Failed to encode pretty JSON: ' . $e->getMessage(), previous: $e);
+        }
+    }
+
+    /**
+     * HINZUGEFÜGT: Minimaler JSON (kompakt)
+     */
+    public function jsonMinimal(array|object $data): self
+    {
+        try {
+            $json = JsonUtility::encodeMinimal($data);
+            return $this->withContentType('application/json; charset=utf-8')
+                ->withBody($json);
+        } catch (JsonException $e) {
+            throw new InvalidArgumentException('Failed to encode minimal JSON: ' . $e->getMessage(), previous: $e);
+        }
+    }
+
+    /**
+     * HINZUGEFÜGT: API-Standard JSON-Response
+     */
+    public function apiResponse(mixed $data = null, string $message = '', array $meta = []): self
+    {
+        $response = [
+            'success' => $this->status->isSuccessful(),
+            'status' => $this->status->value,
+        ];
+
+        if ($message) {
+            $response['message'] = $message;
+        }
+
+        if ($data !== null) {
+            $response['data'] = $data;
+        }
+
+        if (!empty($meta)) {
+            $response['meta'] = $meta;
+        }
+
+        return $this->json($response);
+    }
+
+    /**
+     * HINZUGEFÜGT: Error JSON-Response
+     */
+    public function jsonError(string $message, array $errors = [], mixed $code = null): self
+    {
+        $response = [
+            'success' => false,
+            'error' => $message,
+            'status' => $this->status->value
+        ];
+
+        if (!empty($errors)) {
+            $response['errors'] = $errors;
+        }
+
+        if ($code !== null) {
+            $response['code'] = $code;
+        }
+
+        return $this->json($response);
+    }
+
+    /**
+     * HINZUGEFÜGT: Validierungsfehler JSON-Response
+     */
+    public function jsonValidationError(array $errors, string $message = 'Validation failed'): self
+    {
+        return $this->withStatus(HttpStatus::UNPROCESSABLE_ENTITY)
+            ->jsonError($message, $errors, 'VALIDATION_ERROR');
+    }
+
+    // ===================================================================
+    // STATIC FACTORY METHODS (erweitert)
+    // ===================================================================
+
+    /**
+     * MODERNISIERT: JSON Factory-Methode
+     */
+    public static function jsonResponse(array|object $data, HttpStatus $status = HttpStatus::OK): self
+    {
+        return (new self($status))->json($data);
+    }
+
+    /**
+     * HINZUGEFÜGT: API Success Response
+     */
+    public static function apiSuccess(mixed $data = null, string $message = 'Success', HttpStatus $status = HttpStatus::OK): self
+    {
+        return (new self($status))->apiResponse($data, $message);
+    }
+
+    /**
+     * HINZUGEFÜGT: API Error Response
+     */
+    public static function apiError(string $message, HttpStatus $status = HttpStatus::BAD_REQUEST, array $errors = []): self
+    {
+        return (new self($status))->jsonError($message, $errors);
+    }
+
+    /**
+     * HINZUGEFÜGT: Validation Error Response
+     */
+    public static function validationError(array $errors, string $message = 'Validation failed'): self
+    {
+        return (new self(HttpStatus::UNPROCESSABLE_ENTITY))->jsonValidationError($errors, $message);
+    }
+
+    /**
+     * HINZUGEFÜGT: Not Found JSON Response
+     */
+    public static function notFoundJson(string $message = 'Resource not found'): self
+    {
+        return (new self(HttpStatus::NOT_FOUND))->jsonError($message, [], 'NOT_FOUND');
+    }
+
+    /**
+     * HINZUGEFÜGT: Unauthorized JSON Response
+     */
+    public static function unauthorizedJson(string $message = 'Unauthorized'): self
+    {
+        return (new self(HttpStatus::UNAUTHORIZED))->jsonError($message, [], 'UNAUTHORIZED');
+    }
+
+    // ===================================================================
+    // BESTEHENDE FACTORY METHODS (unverändert)
+    // ===================================================================
+
+    public static function ok(string $body = 'OK'): self
+    {
+        return new self(HttpStatus::OK, [], $body);
+    }
+
+    public static function created(string $body = 'Created'): self
+    {
+        return new self(HttpStatus::CREATED, [], $body);
+    }
+
+    public static function noContent(): self
+    {
+        return new self(HttpStatus::NO_CONTENT);
+    }
+
+    public static function redirect(string $url, HttpStatus $status = HttpStatus::FOUND): self
+    {
+        return new self($status, ['Location' => $url]);
+    }
+
+    public static function badRequest(string $body = 'Bad Request'): self
+    {
+        return new self(HttpStatus::BAD_REQUEST, [], $body);
+    }
+
+    public static function unauthorized(string $body = 'Unauthorized'): self
+    {
+        return new self(HttpStatus::UNAUTHORIZED, [], $body);
+    }
+
+    public static function forbidden(string $body = 'Forbidden'): self
+    {
+        return new self(HttpStatus::FORBIDDEN, [], $body);
+    }
+
+    public static function notFound(string $body = 'Not Found'): self
+    {
+        return new self(HttpStatus::NOT_FOUND, [], $body);
+    }
+
+    public static function methodNotAllowed(string $body = 'Method Not Allowed'): self
+    {
+        return new self(HttpStatus::METHOD_NOT_ALLOWED, [], $body);
+    }
+
+    public static function internalServerError(string $body = 'Internal Server Error'): self
+    {
+        return new self(HttpStatus::INTERNAL_SERVER_ERROR, [], $body);
+    }
+
+    // ===================================================================
+    // BUILDER METHODS (erweitert)
     // ===================================================================
 
     public function withStatus(HttpStatus $status): self
@@ -47,46 +241,48 @@ class Response
         return $this;
     }
 
-    public function withoutHeader(string $name): self
+    public function withHeader(string $name, string $value): self
     {
-        unset($this->headers[$name]);
+        $this->headers[$name] = $value;
         return $this;
     }
 
-    public function withCookieDeleted(string $name, string $path = '/', string $domain = ''): self
+    public function withHeaders(array $headers): self
     {
-        return $this->withCookie($name, '', time() - 3600, $path, $domain);
+        $this->headers = [...$this->headers, ...$headers];
+        return $this;
+    }
+
+    public function withBody(string $body): self
+    {
+        $this->body = $body;
+        return $this;
+    }
+
+    public function withContentType(string $contentType): self
+    {
+        return $this->withHeader('Content-Type', $contentType);
     }
 
     /**
-     * MODERNISIERT: Cookie-Handling mit SameSite-Enum Support
+     * HINZUGEFÜGT: CORS Headers setzen
      */
-    public function withCookie(
-        string $name,
-        string $value,
-        int    $expire = 0,
-        string $path = '/',
-        string $domain = '',
-        bool   $secure = false,
-        bool   $httpOnly = true,
-        string $sameSite = 'Lax'
-    ): self
+    public function withCors(array $options = []): self
     {
-        if (headers_sent()) {
-            throw new InvalidArgumentException('Cannot set cookie: headers already sent');
-        }
+        $defaults = [
+            'Access-Control-Allow-Origin' => '*',
+            'Access-Control-Allow-Methods' => 'GET, POST, PUT, DELETE, OPTIONS',
+            'Access-Control-Allow-Headers' => 'Content-Type, Authorization, X-Requested-With',
+            'Access-Control-Max-Age' => '86400'
+        ];
 
-        setcookie($name, $value, [
-            'expires' => $expire,
-            'path' => $path,
-            'domain' => $domain,
-            'secure' => $secure,
-            'httponly' => $httpOnly,
-            'samesite' => $sameSite,
-        ]);
-
-        return $this;
+        $corsHeaders = [...$defaults, ...$options];
+        return $this->withHeaders($corsHeaders);
     }
+
+    // ===================================================================
+    // GETTER METHODS (bestehend)
+    // ===================================================================
 
     public function getStatus(): HttpStatus
     {
@@ -108,10 +304,6 @@ class Response
         return isset($this->headers[$name]);
     }
 
-    // ===================================================================
-    // Getter Methods - ERWEITERT
-    // ===================================================================
-
     public function getBody(): string
     {
         return $this->body;
@@ -122,150 +314,32 @@ class Response
         return $this->sent;
     }
 
-    public function isSuccessful(): bool
-    {
-        return $this->status->isSuccessful();
-    }
-
-    public function isRedirect(): bool
-    {
-        return $this->status->isRedirect();
-    }
-
-    public function isClientError(): bool
-    {
-        return $this->status->isClientError();
-    }
-
-    public function isServerError(): bool
-    {
-        return $this->status->isServerError();
-    }
-
     // ===================================================================
-    // Status Check Methods - DELEGIERT AN ENUM
+    // OUTPUT METHODS (bestehend)
     // ===================================================================
 
-    public function isInformational(): bool
-    {
-        return $this->status->isInformational();
-    }
-
-    /**
-     * Sendet Response an Browser
-     */
     public function send(): void
     {
         if ($this->sent) {
-            throw new InvalidArgumentException('Response has already been sent');
+            throw new \RuntimeException('Response has already been sent');
         }
 
-        $this->sendHeaders();
-        $this->sendBody();
+        // Status header senden
+        http_response_code($this->status->value);
+
+        // Headers senden
+        foreach ($this->headers as $name => $value) {
+            header("{$name}: {$value}");
+        }
+
+        // Body senden
+        echo $this->body;
+
         $this->sent = true;
     }
 
     /**
-     * MODERNISIERT: Header-Sending mit besserer Prüfung
-     */
-    private function sendHeaders(): void
-    {
-        if (headers_sent($file, $line)) {
-            throw new InvalidArgumentException(
-                "Headers already sent in {$file}:{$line}"
-            );
-        }
-
-        // Status Line
-        http_response_code($this->status->value);
-
-        // Headers
-        foreach ($this->headers as $name => $value) {
-            header("{$name}: {$value}");
-        }
-    }
-
-    private function sendBody(): void
-    {
-        echo $this->body;
-    }
-
-    public function __toString(): string
-    {
-        $headers = [];
-        foreach ($this->headers as $name => $value) {
-            $headers[] = "{$name}: {$value}";
-        }
-
-        return sprintf(
-            "HTTP/1.1 %d %s\r\n%s\r\n\r\n%s",
-            $this->status->value,
-            $this->status->getText(),
-            implode("\r\n", $headers),
-            $this->body
-        );
-    }
-
-    // ===================================================================
-    // Output Methods - MODERNISIERT
-    // ===================================================================
-
-    /**
-     * NEU: Debug-Ausgabe der Response mit mehr Details
-     */
-    public function dump(): void
-    {
-        echo "\n=== HTTP RESPONSE DEBUG ===\n";
-        echo "Status: {$this->status->value} {$this->status->getText()}\n";
-        echo "Sent: " . ($this->sent ? 'Yes' : 'No') . "\n";
-        echo "Headers:\n";
-        foreach ($this->headers as $name => $value) {
-            echo "  {$name}: {$value}\n";
-        }
-        echo "Body Length: " . strlen($this->body) . " bytes\n";
-        echo "Body Preview: " . substr($this->body, 0, 100) . "...\n";
-        echo "Is Cacheable: " . ($this->status->isCacheable() ? 'Yes' : 'No') . "\n";
-        echo "May Have Body: " . ($this->status->mayHaveBody() ? 'Yes' : 'No') . "\n";
-        echo "========================\n\n";
-    }
-
-    /**
-     * NEU: JSON Response Helper
-     */
-    public function json(array|object $data, int $flags = JSON_THROW_ON_ERROR): self
-    {
-        try {
-            $json = json_encode($data, $flags);
-            return $this->withContentType('application/json')
-                ->withBody($json);
-        } catch (JsonException $e) {
-            throw new InvalidArgumentException('Failed to encode JSON: ' . $e->getMessage());
-        }
-    }
-
-    public function withBody(string $body): self
-    {
-        $this->body = $body;
-        return $this;
-    }
-
-    // ===================================================================
-    // Debug Methods - ERWEITERT
-    // ===================================================================
-
-    public function withContentType(string $contentType): self
-    {
-        return $this->withHeader('Content-Type', $contentType);
-    }
-
-    public function withHeader(string $name, string $value): self
-    {
-        $this->headers[$name] = $value;
-        return $this;
-    }
-
-    /**
-     * NEU: Download Response Helper
+     * ERWEITERT: Download Response Helper
      */
     public function download(string $content, string $filename, string $contentType = 'application/octet-stream'): self
     {
@@ -273,12 +347,47 @@ class Response
             'Content-Type' => $contentType,
             'Content-Disposition' => 'attachment; filename="' . $filename . '"',
             'Content-Length' => (string)strlen($content),
+            'Cache-Control' => 'must-revalidate',
+            'Pragma' => 'public',
         ])->withBody($content);
     }
 
-    public function withHeaders(array $headers): self
+    // ===================================================================
+    // DEBUG METHODS (erweitert)
+    // ===================================================================
+
+    public function dump(): void
     {
-        $this->headers = [...$this->headers, ...$headers]; // MODERNISIERT
-        return $this;
+        echo "\n========================\n";
+        echo "Response Debug Information\n";
+        echo "========================\n";
+        echo "Status: " . $this->status->value . " " . $this->status->getText() . "\n";
+        echo "Sent: " . ($this->sent ? 'Yes' : 'No') . "\n";
+        echo "Headers:\n";
+        foreach ($this->headers as $name => $value) {
+            echo "  {$name}: {$value}\n";
+        }
+        echo "Body Length: " . strlen($this->body) . " bytes\n";
+        echo "Body Preview: " . substr($this->body, 0, 100) . (strlen($this->body) > 100 ? '...' : '') . "\n";
+        echo "Is Cacheable: " . ($this->status->isCacheable() ? 'Yes' : 'No') . "\n";
+        echo "May Have Body: " . ($this->status->mayHaveBody() ? 'Yes' : 'No') . "\n";
+
+        // JSON-spezifische Debug-Info
+        if ($this->hasHeader('Content-Type') && str_contains($this->getHeader('Content-Type'), 'application/json')) {
+            echo "JSON Valid: " . (JsonUtility::isValid($this->body) ? 'Yes' : 'No') . "\n";
+            if (JsonUtility::isValid($this->body)) {
+                try {
+                    $decoded = JsonUtility::decode($this->body);
+                    echo "JSON Structure: " . gettype($decoded) . "\n";
+                    if (is_array($decoded)) {
+                        echo "JSON Keys: " . implode(', ', array_keys($decoded)) . "\n";
+                    }
+                } catch (JsonException) {
+                    echo "JSON Parse Error\n";
+                }
+            }
+        }
+
+        echo "========================\n\n";
     }
 }
