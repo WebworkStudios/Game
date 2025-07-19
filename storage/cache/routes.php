@@ -1,6 +1,6 @@
 <?php
 // Auto-generated route cache file
-// Generated: 2025-07-19 17:01:51
+// Generated: 2025-07-19 17:20:40
 
 return array (
   0 => 
