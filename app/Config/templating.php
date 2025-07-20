@@ -1,4 +1,5 @@
 <?php
+// app/Config/templating.php - FINALE OPTIMIERTE VERSION
 
 declare(strict_types=1);
 
@@ -7,7 +8,6 @@ return [
     |--------------------------------------------------------------------------
     | Template Paths
     |--------------------------------------------------------------------------
-    | Verzeichnisse in denen Templates gesucht werden
     */
     'paths' => [
         'app/Views',
@@ -15,13 +15,13 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Template Cache
+    | Template Cache - STABIL KONFIGURIERT
     |--------------------------------------------------------------------------
     */
     'cache' => [
-        'enabled' => true,
+        'enabled' => false,  // Vorerst deaktiviert für Stabilität
         'path' => 'storage/cache/views',
-        'auto_reload' => true, // Reload if template changed (dev mode)
+        'auto_reload' => true,
     ],
 
     /*
@@ -31,8 +31,8 @@ return [
     */
     'options' => [
         'auto_escape' => true,        // XSS Protection
-        'strict_variables' => false,  // Throw error on undefined variables
-        'debug' => FALSE,             // Debug mode
+        'strict_variables' => false,  // Flexible Variable Handling
+        'debug' => true,              // Debug Informationen
     ],
 
     /*
@@ -42,7 +42,7 @@ return [
     */
     'filters' => [
         'custom_filter_classes' => [
-            // 'custom_filter' => App\Filters\CustomFilterClass::class,
+            // Hier können später eigene Filter-Klassen hinzugefügt werden
         ],
     ],
 ];

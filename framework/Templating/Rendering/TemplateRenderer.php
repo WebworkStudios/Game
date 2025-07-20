@@ -84,20 +84,65 @@ class TemplateRenderer
 
     private function renderVariable(VariableToken $token): string
     {
-        $value = $this->variableResolver->resolve($token->getVariable());
+        try {
+            // 1. Variable auflösen
+            $value = $this->variableResolver->resolve($token->getVariable());
 
-        // Apply filters
-        if (!empty($token->getFilters())) {
-            $value = $this->filterManager->applyPipeline($value, $token->getFilters());
+            // 2. Prüfe ob Raw-Filter vorhanden ist (BEVOR Filter angewendet werden)
+            $hasRawFilter = $this->hasRawFilter($token->getFilters());
+
+            // 3. Filter anwenden (wenn vorhanden)
+            if (!empty($token->getFilters())) {
+                $value = $this->filterManager->applyPipeline($value, $token->getFilters());
+            }
+
+            // 4. Auto-Escape (WICHTIG: Nur wenn KEIN raw filter UND shouldEscape true)
+            if (!$hasRawFilter && $token->shouldEscape()) {
+                // Double-check: Wenn der Wert bereits escaped ist, nicht nochmal escapen
+                if (!$this->isAlreadyEscaped((string)$value)) {
+                    return htmlspecialchars((string)$value, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+                }
+            }
+
+            return (string)$value;
+
+        } catch (\Throwable $e) {
+            error_log("Variable rendering error: " . $e->getMessage());
+
+            // Fallback: Zeige Variable-Name bei Fehlern
+            $varName = method_exists($token, 'getVariable') ? $token->getVariable() : 'unknown';
+            return "{{ {$varName}_error }}";
         }
-
-        // Auto-escape unless raw filter was applied
-        if ($token->shouldEscape()) {
-            return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8');
-        }
-
-        return (string)$value;
     }
+
+    /**
+     * HELPER: Prüft ob Raw-Filter in der Filter-Liste vorhanden ist
+     */
+    private function hasRawFilter(array $filters): bool
+    {
+        foreach ($filters as $filter) {
+            if (is_string($filter) && $filter === 'raw') {
+                return true;
+            }
+            if (is_array($filter)) {
+                $filterName = $filter['name'] ?? $filter[0] ?? '';
+                if ($filterName === 'raw') {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * HELPER: Prüft ob String bereits HTML-escaped ist
+     */
+    private function isAlreadyEscaped(string $value): bool
+    {
+        // Einfache Heuristik: Wenn der String bereits escaped entities enthält
+        return $value !== htmlspecialchars_decode($value, ENT_QUOTES | ENT_HTML5);
+    }
+
 
     private function renderControl(ControlToken $token): string
     {

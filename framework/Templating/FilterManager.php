@@ -1,5 +1,4 @@
 <?php
-
 declare(strict_types=1);
 
 namespace Framework\Templating;
@@ -15,10 +14,7 @@ use Framework\Templating\Filters\TranslationFilters;
 use Framework\Templating\Filters\UtilityFilters;
 
 /**
- * FilterManager - MINIMALER FIX für bestehende Filter-Klassen
- *
- * Verwendet bestehende Filter-Klassen ohne sie zu ändern!
- * Löst nur das Array-Callable Problem.
+ * FilterManager - KRITISCHER FIX: applyPipeline Methode hinzugefügt
  */
 class FilterManager
 {
@@ -32,6 +28,71 @@ class FilterManager
         $this->executor = new FilterExecutor($this->registry);
 
         $this->registerDefaultFilters();
+    }
+
+    /**
+     * KRITISCHER FIX: applyPipeline Methode die vom TemplateRenderer erwartet wird
+     */
+    public function applyPipeline(mixed $value, array $filters): mixed
+    {
+        $result = $value;
+
+        foreach ($filters as $filter) {
+            if (is_string($filter)) {
+                // Einfacher Filter ohne Argumente: "upper"
+                $result = $this->execute($filter, $result);
+            } elseif (is_array($filter)) {
+                // Filter mit Argumenten: ["number_format", [2]]
+                $filterName = $filter['name'] ?? $filter[0] ?? '';
+                $arguments = $filter['arguments'] ?? $filter[1] ?? [];
+
+                if ($filterName) {
+                    $result = $this->execute($filterName, $result, $arguments);
+                }
+            }
+        }
+
+        return $result;
+    }
+
+    /**
+     * Einzelnen Filter ausführen
+     */
+    public function execute(string $filterName, mixed $value, array $arguments = []): mixed
+    {
+        return $this->executor->execute($filterName, $value, $arguments);
+    }
+
+    /**
+     * Prüft ob Filter existiert
+     */
+    public function has(string $name): bool
+    {
+        return $this->registry->has($name);
+    }
+
+    /**
+     * Filter registrieren
+     */
+    public function register(string $name, callable $filter): void
+    {
+        $this->registry->register($name, $filter);
+    }
+
+    /**
+     * Alle verfügbaren Filter abrufen
+     */
+    public function getAvailableFilters(): array
+    {
+        return $this->registry->getAvailableFilterNames();
+    }
+
+    /**
+     * Registry-Zugriff
+     */
+    public function getRegistry(): FilterRegistry
+    {
+        return $this->registry;
     }
 
     /**
@@ -51,112 +112,142 @@ class FilterManager
     }
 
     /**
-     * Text-Filter mit BESTEHENDEN Klassen registrieren
+     * Text-Filter registrieren
      */
     private function registerTextFilters(): void
     {
-        // Nur die Filter registrieren, die WIRKLICH existieren
-        $this->registerIfExists('upper', [TextFilters::class, 'upper']);
-        $this->registerIfExists('lower', [TextFilters::class, 'lower']);
-        $this->registerIfExists('capitalize', [TextFilters::class, 'capitalize']);
+        // Basis-Filter die immer funktionieren
+        $this->registerFallback('upper', fn($value) => strtoupper((string)$value));
+        $this->registerFallback('lower', fn($value) => strtolower((string)$value));
+        $this->registerFallback('capitalize', fn($value) => ucfirst(strtolower((string)$value)));
+        $this->registerFallback('title', fn($value) => ucwords(strtolower((string)$value)));
+        $this->registerFallback('trim', fn($value) => trim((string)$value));
+        $this->registerFallback('length', fn($value) => is_array($value) ? count($value) : strlen((string)$value));
+        $this->registerFallback('escape', fn($value) => htmlspecialchars((string)$value, ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+        $this->registerFallback('e', fn($value) => htmlspecialchars((string)$value, ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+        $this->registerFallback('raw', fn($value) => $value);
+        $this->registerFallback('default', fn($value, $default = '') => empty($value) ? $default : $value);
+
+        // Versuche erweiterte Filter zu registrieren
         $this->registerIfExists('truncate', [TextFilters::class, 'truncate']);
         $this->registerIfExists('slug', [TextFilters::class, 'slug']);
         $this->registerIfExists('nl2br', [TextFilters::class, 'nl2br']);
         $this->registerIfExists('strip_tags', [TextFilters::class, 'stripTags']);
-        $this->registerIfExists('raw', [TextFilters::class, 'raw']);
-        $this->registerIfExists('trim', [TextFilters::class, 'trim']);
         $this->registerIfExists('replace', [TextFilters::class, 'replace']);
         $this->registerIfExists('repeat', [TextFilters::class, 'repeat']);
         $this->registerIfExists('reverse', [TextFilters::class, 'reverse']);
-
-        // Fallback für fehlende Methoden
-        $this->registerFallback('title', fn($value) => ucwords(strtolower((string)$value)));
-        $this->registerFallback('length', fn($value) => is_array($value) ? count($value) : mb_strlen((string)$value));
-        $this->registerFallback('escape', fn($value) => htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8'));
-        $this->registerFallback('e', fn($value) => htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8'));
-        $this->registerFallback('default', fn($value, $default = '') => $value ?: $default);
     }
 
     /**
-     * Number-Filter mit BESTEHENDEN Klassen registrieren
+     * Number-Filter registrieren
      */
     private function registerNumberFilters(): void
     {
-        $this->registerIfExists('number_format', [NumberFilters::class, 'numberFormat']);
-        $this->registerIfExists('currency', [NumberFilters::class, 'currency']);
-        $this->registerIfExists('percentage', [NumberFilters::class, 'percentage']);
-        $this->registerIfExists('abs', [NumberFilters::class, 'abs']);
-        $this->registerIfExists('round', [NumberFilters::class, 'round']);
+        // Basis-Number-Filter
+        $this->registerFallback('number_format', function($value, $decimals = 0) {
+            return number_format((float)$value, (int)$decimals);
+        });
+        $this->registerFallback('currency', function($value, $currency = '€') {
+            return number_format((float)$value, 2, ',', '.') . ' ' . $currency;
+        });
+        $this->registerFallback('abs', fn($value) => abs((float)$value));
+        $this->registerFallback('round', fn($value, $precision = 0) => round((float)$value, (int)$precision));
+        $this->registerFallback('ceil', fn($value) => ceil((float)$value));
+        $this->registerFallback('floor', fn($value) => floor((float)$value));
 
-        // Fallback für fehlende Methoden
-        $this->registerFallback('ceil', fn($value) => (int) ceil((float) $value));
-        $this->registerFallback('floor', fn($value) => (int) floor((float) $value));
+        // Erweiterte Number-Filter
+        $this->registerIfExists('currency_format', [NumberFilters::class, 'currency']);
+        $this->registerIfExists('percentage', [NumberFilters::class, 'percentage']);
     }
 
     /**
-     * Date-Filter mit BESTEHENDEN Klassen registrieren
+     * Date-Filter registrieren
      */
     private function registerDateFilters(): void
     {
-        $this->registerIfExists('date_format', [DateFilters::class, 'dateFormat']);
-        $this->registerIfExists('date', [DateFilters::class, 'date']);
-        $this->registerIfExists('time', [DateFilters::class, 'time']);
-        $this->registerIfExists('relative_time', [DateFilters::class, 'relativeTime']);
-        $this->registerIfExists('timestamp', [DateFilters::class, 'timestamp']);
+        // Basis-Date-Filter
+        $this->registerFallback('date', function($value, $format = 'Y-m-d H:i:s') {
+            if (is_int($value)) return date($format, $value);
+            if (is_string($value)) {
+                $timestamp = strtotime($value);
+                return $timestamp !== false ? date($format, $timestamp) : $value;
+            }
+            return $value;
+        });
 
-        // Alias für Kompatibilität - timeAgo ist die ECHTE Methode
-        $this->registerFallback('relative_time', fn($value) =>
-        method_exists(DateFilters::class, 'timeAgo')
-            ? DateFilters::timeAgo($value)
-            : 'vor unbekannter Zeit'
-        );
+        $this->registerFallback('time', fn($value) => date('H:i:s', is_int($value) ? $value : strtotime((string)$value)));
+        $this->registerFallback('timestamp', fn($value) => is_int($value) ? $value : strtotime((string)$value));
+
+        $this->registerFallback('relative_time', function($value) {
+            $timestamp = is_int($value) ? $value : strtotime((string)$value);
+            if ($timestamp === false) return 'unbekannt';
+
+            $diff = time() - $timestamp;
+            if ($diff < 60) return 'vor ' . $diff . ' Sekunden';
+            if ($diff < 3600) return 'vor ' . floor($diff / 60) . ' Minuten';
+            if ($diff < 86400) return 'vor ' . floor($diff / 3600) . ' Stunden';
+            return 'vor ' . floor($diff / 86400) . ' Tagen';
+        });
+
+        // Erweiterte Date-Filter
+        $this->registerIfExists('time_ago', [DateFilters::class, 'timeAgo']);
+        $this->registerIfExists('format_date', [DateFilters::class, 'formatDate']);
     }
 
     /**
-     * Utility-Filter mit BESTEHENDEN Klassen registrieren
+     * Utility-Filter registrieren
      */
     private function registerUtilityFilters(): void
     {
-        $this->registerIfExists('first', [UtilityFilters::class, 'first']);
-        $this->registerIfExists('last', [UtilityFilters::class, 'last']);
-        $this->registerIfExists('length', [UtilityFilters::class, 'length']);
-        $this->registerIfExists('count', [UtilityFilters::class, 'count']);
+        // Array-Filter
+        $this->registerFallback('first', fn($array) => is_array($array) && !empty($array) ? reset($array) : null);
+        $this->registerFallback('last', fn($array) => is_array($array) && !empty($array) ? end($array) : null);
+        $this->registerFallback('count', fn($value) => is_array($value) ? count($value) : (is_string($value) ? strlen($value) : 0));
+        $this->registerFallback('join', fn($array, $separator = ', ') => is_array($array) ? implode($separator, $array) : (string)$array);
 
-        // Fallback für weitere Utility-Filter
-        $this->registerFallback('join', fn($array, $separator = ', ') =>
-        is_array($array) ? implode($separator, $array) : (string)$array);
-        $this->registerFallback('sort', fn($array) =>
-        is_array($array) ? (sort($array) ? $array : $array) : $array);
-        $this->registerFallback('unique', fn($array) =>
-        is_array($array) ? array_unique($array) : $array);
-        $this->registerFallback('slice', fn($array, $start, $length = null) =>
-        is_array($array) ? array_slice($array, $start, $length) : $array);
+        $this->registerFallback('sort', function($array) {
+            if (!is_array($array)) return $array;
+            sort($array);
+            return $array;
+        });
+
+        $this->registerFallback('unique', fn($array) => is_array($array) ? array_unique($array) : $array);
+        $this->registerFallback('slice', fn($array, $start, $length = null) => is_array($array) ? array_slice($array, (int)$start, $length) : $array);
+
+        // Erweiterte Utility-Filter
+        $this->registerIfExists('map', [UtilityFilters::class, 'map']);
+        $this->registerIfExists('filter_empty', [UtilityFilters::class, 'filterEmpty']);
     }
 
     /**
-     * JSON-Filter mit BESTEHENDEN Klassen registrieren
+     * JSON-Filter registrieren
      */
     private function registerJsonFilters(): void
     {
+        $this->registerFallback('json_pretty', fn($value) => json_encode($value, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+
         $this->registerIfExists('json_encode', [JsonFilters::class, 'jsonEncode']);
         $this->registerIfExists('json_decode', [JsonFilters::class, 'jsonDecode']);
-        $this->registerIfExists('json_pretty', [JsonFilters::class, 'jsonPretty']);
     }
 
     /**
-     * Translation-Filter mit BESTEHENDER Klasse registrieren
+     * Translation-Filter registrieren
      */
     private function registerTranslationFilters(): void
     {
+        if ($this->translator === null) {
+            // Fallback wenn kein Translator verfügbar
+            $this->registerFallback('t', fn($value) => (string)$value);
+            $this->registerFallback('translate', fn($value) => (string)$value);
+            return;
+        }
+
         $translationFilters = new TranslationFilters($this->translator);
 
         $this->registerIfExists('t', [$translationFilters, 't']);
         $this->registerIfExists('translate', [$translationFilters, 'translate']);
         $this->registerIfExists('tp', [$translationFilters, 'tp']);
         $this->registerIfExists('translate_plural', [$translationFilters, 'translatePlural']);
-        $this->registerIfExists('has_translation', [$translationFilters, 'hasTranslation']);
-        $this->registerIfExists('locale', [$translationFilters, 'locale']);
-        $this->registerIfExists('translate_in', [$translationFilters, 'translateIn']);
     }
 
     /**
@@ -166,12 +257,13 @@ class FilterManager
     {
         [$class, $method] = $callable;
 
-        if (method_exists($class, $method)) {
+        if (class_exists($class) && method_exists($class, $method)) {
             try {
                 $this->registry->register($name, $callable);
-            } catch (\Throwable) {
-                // Fallback registrieren wenn Array-Callable fehlschlägt
-                $this->registerFallback($name, fn($value, ...$args) => $class::$method($value, ...$args));
+            } catch (\Throwable $e) {
+                error_log("Failed to register filter '{$name}': " . $e->getMessage());
+                // Fallback: Identity filter
+                $this->registerFallback($name, fn($value, ...$args) => $value);
             }
         }
     }
@@ -184,31 +276,5 @@ class FilterManager
         if (!$this->registry->has($name)) {
             $this->registry->register($name, $filter);
         }
-    }
-
-    // Public API - unverändert
-    public function register(string $name, callable $filter): void
-    {
-        $this->registry->register($name, $filter);
-    }
-
-    public function has(string $name): bool
-    {
-        return $this->registry->has($name);
-    }
-
-    public function execute(string $filterName, mixed $value, array $arguments = []): mixed
-    {
-        return $this->executor->execute($filterName, $value, $arguments);
-    }
-
-    public function getRegistry(): FilterRegistry
-    {
-        return $this->registry;
-    }
-
-    public function getAvailableFilters(): array
-    {
-        return $this->registry->getAvailableFilterNames();
     }
 }
