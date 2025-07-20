@@ -1,15 +1,18 @@
-# public/.htaccess
 RewriteEngine On
 
-# Handle static files
-RewriteCond %{REQUEST_FILENAME} -f
-RewriteRule ^.*$ - [L]
-
-# Handle directories
-RewriteCond %{REQUEST_FILENAME} -d
-RewriteRule ^.*$ - [L]
-
-# Send all other requests to index.php
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
 RewriteRule ^(.*)$ index.php [QSA,L]
+
+# ALTERNATIVE: Erweiterte Version mit Static Asset Optimierung
+# Uncomment für bessere Performance:
+
+# # Static Assets direkt servieren (ohne PHP)
+# RewriteCond %{REQUEST_URI} \.(css|js|png|jpg|jpeg|gif|webp|svg|woff|woff2|ttf|otf|eot|ico|pdf|zip)$ [NC]
+# RewriteRule ^.*$ - [L]
+#
+# # API Routes markieren für spezielle Behandlung
+# RewriteCond %{REQUEST_URI} ^/api/ [NC]
+# RewriteCond %{REQUEST_FILENAME} !-f
+# RewriteCond %{REQUEST_FILENAME} !-d
+# RewriteRule ^(.*)$ index.php [QSA,L,E=REQUEST_TYPE:api]

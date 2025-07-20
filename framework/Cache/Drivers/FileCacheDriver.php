@@ -34,7 +34,6 @@ readonly class FileCacheDriver implements CacheDriverInterface
         try {
             // ROBUST: Cache-Validierung vor dem Laden
             if (!$this->validateCacheFile($file)) {
-                error_log("Corrupted cache file detected, removing: {$file}");
                 @unlink($file);
                 return null;
             }
@@ -44,7 +43,6 @@ readonly class FileCacheDriver implements CacheDriverInterface
 
             // Structure validation
             if (!is_array($cached) || !isset($cached['data'], $cached['expires_at'])) {
-                error_log("Invalid cache structure in file: {$file}");
                 @unlink($file);
                 return null;
             }
@@ -58,7 +56,6 @@ readonly class FileCacheDriver implements CacheDriverInterface
             return $cached['data'];
 
         } catch (\Throwable $e) {
-            error_log("Cache file loading error for {$file}: " . $e->getMessage());
             @unlink($file);
             return null;
         }
@@ -71,7 +68,6 @@ readonly class FileCacheDriver implements CacheDriverInterface
 
         if (!is_dir($dir)) {
             if (!mkdir($dir, 0755, true)) {
-                error_log("Cannot create cache directory: {$dir}");
                 return false;
             }
         }
@@ -91,28 +87,24 @@ readonly class FileCacheDriver implements CacheDriverInterface
             $tempFile = $file . '.tmp.' . uniqid();
 
             if (file_put_contents($tempFile, $content, LOCK_EX) === false) {
-                error_log("Cannot write to temp cache file: {$tempFile}");
                 return false;
             }
 
             // Validierung der generierten Datei
             if (!$this->validateGeneratedFile($tempFile)) {
                 @unlink($tempFile);
-                error_log("Generated cache file failed validation for key: {$key}");
                 return false;
             }
 
             // Atomic move
             if (!rename($tempFile, $file)) {
                 @unlink($tempFile);
-                error_log("Cannot move cache file from {$tempFile} to {$file}");
                 return false;
             }
 
             return true;
 
         } catch (\Throwable $e) {
-            error_log("Cache put error for key {$key}: " . $e->getMessage());
             if (isset($tempFile)) {
                 @unlink($tempFile);
             }
@@ -139,7 +131,6 @@ readonly class FileCacheDriver implements CacheDriverInterface
         foreach ($files as $file) {
             if (!@unlink($file)) {
                 $success = false;
-                error_log("Cannot delete cache file: {$file}");
             }
         }
 
@@ -184,7 +175,6 @@ return {$exportedData};
 PHP;
 
         } catch (\Throwable $e) {
-            error_log("Cache content generation error: " . $e->getMessage());
             throw new \RuntimeException("Failed to generate cache content: " . $e->getMessage());
         }
     }
@@ -212,7 +202,6 @@ PHP;
             return $result !== false;
 
         } catch (\Throwable $e) {
-            error_log("Cache file validation failed for {$file}: " . $e->getMessage());
             return false;
         }
     }
@@ -236,7 +225,6 @@ PHP;
 
         } catch (\Throwable $e) {
             restore_error_handler();
-            error_log("Test include failed for {$file}: " . $e->getMessage());
             return false;
         }
     }
@@ -269,7 +257,6 @@ PHP;
             return true;
 
         } catch (\Throwable $e) {
-            error_log("Generated file validation failed for {$file}: " . $e->getMessage());
             return false;
         }
     }
