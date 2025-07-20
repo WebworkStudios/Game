@@ -19,7 +19,7 @@ return [
     |--------------------------------------------------------------------------
     */
     'cache' => [
-        'enabled' => false,  // Vorerst deaktiviert für Stabilität
+        'enabled' => true,  // Vorerst deaktiviert für Stabilität
         'path' => 'storage/cache/views',
         'auto_reload' => true,
     ],

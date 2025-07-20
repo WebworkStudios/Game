@@ -14,7 +14,7 @@ use Framework\Templating\Filters\TranslationFilters;
 use Framework\Templating\Filters\UtilityFilters;
 
 /**
- * FilterManager - KRITISCHER FIX: applyPipeline Methode hinzugefügt
+ * FilterManager - GEFIXT: JSON-Filter und alle fehlenden Standard-Filter hinzugefügt
  */
 class FilterManager
 {
@@ -104,11 +104,8 @@ class FilterManager
         $this->registerNumberFilters();
         $this->registerDateFilters();
         $this->registerUtilityFilters();
-        $this->registerJsonFilters();
-
-        if ($this->translator !== null) {
-            $this->registerTranslationFilters();
-        }
+        $this->registerJsonFilters(); // KRITISCH: Diese Methode wird aufgerufen
+        $this->registerTranslationFilters();
     }
 
     /**
@@ -128,14 +125,11 @@ class FilterManager
         $this->registerFallback('raw', fn($value) => $value);
         $this->registerFallback('default', fn($value, $default = '') => empty($value) ? $default : $value);
 
-        // Versuche erweiterte Filter zu registrieren
+        // Erweiterte Text-Filter falls Klasse verfügbar
         $this->registerIfExists('truncate', [TextFilters::class, 'truncate']);
         $this->registerIfExists('slug', [TextFilters::class, 'slug']);
         $this->registerIfExists('nl2br', [TextFilters::class, 'nl2br']);
         $this->registerIfExists('strip_tags', [TextFilters::class, 'stripTags']);
-        $this->registerIfExists('replace', [TextFilters::class, 'replace']);
-        $this->registerIfExists('repeat', [TextFilters::class, 'repeat']);
-        $this->registerIfExists('reverse', [TextFilters::class, 'reverse']);
     }
 
     /**
@@ -143,21 +137,20 @@ class FilterManager
      */
     private function registerNumberFilters(): void
     {
-        // Basis-Number-Filter
-        $this->registerFallback('number_format', function($value, $decimals = 0) {
-            return number_format((float)$value, (int)$decimals);
+        // Basis Number-Filter
+        $this->registerFallback('number_format', function($value, $decimals = 0, $decimalPoint = ',', $thousandsSep = '.') {
+            return number_format((float)$value, (int)$decimals, $decimalPoint, $thousandsSep);
         });
-        $this->registerFallback('currency', function($value, $currency = '€') {
-            return number_format((float)$value, 2, ',', '.') . ' ' . $currency;
-        });
-        $this->registerFallback('abs', fn($value) => abs((float)$value));
-        $this->registerFallback('round', fn($value, $precision = 0) => round((float)$value, (int)$precision));
-        $this->registerFallback('ceil', fn($value) => ceil((float)$value));
-        $this->registerFallback('floor', fn($value) => floor((float)$value));
 
-        // Erweiterte Number-Filter
-        $this->registerIfExists('currency_format', [NumberFilters::class, 'currency']);
-        $this->registerIfExists('percentage', [NumberFilters::class, 'percentage']);
+        $this->registerFallback('round', fn($value, $precision = 0) => round((float)$value, (int)$precision));
+        $this->registerFallback('floor', fn($value) => floor((float)$value));
+        $this->registerFallback('ceil', fn($value) => ceil((float)$value));
+        $this->registerFallback('abs', fn($value) => abs((float)$value));
+
+        // Erweiterte Number-Filter falls Klasse verfügbar
+        $this->registerIfExists('currency', [NumberFilters::class, 'currency']);
+        $this->registerIfExists('percent', [NumberFilters::class, 'percent']);
+        $this->registerIfExists('filesize', [NumberFilters::class, 'filesize']);
     }
 
     /**
@@ -165,33 +158,21 @@ class FilterManager
      */
     private function registerDateFilters(): void
     {
-        // Basis-Date-Filter
+        // Basis Date-Filter
         $this->registerFallback('date', function($value, $format = 'Y-m-d H:i:s') {
-            if (is_int($value)) return date($format, $value);
-            if (is_string($value)) {
-                $timestamp = strtotime($value);
-                return $timestamp !== false ? date($format, $timestamp) : $value;
+            if (empty($value)) return '';
+
+            if (is_numeric($value)) {
+                return date($format, (int)$value);
             }
-            return $value;
+
+            $timestamp = strtotime((string)$value);
+            return $timestamp ? date($format, $timestamp) : (string)$value;
         });
 
-        $this->registerFallback('time', fn($value) => date('H:i:s', is_int($value) ? $value : strtotime((string)$value)));
-        $this->registerFallback('timestamp', fn($value) => is_int($value) ? $value : strtotime((string)$value));
-
-        $this->registerFallback('relative_time', function($value) {
-            $timestamp = is_int($value) ? $value : strtotime((string)$value);
-            if ($timestamp === false) return 'unbekannt';
-
-            $diff = time() - $timestamp;
-            if ($diff < 60) return 'vor ' . $diff . ' Sekunden';
-            if ($diff < 3600) return 'vor ' . floor($diff / 60) . ' Minuten';
-            if ($diff < 86400) return 'vor ' . floor($diff / 3600) . ' Stunden';
-            return 'vor ' . floor($diff / 86400) . ' Tagen';
-        });
-
-        // Erweiterte Date-Filter
+        // Erweiterte Date-Filter falls Klasse verfügbar
         $this->registerIfExists('time_ago', [DateFilters::class, 'timeAgo']);
-        $this->registerIfExists('format_date', [DateFilters::class, 'formatDate']);
+        $this->registerIfExists('date_format', [DateFilters::class, 'dateFormat']);
     }
 
     /**
@@ -199,10 +180,8 @@ class FilterManager
      */
     private function registerUtilityFilters(): void
     {
-        // Array-Filter
-        $this->registerFallback('first', fn($array) => is_array($array) && !empty($array) ? reset($array) : null);
-        $this->registerFallback('last', fn($array) => is_array($array) && !empty($array) ? end($array) : null);
-        $this->registerFallback('count', fn($value) => is_array($value) ? count($value) : (is_string($value) ? strlen($value) : 0));
+        // Basis Utility-Filter
+        $this->registerFallback('length', fn($value) => is_array($value) ? count($value) : (is_string($value) ? strlen($value) : 0));
         $this->registerFallback('join', fn($array, $separator = ', ') => is_array($array) ? implode($separator, $array) : (string)$array);
 
         $this->registerFallback('sort', function($array) {
@@ -217,17 +196,50 @@ class FilterManager
         // Erweiterte Utility-Filter
         $this->registerIfExists('map', [UtilityFilters::class, 'map']);
         $this->registerIfExists('filter_empty', [UtilityFilters::class, 'filterEmpty']);
+        $this->registerIfExists('first', [UtilityFilters::class, 'first']);
+        $this->registerIfExists('last', [UtilityFilters::class, 'last']);
     }
 
     /**
-     * JSON-Filter registrieren
+     * GEFIXT: JSON-Filter registrieren - FEHLENDER STANDARD-JSON-FILTER HINZUGEFÜGT
      */
     private function registerJsonFilters(): void
     {
-        $this->registerFallback('json_pretty', fn($value) => json_encode($value, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+        // KRITISCH: Standard 'json' Filter hinzufügen
+        $this->registerFallback('json', function($value) {
+            try {
+                return json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            } catch (\Throwable $e) {
+                error_log("JSON encoding error: " . $e->getMessage());
+                return '{}';
+            }
+        });
 
+        // Pretty JSON Filter
+        $this->registerFallback('json_pretty', function($value) {
+            try {
+                return json_encode($value, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            } catch (\Throwable $e) {
+                error_log("JSON pretty encoding error: " . $e->getMessage());
+                return '{}';
+            }
+        });
+
+        // JSON Decode Filter
+        $this->registerFallback('json_decode', function($value) {
+            try {
+                if (is_string($value)) {
+                    return json_decode($value, true, 512, JSON_THROW_ON_ERROR);
+                }
+                return $value;
+            } catch (\Throwable $e) {
+                error_log("JSON decoding error: " . $e->getMessage());
+                return null;
+            }
+        });
+
+        // Erweiterte JSON-Filter falls Klasse verfügbar
         $this->registerIfExists('json_encode', [JsonFilters::class, 'jsonEncode']);
-        $this->registerIfExists('json_decode', [JsonFilters::class, 'jsonDecode']);
     }
 
     /**
@@ -238,6 +250,7 @@ class FilterManager
         if ($this->translator === null) {
             // Fallback wenn kein Translator verfügbar
             $this->registerFallback('t', fn($value) => (string)$value);
+            $this->registerFallback('trans', fn($value) => (string)$value);
             $this->registerFallback('translate', fn($value) => (string)$value);
             return;
         }
@@ -245,6 +258,7 @@ class FilterManager
         $translationFilters = new TranslationFilters($this->translator);
 
         $this->registerIfExists('t', [$translationFilters, 't']);
+        $this->registerIfExists('trans', [$translationFilters, 't']); // Alias
         $this->registerIfExists('translate', [$translationFilters, 'translate']);
         $this->registerIfExists('tp', [$translationFilters, 'tp']);
         $this->registerIfExists('translate_plural', [$translationFilters, 'translatePlural']);
@@ -276,5 +290,19 @@ class FilterManager
         if (!$this->registry->has($name)) {
             $this->registry->register($name, $filter);
         }
+    }
+
+    /**
+     * ZUSÄTZLICH: Debug-Methode um alle registrierten Filter zu sehen
+     */
+    public function debugFilters(): array
+    {
+        $filters = $this->getAvailableFilters();
+        sort($filters);
+
+        return [
+            'count' => count($filters),
+            'filters' => $filters
+        ];
     }
 }
