@@ -7,91 +7,81 @@ namespace Framework\Templating\Filters;
 use RuntimeException;
 
 /**
- * FilterExecutor - Verbesserte Ausführungslogik für Filter
+ * FilterExecutor - Clean Implementation für KickersCup Manager
  *
- * BEREINIGT: Debug-Logging komplett entfernt
+ * Verantwortlichkeiten:
+ * - Filter-Ausführung mit Argumenten
+ * - Fehlerbehandlung bei Filter-Ausführung
+ * - Performance-optimierte Ausführung
  */
-class FilterExecutor
+final readonly class FilterExecutor
 {
     public function __construct(
-        private readonly FilterRegistry $registry
+        private FilterRegistry $registry
     ) {}
 
     /**
-     * Führt mehrere Filter nacheinander aus (Pipeline)
+     * Filter ausführen
      */
-    public function executePipeline(mixed $value, array $filterPipeline): mixed
+    public function execute(string $filterName, mixed $value, array $arguments = []): mixed
     {
-        foreach ($filterPipeline as $filterConfig) {
-            if (is_string($filterConfig)) {
-                // Einfacher Filter ohne Parameter
-                $value = $this->execute($filterConfig, $value);
-            } elseif (is_array($filterConfig)) {
-                // Filter mit Parametern
-                $filterName = $filterConfig['name'] ?? $filterConfig[0] ?? null;
-                $parameters = $filterConfig['parameters'] ?? array_slice($filterConfig, 1);
+        $filter = $this->registry->get($filterName);
 
-                if ($filterName === null) {
-                    throw new RuntimeException('Filter name missing in pipeline configuration');
-                }
-
-                $value = $this->execute($filterName, $value, $parameters);
-            } else {
-                throw new RuntimeException('Invalid filter configuration in pipeline');
-            }
-        }
-
-        return $value;
-    }
-
-    /**
-     * Führt einen Filter aus
-     */
-    public function execute(string $filterName, mixed $value, array $parameters = []): mixed
-    {
         try {
-            $filter = $this->registry->get($filterName);
-
-            // Validate that we have a callable
-            if (!is_callable($filter)) {
-                throw new RuntimeException("Filter '{$filterName}' is not callable");
-            }
-
-            // Additional validation for JavaScript filters
-            if (str_starts_with($filterName, 'js_') && $value === null) {
-                // For JavaScript filters, null values should return empty string
-                return '';
-            }
-
-            // Filter mit Parametern ausführen
-            return $filter($value, ...$parameters);
-
-        } catch (RuntimeException $e) {
-            // Registry-Fehler weiterleiten
-            throw $e;
+            return $this->callFilter($filter, $value, $arguments);
         } catch (\Throwable $e) {
-            // Filter-Execution-Fehler
             throw new RuntimeException(
-                "Filter '{$filterName}' execution failed: " . $e->getMessage() .
-                " (received " . gettype($value) . " value)",
+                "Filter '{$filterName}' execution failed: " . $e->getMessage(),
                 previous: $e
             );
         }
     }
 
     /**
-     * Prüft ob ein Filter existiert
+     * Filter mit Argumenten aufrufen
      */
-    public function hasFilter(string $filterName): bool
+    private function callFilter(callable $filter, mixed $value, array $arguments): mixed
     {
-        return $this->registry->has($filterName);
+        // Wert ist immer das erste Argument
+        $allArguments = [$value, ...$arguments];
+
+        return $filter(...$allArguments);
     }
 
     /**
-     * Gibt alle verfügbaren Filter zurück
+     * Mehrere Filter hintereinander ausführen (Pipeline)
      */
-    public function getAvailableFilters(): array
+    public function executePipeline(mixed $value, array $filterPipeline): mixed
     {
-        return $this->registry->getFilterNames();
+        $result = $value;
+
+        foreach ($filterPipeline as $filterData) {
+            if (is_string($filterData)) {
+                // Einfacher Filter ohne Argumente
+                $result = $this->execute($filterData, $result);
+            } elseif (is_array($filterData) && isset($filterData['name'])) {
+                // Filter mit Argumenten
+                $filterName = $filterData['name'];
+                $arguments = $filterData['arguments'] ?? [];
+                $result = $this->execute($filterName, $result, $arguments);
+            } else {
+                throw new RuntimeException('Invalid filter pipeline data');
+            }
+        }
+
+        return $result;
+    }
+
+    /**
+     * Prüft ob Filter ausführbar ist
+     */
+    public function canExecute(string $filterName): bool
+    {
+        try {
+            $filter = $this->registry->get($filterName);
+            return is_callable($filter);
+        } catch (RuntimeException) {
+            return false;
+        }
     }
 }
