@@ -2,9 +2,8 @@
 declare(strict_types=1);
 
 namespace Framework\Http;
-
 /**
- * HTTP-Methoden Enum mit erweiterten Funktionen für PHP 8.4
+ * HttpMethod - PHP 8.4 Enhanced Enum
  */
 enum HttpMethod: string
 {
@@ -15,66 +14,43 @@ enum HttpMethod: string
     case DELETE = 'DELETE';
     case HEAD = 'HEAD';
     case OPTIONS = 'OPTIONS';
-    case TRACE = 'TRACE';
-    case CONNECT = 'CONNECT';
+
+    // PHP 8.4: Typed constant for safe methods
+    public const array SAFE_METHODS = ['GET', 'HEAD', 'OPTIONS'];
+    public const array IDEMPOTENT_METHODS = ['GET', 'HEAD', 'PUT', 'DELETE', 'OPTIONS'];
 
     /**
-     * NEU: Gibt alle verfügbaren Methoden als Array zurück
-     */
-    public static function all(): array
-    {
-        return array_map(fn(self $case) => $case->value, self::cases());
-    }
-
-    /**
-     * Prüft ob HTTP-Methode idempotent ist
-     */
-    public function isIdempotent(): bool
-    {
-        return match ($this) {
-            self::GET, self::HEAD, self::OPTIONS, self::PUT, self::DELETE, self::TRACE => true,
-            self::POST, self::PATCH, self::CONNECT => false,
-        };
-    }
-
-    /**
-     * Prüft ob HTTP-Methode safe ist (keine Seiteneffekte)
+     * Check if method is safe (read-only)
      */
     public function isSafe(): bool
     {
-        return match ($this) {
-            self::GET, self::HEAD, self::OPTIONS, self::TRACE => true,
-            default => false,
-        };
+        return in_array($this->value, self::SAFE_METHODS, true);
     }
 
     /**
-     * Prüft ob Methode einen Request Body erlaubt
+     * Check if method is idempotent
      */
-    public function allowsBody(): bool
+    public function isIdempotent(): bool
     {
-        return match ($this) {
-            self::POST, self::PUT, self::PATCH => true,
-            self::GET, self::HEAD, self::DELETE, self::OPTIONS, self::TRACE, self::CONNECT => false,
-        };
+        return in_array($this->value, self::IDEMPOTENT_METHODS, true);
     }
 
     /**
-     * Prüft ob Methode cacheable ist
+     * Create from string with validation
      */
-    public function isCacheable(): bool
+    public static function fromString(string $method): self
     {
-        return match ($this) {
-            self::GET, self::HEAD => true,
-            default => false,
-        };
-    }
+        $normalized = strtoupper(trim($method));
 
-    /**
-     * NEU: Erstellt sicheren HTTP-Method-String für Logs
-     */
-    public function toLogString(): string
-    {
-        return $this->value;
+        return match ($normalized) {
+            'GET' => self::GET,
+            'POST' => self::POST,
+            'PUT' => self::PUT,
+            'PATCH' => self::PATCH,
+            'DELETE' => self::DELETE,
+            'HEAD' => self::HEAD,
+            'OPTIONS' => self::OPTIONS,
+            default => throw new \InvalidArgumentException("Unsupported HTTP method: {$method}")
+        };
     }
 }
