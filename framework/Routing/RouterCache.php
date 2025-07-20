@@ -220,16 +220,29 @@ readonly class RouterCache
         }
 
         try {
+            // Verify file integrity before loading
+            if (!$this->validateCacheFile($this->cacheFile)) {
+                error_log("Corrupted cache file detected, rebuilding...");
+                @unlink($this->cacheFile);
+                return [];
+            }
+
             $cacheData = require $this->cacheFile;
 
             if (is_array($cacheData)) {
                 return $this->convertCacheDataToRoutes($cacheData);
             }
-        } catch (Throwable $e) {
+
+        } catch (\Throwable $e) {
+            error_log("Cache loading error: " . $e->getMessage());
+
+            // Clean up corrupted cache
+            @unlink($this->cacheFile);
         }
 
         return [];
     }
+
 
     /**
      * OPTIMIZED: Build named routes array with lazy evaluation
@@ -433,16 +446,74 @@ readonly class RouterCache
 
         $tempFile = $this->cacheFile . '.tmp';
 
-        // KORRIGIERT: Vollständige String-Konkatenation mit Semikolon und Newline
-        $content = "<?php\n\ndeclare(strict_types=1);\n\nreturn " . var_export($routes, true) . ";\n";
+        // FIXED: Robust content generation with validation
+        $content = $this->generateCacheFileContent($routes);
 
+        // CRITICAL: Validate content before writing
+        if (empty($content) || !str_ends_with($content, ";\n")) {
+            throw new RuntimeException("Invalid cache content generated");
+        }
+
+        // ATOMIC: Write to temp file first
         if (file_put_contents($tempFile, $content, LOCK_EX) === false) {
             throw new RuntimeException("Cannot write to cache file: {$tempFile}");
         }
 
+        // VALIDATION: Verify the written file can be parsed
+        if (!$this->validateCacheFile($tempFile)) {
+            @unlink($tempFile);
+            throw new RuntimeException("Generated cache file is invalid");
+        }
+
+        // ATOMIC: Move temp file to final location
         if (!rename($tempFile, $this->cacheFile)) {
             @unlink($tempFile);
             throw new RuntimeException("Cannot move cache file from {$tempFile} to {$this->cacheFile}");
+        }
+    }
+
+    /**
+     * NEW: Generate cache file content with proper formatting
+     */
+    private function generateCacheFileContent(array $routes): string
+    {
+        // Ensure routes array is valid
+        if (!is_array($routes)) {
+            $routes = [];
+        }
+
+        $exportedRoutes = var_export($routes, true);
+
+        // Build content with proper PHP syntax
+        return <<<PHP
+<?php
+
+declare(strict_types=1);
+
+// Route cache generated at: {date('Y-m-d H:i:s')}
+// Framework: KickersCup Manager
+// DO NOT EDIT - This file is auto-generated
+
+return {$exportedRoutes};
+
+PHP;
+    }
+
+    /**
+     * NEW: Validate cache file can be properly parsed
+     */
+    private function validateCacheFile(string $filePath): bool
+    {
+        try {
+            // Attempt to include and validate
+            $result = require $filePath;
+
+            // Must return an array
+            return is_array($result);
+
+        } catch (\Throwable $e) {
+            error_log("Cache file validation failed: " . $e->getMessage());
+            return false;
         }
     }
 
