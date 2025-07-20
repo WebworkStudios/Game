@@ -5,22 +5,6 @@ declare(strict_types=1);
 return array (
   0 => 
   array (
-    'pattern' => '#^/test/filters$#',
-    'methods' => 
-    array (
-      0 => 'GET',
-    ),
-    'action' => 'App\\Actions\\FilterDemoAction',
-    'middlewares' => 
-    array (
-    ),
-    'name' => 'test.filters',
-    'parameters' => 
-    array (
-    ),
-  ),
-  1 => 
-  array (
     'pattern' => '#^/$#',
     'methods' => 
     array (
@@ -35,7 +19,7 @@ return array (
     array (
     ),
   ),
-  2 => 
+  1 => 
   array (
     'pattern' => '#^/team$#',
     'methods' => 
@@ -51,7 +35,7 @@ return array (
     array (
     ),
   ),
-  3 => 
+  2 => 
   array (
     'pattern' => '#^/test/templates$#',
     'methods' => 

@@ -203,45 +203,4 @@ readonly class RouteEntry
         array_pop($parts); // Entferne Klassenname
         return implode('\\', $parts);
     }
-
-    /**
-     * Prüft ob Route ein benannter Route ist
-     */
-    public function isNamed(): bool
-    {
-        return $this->name !== null;
-    }
-
-    /**
-     * String-Darstellung der Route
-     */
-    public function __toString(): string
-    {
-        $methods = implode('|', $this->getMethodStrings());
-        $name = $this->name ? " ({$this->name})" : '';
-        return "[{$methods}] {$this->pattern} -> {$this->action}{$name}";
-    }
-
-    /**
-     * Holt alle unterstützten HTTP-Methoden als Strings
-     */
-    public function getMethodStrings(): array
-    {
-        return array_map(fn(HttpMethod $method) => $method->value, $this->methods);
-    }
-
-    /**
-     * Debug-Ausgabe der Route
-     */
-    public function dump(): void
-    {
-        echo "\n=== ROUTE ENTRY DEBUG ===\n";
-        echo "Pattern: {$this->pattern}\n";
-        echo "Methods: " . implode(', ', $this->getMethodStrings()) . "\n";
-        echo "Action: {$this->action}\n";
-        echo "Name: " . ($this->name ?? 'unnamed') . "\n";
-        echo "Parameters: " . implode(', ', $this->parameters) . "\n";
-        echo "Middlewares: " . implode(', ', $this->middlewares) . "\n";
-        echo "========================\n\n";
-    }
 }

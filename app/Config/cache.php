@@ -1,27 +1,19 @@
 <?php
-
 declare(strict_types=1);
-
-// app/Config/cache.php - NUR intelligente Cache-Driver Auto-Detection
-
-use Framework\Core\CacheDriverDetector;
 
 return [
     /*
     |--------------------------------------------------------------------------
-    | Intelligente Cache-Driver Detection (Convention over Configuration)
+    | Default Cache Store
     |--------------------------------------------------------------------------
     */
-
-    // Automatische Driver-Selection über Static Method Call
-    'default' => [CacheDriverDetector::class, 'detectOptimalDriver'],
+    'default' => 'auto', // Automatic driver selection
 
     /*
     |--------------------------------------------------------------------------
-    | Cache-Driver Konfigurationen
+    | Cache Stores
     |--------------------------------------------------------------------------
     */
-
     'stores' => [
         'apcu' => [
             'driver' => 'apcu',
@@ -55,9 +47,15 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Default TTL Werte
+    | Cache Prefix
     |--------------------------------------------------------------------------
     */
+    'prefix' => 'kickerscup_',
 
-    'ttl' => 3600, // Standard: 1 Stunde
+    /*
+    |--------------------------------------------------------------------------
+    | Default TTL
+    |--------------------------------------------------------------------------
+    */
+    'ttl' => 3600, // 1 hour
 ];

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Framework\Templating;
 
 use Framework\Assets\JavaScriptAssetManager;
+use Framework\Cache\CacheManager;
 use Framework\Core\AbstractServiceProvider;
 use Framework\Core\ConfigManager;
 use Framework\Core\ConfigValidation;
@@ -24,21 +25,12 @@ use Framework\Templating\Rendering\TemplateRenderer;
 use Framework\Templating\Rendering\TemplateVariableResolver;
 
 /**
- * TemplatingServiceProvider - REFACTORED für neue SRP-konforme ViewRenderer-Architektur
- *
- * NEUE SERVICE-REGISTRIERUNG:
- * ✅ Alle spezialisierten Services registrieren
- * ✅ ViewRenderer als Koordinator mit Dependencies
- * ✅ Bestehende Template-Engine-Services bleiben unverändert
- * ✅ Backward-Compatibility gewährleistet
+ * TemplatingServiceProvider - FIXED für neue Cache-Abstraktion
  */
 class TemplatingServiceProvider extends AbstractServiceProvider
 {
     use ConfigValidation;
 
-    /**
-     * Validiert Template-spezifische Abhängigkeiten
-     */
     protected function validateDependencies(): void
     {
         $this->ensureConfigExists('templating');
@@ -46,24 +38,65 @@ class TemplatingServiceProvider extends AbstractServiceProvider
         $this->validateCacheDirectory();
     }
 
-    /**
-     * Registriert alle Template-Services
-     */
     protected function registerServices(): void
     {
-        $this->registerSupportServices();     // Cache, Filters
-        $this->registerParsingServices();     // Tokenizer, Parser, PathResolver
-        $this->registerRenderingServices();   // Renderer, VariableResolver
-        $this->registerCoordinationServices(); // TemplateEngine
-
-        // NEUE SRP-KONFORME SERVICES
-        $this->registerSpecializedServices(); // Data Injector, Asset Manager, etc.
-        $this->registerIntegrationServices(); // Refactored ViewRenderer
+        $this->registerSupportServices();
+        $this->registerParsingServices();
+        $this->registerRenderingServices();
+        $this->registerCoordinationServices();
+        $this->registerSpecializedServices();
+        $this->registerIntegrationServices();
     }
 
+    // ===================================================================
+    // FIXED: Template Cache Registration
+    // ===================================================================
+
     /**
-     * NEUE METHODE: Registriert spezialisierte Services
+     * FIXED: Registriert Template Cache mit neuer API
      */
+    private function registerTemplateCache(): void
+    {
+        $this->singleton(TemplateCache::class, function () {
+            $config = $this->loadAndValidateConfig('templating');
+            $cacheDir = $this->basePath($config['cache']['path'] ?? 'storage/cache/views');
+            $enabled = $config['cache']['enabled'] ?? true;
+
+            // FIXED: Nutzt neue factory method statt named parameters
+            return TemplateCache::create($cacheDir, $enabled);
+        });
+    }
+
+    // ===================================================================
+    // ALTERNATIVE: Direct CacheManager Usage (Optional)
+    // ===================================================================
+
+    /**
+     * ALTERNATIVE: Template Cache mit direkter CacheManager-Nutzung
+     */
+    private function registerTemplateCacheAlternative(): void
+    {
+        $this->singleton(TemplateCache::class, function () {
+            $config = $this->loadAndValidateConfig('templating');
+            $enabled = $config['cache']['enabled'] ?? true;
+
+            // Nutzt registrierten CacheManager
+            $cacheManager = $this->container->get(CacheManager::class);
+
+            return new TemplateCache($cacheManager, $enabled);
+        });
+    }
+
+    // ===================================================================
+    // REST OF THE SERVICE REGISTRATIONS (unchanged)
+    // ===================================================================
+
+    private function registerSupportServices(): void
+    {
+        $this->registerTemplateCache();  // ← FIXED method
+        $this->registerFilterServices();
+    }
+
     private function registerSpecializedServices(): void
     {
         $this->registerTemplateConfigManager();
@@ -72,9 +105,6 @@ class TemplatingServiceProvider extends AbstractServiceProvider
         $this->registerTemplateErrorHandler();
     }
 
-    /**
-     * Registriert TemplateConfigManager
-     */
     private function registerTemplateConfigManager(): void
     {
         $this->singleton(TemplateConfigManager::class, function () {
@@ -86,33 +116,19 @@ class TemplatingServiceProvider extends AbstractServiceProvider
         });
     }
 
-    /**
-     * Registriert TemplateDataInjector
-     */
     private function registerTemplateDataInjector(): void
     {
         $this->singleton(TemplateDataInjector::class, function () {
-            $translator = $this->container->has(Translator::class)
-                ? $this->container->get(Translator::class)
-                : null;
-
             $csrf = $this->container->has(Csrf::class)
                 ? $this->container->get(Csrf::class)
                 : null;
 
             $configManager = $this->container->get(TemplateConfigManager::class);
 
-            return new TemplateDataInjector(
-                translator: $translator,
-                csrf: $csrf,
-                appConfig: $configManager->getConfig()
-            );
+            return new TemplateDataInjector($csrf, $configManager);
         });
     }
 
-    /**
-     * Registriert AssetIntegrationManager
-     */
     private function registerAssetIntegrationManager(): void
     {
         $this->singleton(AssetIntegrationManager::class, function () {
@@ -124,9 +140,6 @@ class TemplatingServiceProvider extends AbstractServiceProvider
         });
     }
 
-    /**
-     * Registriert TemplateErrorHandler
-     */
     private function registerTemplateErrorHandler(): void
     {
         $this->singleton(TemplateErrorHandler::class, function () {
@@ -138,54 +151,11 @@ class TemplatingServiceProvider extends AbstractServiceProvider
         });
     }
 
-    /**
-     * BESTEHENDE SERVICES (unverändert) - Support Services
-     */
-    private function registerSupportServices(): void
-    {
-        $this->registerTemplateCache();
-        $this->registerFilterServices();
-    }
-
-    /**
-     * BESTEHENDE SERVICES (unverändert) - Parsing Services
-     */
-    private function registerParsingServices(): void
-    {
-        $this->registerTemplatePathResolver();
-        $this->registerTemplateTokenizer();
-        $this->registerControlFlowParser();
-        $this->registerTemplateParser();
-    }
-
-    /**
-     * BESTEHENDE SERVICES (unverändert) - Rendering Services
-     */
-    private function registerRenderingServices(): void
-    {
-        $this->registerTemplateVariableResolver();
-        $this->registerTemplateRenderer();
-    }
-
-    /**
-     * BESTEHENDE SERVICES (unverändert) - Coordination Services
-     */
-    private function registerCoordinationServices(): void
-    {
-        $this->registerTemplateEngine();
-    }
-
-    /**
-     * REFACTORED: Integration Services - Neue ViewRenderer-Architektur
-     */
     private function registerIntegrationServices(): void
     {
         $this->registerRefactoredViewRenderer();
     }
 
-    /**
-     * Registriert den refactorierten ViewRenderer
-     */
     private function registerRefactoredViewRenderer(): void
     {
         $this->singleton(ViewRenderer::class, function () {
@@ -215,28 +185,6 @@ class TemplatingServiceProvider extends AbstractServiceProvider
         });
     }
 
-    // ================================================================
-    // BESTEHENDE SERVICE-REGISTRIERUNGEN (unverändert für Kompatibilität)
-    // ================================================================
-
-    /**
-     * Registriert Template Cache
-     */
-    private function registerTemplateCache(): void
-    {
-        $this->singleton(TemplateCache::class, function () {
-            $config = $this->loadAndValidateConfig('templating');
-
-            return new TemplateCache(
-                cacheDir: $this->basePath($config['cache']['path'] ?? 'storage/cache/views'),
-                enabled: $config['cache']['enabled'] ?? true
-            );
-        });
-    }
-
-    /**
-     * Registriert Filter-Services
-     */
     private function registerFilterServices(): void
     {
         $this->singleton(FilterRegistry::class);
@@ -252,9 +200,25 @@ class TemplatingServiceProvider extends AbstractServiceProvider
         });
     }
 
-    /**
-     * Registriert TemplatePathResolver
-     */
+    private function registerParsingServices(): void
+    {
+        $this->registerTemplatePathResolver();
+        $this->registerTemplateTokenizer();
+        $this->registerControlFlowParser();
+        $this->registerTemplateParser();
+    }
+
+    private function registerRenderingServices(): void
+    {
+        $this->registerTemplateVariableResolver();
+        $this->registerTemplateRenderer();
+    }
+
+    private function registerCoordinationServices(): void
+    {
+        $this->registerTemplateEngine();
+    }
+
     private function registerTemplatePathResolver(): void
     {
         $this->singleton(TemplatePathResolver::class, function () {
@@ -269,9 +233,6 @@ class TemplatingServiceProvider extends AbstractServiceProvider
         });
     }
 
-    /**
-     * Registriert TemplateTokenizer
-     */
     private function registerTemplateTokenizer(): void
     {
         $this->singleton(TemplateTokenizer::class, function () {
@@ -279,9 +240,6 @@ class TemplatingServiceProvider extends AbstractServiceProvider
         });
     }
 
-    /**
-     * Registriert ControlFlowParser
-     */
     private function registerControlFlowParser(): void
     {
         $this->singleton(ControlFlowParser::class, function () {
@@ -289,9 +247,6 @@ class TemplatingServiceProvider extends AbstractServiceProvider
         });
     }
 
-    /**
-     * Registriert TemplateParser
-     */
     private function registerTemplateParser(): void
     {
         $this->singleton(TemplateParser::class, function () {
@@ -303,9 +258,6 @@ class TemplatingServiceProvider extends AbstractServiceProvider
         });
     }
 
-    /**
-     * Registriert TemplateVariableResolver
-     */
     private function registerTemplateVariableResolver(): void
     {
         $this->singleton(TemplateVariableResolver::class, function () {
@@ -313,9 +265,6 @@ class TemplatingServiceProvider extends AbstractServiceProvider
         });
     }
 
-    /**
-     * Registriert TemplateRenderer (Low-Level)
-     */
     private function registerTemplateRenderer(): void
     {
         $this->singleton(TemplateRenderer::class, function () {
@@ -327,9 +276,6 @@ class TemplatingServiceProvider extends AbstractServiceProvider
         });
     }
 
-    /**
-     * Registriert TemplateEngine
-     */
     private function registerTemplateEngine(): void
     {
         $this->singleton(TemplateEngine::class, function () {
@@ -341,9 +287,6 @@ class TemplatingServiceProvider extends AbstractServiceProvider
         });
     }
 
-    /**
-     * Validiert Template-Verzeichnisse
-     */
     private function validateTemplateDirectories(): void
     {
         $config = $this->loadAndValidateConfig('templating');
@@ -358,13 +301,9 @@ class TemplatingServiceProvider extends AbstractServiceProvider
         }
     }
 
-    /**
-     * Validiert Cache-Verzeichnis
-     */
     private function validateCacheDirectory(): void
     {
         $config = $this->loadAndValidateConfig('templating');
-
         $cachePath = $this->basePath($config['cache']['path'] ?? 'storage/cache/views');
 
         if (!is_dir($cachePath)) {
@@ -374,11 +313,8 @@ class TemplatingServiceProvider extends AbstractServiceProvider
         }
     }
 
-    /**
-     * Bindet Template-Interfaces
-     */
     protected function bindInterfaces(): void
     {
-        // Hier können zukünftige Template-Interfaces gebunden werden
+        // Future template interfaces can be bound here
     }
 }

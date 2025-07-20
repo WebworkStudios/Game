@@ -292,10 +292,6 @@ class MessageBag implements Countable, Iterator
         return $counts;
     }
 
-    // ===================================================================
-    // EXISTING METHODS (Backward Compatibility)
-    // ===================================================================
-
     /**
      * Error-Message für Feld hinzufügen
      */
@@ -349,10 +345,6 @@ class MessageBag implements Countable, Iterator
         return isset($this->messages[$field]) && $this->messages[$field] !== [];
     }
 
-    // ===================================================================
-    // OPTIMIZED: JSON and Serialization
-    // ===================================================================
-
     /**
      * OPTIMIZED: JSON conversion with performance awareness
      *
@@ -367,32 +359,6 @@ class MessageBag implements Countable, Iterator
 
         return json_encode($this->toArray(), $flags);
     }
-
-    /**
-     * OPTIMIZED: Export for debugging with size awareness
-     */
-    public function toDebugArray(): array
-    {
-        $totalMessages = $this->count();
-        $fieldCount = count($this->messages);
-
-        return [
-            'summary' => [
-                'total_messages' => $totalMessages,
-                'field_count' => $fieldCount,
-                'memory_usage' => memory_get_usage(true),
-            ],
-            'fields' => $this->countPerField(),
-            'messages' => $totalMessages > 100 ?
-                array_slice($this->all(), 0, 10) :
-                $this->all(),
-            'sample_flat' => array_slice($this->flatten(), 0, 5),
-        ];
-    }
-
-    // ===================================================================
-    // ITERATOR & COUNTABLE INTERFACES
-    // ===================================================================
 
     /**
      * OPTIMIZED: Count with lazy evaluation
@@ -437,26 +403,6 @@ class MessageBag implements Countable, Iterator
         return isset($keys[$this->position]);
     }
 
-    // ===================================================================
-    // DEBUGGING AND MONITORING
-    // ===================================================================
-
-    /**
-     * OPTIMIZED: Debug dump with performance metrics
-     */
-    public function dd(): self
-    {
-        $debugInfo = $this->toDebugArray();
-
-        echo "\n=== MESSAGE BAG DEBUG ===\n";
-        echo "Total Messages: " . $debugInfo['summary']['total_messages'] . "\n";
-        echo "Field Count: " . $debugInfo['summary']['field_count'] . "\n";
-        echo "Fields by Error Count: " . json_encode($this->getFieldsByErrorCount()) . "\n";
-        echo "Sample Messages: " . json_encode($debugInfo['sample_flat']) . "\n";
-        echo "========================\n\n";
-
-        return $this;
-    }
 
     /**
      * OPTIMIZED: String conversion with size awareness

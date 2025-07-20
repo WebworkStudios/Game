@@ -163,11 +163,13 @@ class ApplicationKernel
      */
     private function handleException(Throwable $e, Request $request): Response
     {
-        // Debug-Logging der Exception
         if ($this->debug) {
-            error_log("🚨 Exception in handleRequest: " . $e->getMessage());
-            error_log("   URI: " . $request->getUri());
-            error_log("   Method: " . $request->getMethod()->value);
+            error_log(sprintf(
+                'Request exception: %s [%s %s]',
+                $e->getMessage(),
+                $request->getMethod()->value,
+                $request->getUri()
+            ));
         }
 
         // Custom Error Handler falls vorhanden

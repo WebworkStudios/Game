@@ -1,0 +1,200 @@
+<!-- Template: app/Views/components/flash-messages.html -->
+<!-- Flash-Messages Component für Template Integration -->
+
+{% set flash_messages = get_flash_bag() %}
+
+{% if flash_messages %}
+<div id="flash-messages-container" class="flash-messages">
+
+    {% if flash_messages.success %}
+    <div class="flash-message flash-success" role="alert">
+        <div class="flash-icon">✅</div>
+        <div class="flash-content">
+            <strong>Erfolg!</strong>
+            <span>{{ flash_messages.success }}</span>
+        </div>
+        <button type="button" class="flash-close" aria-label="Schließen">&times;</button>
+    </div>
+    {% endif %}
+
+    {% if flash_messages.error %}
+    <div class="flash-message flash-error" role="alert">
+        <div class="flash-icon">❌</div>
+        <div class="flash-content">
+            <strong>Fehler!</strong>
+            <span>{{ flash_messages.error }}</span>
+        </div>
+        <button type="button" class="flash-close" aria-label="Schließen">&times;</button>
+    </div>
+    {% endif %}
+
+    {% if flash_messages.warning %}
+    <div class="flash-message flash-warning" role="alert">
+        <div class="flash-icon">⚠️</div>
+        <div class="flash-content">
+            <strong>Warnung!</strong>
+            <span>{{ flash_messages.warning }}</span>
+        </div>
+        <button type="button" class="flash-close" aria-label="Schließen">&times;</button>
+    </div>
+    {% endif %}
+
+    {% if flash_messages.info %}
+    <div class="flash-message flash-info" role="alert">
+        <div class="flash-icon">ℹ️</div>
+        <div class="flash-content">
+            <strong>Info:</strong>
+            <span>{{ flash_messages.info }}</span>
+        </div>
+        <button type="button" class="flash-close" aria-label="Schließen">&times;</button>
+    </div>
+    {% endif %}
+
+</div>
+
+<style>
+    .flash-messages {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        z-index: 9999;
+        max-width: 400px;
+    }
+
+    .flash-message {
+        display: flex;
+        align-items: center;
+        padding: 12px 16px;
+        margin-bottom: 10px;
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        animation: slideInRight 0.3s ease-out;
+    }
+
+    .flash-success {
+        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        color: white;
+        border-left: 4px solid #047857;
+    }
+
+    .flash-error {
+        background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+        color: white;
+        border-left: 4px solid #b91c1c;
+    }
+
+    .flash-warning {
+        background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+        color: white;
+        border-left: 4px solid #b45309;
+    }
+
+    .flash-info {
+        background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+        color: white;
+        border-left: 4px solid #1d4ed8;
+    }
+
+    .flash-icon {
+        font-size: 18px;
+        margin-right: 12px;
+        flex-shrink: 0;
+    }
+
+    .flash-content {
+        flex-grow: 1;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .flash-content strong {
+        font-weight: 600;
+        margin-bottom: 2px;
+    }
+
+    .flash-close {
+        background: none;
+        border: none;
+        color: currentColor;
+        font-size: 20px;
+        cursor: pointer;
+        margin-left: 12px;
+        opacity: 0.7;
+        transition: opacity 0.2s;
+    }
+
+    .flash-close:hover {
+        opacity: 1;
+    }
+
+    @keyframes slideInRight {
+        from {
+            transform: translateX(100%);
+            opacity: 0;
+        }
+        to {
+            transform: translateX(0);
+            opacity: 1;
+        }
+    }
+
+    @keyframes slideOutRight {
+        from {
+            transform: translateX(0);
+            opacity: 1;
+        }
+        to {
+            transform: translateX(100%);
+            opacity: 0;
+        }
+    }
+
+    .flash-message.hiding {
+        animation: slideOutRight 0.3s ease-in forwards;
+    }
+
+    /* Responsive Design */
+    @media (max-width: 640px) {
+        .flash-messages {
+            top: 10px;
+            right: 10px;
+            left: 10px;
+            max-width: none;
+        }
+
+        .flash-message {
+            padding: 10px 14px;
+        }
+    }
+</style>
+
+<script>
+    // Auto-hide flash messages und close functionality
+    document.addEventListener('DOMContentLoaded', function() {
+        const flashMessages = document.querySelectorAll('.flash-message');
+
+        flashMessages.forEach(function(message) {
+            // Close button functionality
+            const closeBtn = message.querySelector('.flash-close');
+            if (closeBtn) {
+                closeBtn.addEventListener('click', function() {
+                    hideFlashMessage(message);
+                });
+            }
+
+            // Auto-hide nach 5 Sekunden (außer bei Fehlern)
+            if (!message.classList.contains('flash-error')) {
+                setTimeout(function() {
+                    hideFlashMessage(message);
+                }, 5000);
+            }
+        });
+    });
+
+    function hideFlashMessage(message) {
+        message.classList.add('hiding');
+        setTimeout(function() {
+            message.remove();
+        }, 300); // Match animation duration
+    }
+</script>

@@ -126,18 +126,3 @@ if (function_exists('fastcgi_finish_request')) {
     // This allows any cleanup code to run without affecting response time
     fastcgi_finish_request();
 }
-
-// Optional: Log request metrics, cleanup, etc.
-// This code runs after the response is sent to the client
-if (isset($app) && $app->isDebug()) {
-    $executionTime = microtime(true) - $_SERVER['REQUEST_TIME_FLOAT'];
-    $memoryUsage = memory_get_peak_usage(true);
-
-    error_log(sprintf(
-        "Request Performance: %s %s - Time: %.3fs, Memory: %s",
-        $_SERVER['REQUEST_METHOD'] ?? 'GET',
-        $_SERVER['REQUEST_URI'] ?? '/',
-        $executionTime,
-        number_format($memoryUsage / 1024 / 1024, 2) . 'MB'
-    ));
-}
