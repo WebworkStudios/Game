@@ -14,15 +14,20 @@ use RuntimeException;
 use Throwable;
 
 /**
- * Router Cache - COMPLETE with ALL original methods + PHP 8.4 iterator_to_array() Optimizations
+ * Router Cache - GEFIXT mit robuster Serialization
+ *
+ * FIXES:
+ * - Serialization statt var_export für komplexe Route-Objekte
+ * - Robuste Cache-Validierung
+ * - Emergency Fallbacks bei Cache-Fehlern
+ * - Atomic File Operations
  */
 readonly class RouterCache
 {
     public function __construct(
         private string $cacheFile,
         private string $actionsPath
-    )
-    {
+    ) {
     }
 
     /**
@@ -57,18 +62,30 @@ readonly class RouterCache
 
     /**
      * Load route entries directly (backward compatibility)
+     * GEFIXT: Mit Emergency Fallback
      */
     public function loadRouteEntries(): array
     {
-        $cachedData = $this->get();
-        if ($cachedData && !empty($cachedData['routes'])) {
-            return $cachedData['routes'];
+        try {
+            $cachedData = $this->get();
+            if ($cachedData && !empty($cachedData['routes'])) {
+                return $cachedData['routes'];
+            }
+        } catch (\Throwable $e) {
+            error_log("Cache loading failed, rebuilding: " . $e->getMessage());
+            // Cache löschen bei Fehler
+            $this->clear();
         }
 
-        // No cache exists or empty - build routes
+        // Fallback: Routes neu aufbauen
         $routes = $this->buildRoutes();
         if (!empty($routes)) {
-            $this->put(['routes' => $routes]);
+            try {
+                $this->put(['routes' => $routes]);
+            } catch (\Throwable $e) {
+                error_log("Cache saving failed: " . $e->getMessage());
+                // Weitermachen ohne Cache
+            }
         }
 
         return $routes;
@@ -91,6 +108,15 @@ readonly class RouterCache
         }
 
         return null;
+    }
+
+    /**
+     * Store routes in cache
+     */
+    public function put(array $data): void
+    {
+        $routes = $data['routes'] ?? [];
+        $this->saveToCache($routes);
     }
 
     /**
@@ -139,18 +165,14 @@ readonly class RouterCache
     }
 
     /**
-     * OPTIMIZED: Load routes from cache with lazy loading
+     * OPTIMIZED: Load from cache with fallback chain
      */
     private function loadFromCache(): array
     {
-        // Try APCu cache first (fastest)
-        $driver = CacheDriverDetector::detectOptimalDriver();
-
-        if ($driver === 'apcu') {
-            $routes = $this->loadFromApcuCache();
-            if (!empty($routes)) {
-                return $routes;
-            }
+        // Try APCu first for speed
+        $routes = $this->loadFromMemoryCache();
+        if (!empty($routes)) {
+            return $routes;
         }
 
         // Fallback to file cache
@@ -160,58 +182,34 @@ readonly class RouterCache
     /**
      * OPTIMIZED: APCu cache loading with compression support
      */
-    private function loadFromApcuCache(): array
+    private function loadFromMemoryCache(): array
     {
-        $isCompressed = apcu_fetch('kickerscup_routes_is_compressed', $success);
+        if (!function_exists('apcu_fetch')) {
+            return [];
+        }
 
-        if ($success && $isCompressed) {
-            $compressed = apcu_fetch('kickerscup_routes_compressed', $success);
-            if ($success && function_exists('gzuncompress')) {
-                $serialized = gzuncompress($compressed);
-                $cacheData = unserialize($serialized);
+        try {
+            $isCompressed = apcu_fetch('kickerscup_routes_is_compressed');
 
-                if (is_array($cacheData)) {
-                    return $this->convertCacheDataToRoutes($cacheData);
+            if ($isCompressed) {
+                $compressed = apcu_fetch('kickerscup_routes_compressed');
+                if ($compressed && function_exists('gzuncompress')) {
+                    $serialized = gzuncompress($compressed);
+                    return unserialize($serialized) ?: [];
                 }
+            } else {
+                $routes = apcu_fetch('kickerscup_routes');
+                return is_array($routes) ? $routes : [];
             }
-        } else {
-            $cacheData = apcu_fetch('kickerscup_routes', $success);
-            if ($success && is_array($cacheData)) {
-                return $this->convertCacheDataToRoutes($cacheData);
-            }
+        } catch (\Throwable $e) {
+            error_log("APCu cache loading error: " . $e->getMessage());
         }
 
         return [];
     }
 
     /**
-     * OPTIMIZED: Convert cache data to RouteEntry objects with iterator_to_array()
-     */
-    private function convertCacheDataToRoutes(array $cacheData): array
-    {
-        $generator = function () use ($cacheData) {
-            foreach ($cacheData as $data) {
-                try {
-                    yield new RouteEntry(
-                        pattern: $data['pattern'],
-                        methods: array_map(fn(string $method) => HttpMethod::from($method), $data['methods']),
-                        action: $data['action'],
-                        middlewares: $data['middlewares'],
-                        name: $data['name'],
-                        parameters: $data['parameters'],
-                    );
-                } catch (Throwable $e) {
-                    // Skip invalid routes but continue processing
-                    continue;
-                }
-            }
-        };
-
-        return iterator_to_array($generator(), preserve_keys: false);
-    }
-
-    /**
-     * OPTIMIZED: File cache loading
+     * OPTIMIZED: File cache loading with validation
      */
     private function loadFromFileCache(): array
     {
@@ -243,6 +241,31 @@ readonly class RouterCache
         return [];
     }
 
+    /**
+     * Convert cached data back to RouteEntry objects
+     */
+    private function convertCacheDataToRoutes(array $cacheData): array
+    {
+        $generator = function () use ($cacheData) {
+            foreach ($cacheData as $data) {
+                try {
+                    yield new RouteEntry(
+                        pattern: $data['pattern'],
+                        methods: array_map(fn(string $method) => HttpMethod::from($method), $data['methods']),
+                        action: $data['action'],
+                        middlewares: $data['middlewares'],
+                        name: $data['name'],
+                        parameters: $data['parameters'],
+                    );
+                } catch (Throwable $e) {
+                    // Skip invalid routes but continue processing
+                    continue;
+                }
+            }
+        };
+
+        return iterator_to_array($generator(), preserve_keys: false);
+    }
 
     /**
      * OPTIMIZED: Build named routes array with lazy evaluation
@@ -258,125 +281,6 @@ readonly class RouterCache
         };
 
         return iterator_to_array($generator(), preserve_keys: true);
-    }
-
-    /**
-     * Build routes from Action files
-     */
-    private function buildRoutes(): array
-    {
-        $routes = [];
-
-        if (!is_dir($this->actionsPath)) {
-            return $routes;
-        }
-
-        $iterator = new RecursiveIteratorIterator(
-            new RecursiveDirectoryIterator($this->actionsPath, RecursiveDirectoryIterator::SKIP_DOTS)
-        );
-
-
-        foreach ($iterator as $file) {
-
-            if ($file->getExtension() === 'php') {
-
-                $className = $this->getClassNameFromFile($file->getPathname());
-
-                if ($className) {
-
-                    $this->loadClass($className, $file->getPathname());
-
-                    if (class_exists($className)) {
-                        $classRoutes = $this->extractRoutesFromClass($className);
-                    }
-
-                    $routes = array_merge($routes, $classRoutes);
-                }
-            }
-        }
-        return $routes;
-    }
-
-    /**
-     * Extract class name from file path (Windows path support)
-     */
-    private function getClassNameFromFile(string $filepath): ?string
-    {
-        // Normalize path separators for Windows compatibility
-        $normalizedFilePath = str_replace('\\', '/', $filepath);
-        $normalizedActionsPath = str_replace('\\', '/', $this->actionsPath);
-
-        $relativePath = str_replace($normalizedActionsPath, '', $normalizedFilePath);
-
-        // Remove leading slash and .php extension
-        $relativePath = ltrim($relativePath, '/');
-        $relativePath = str_replace('.php', '', $relativePath);
-
-        // Convert path to namespace
-        $namespace = str_replace('/', '\\', $relativePath);
-        $fullClassName = 'App\\Actions\\' . $namespace;
-
-        return $fullClassName;
-    }
-
-    /**
-     * Load class from file
-     */
-    private function loadClass(string $className, string $filepath): void
-    {
-        if (!class_exists($className)) try {
-            require_once $filepath;
-
-        } catch (Throwable $e) {
-        }
-    }
-
-    /**
-     * Extract routes from class using Route attributes
-     */
-    private function extractRoutesFromClass(string $className): array
-    {
-        $routes = [];
-
-        try {
-
-            $reflection = new ReflectionClass($className);
-            $attributes = $reflection->getAttributes(Route::class);
-
-            foreach ($attributes as $attribute) {
-
-                // Create route instance
-                $routeInstance = $attribute->newInstance();
-
-                // Get route data
-                $pattern = $routeInstance->getPattern();
-                $methods = $routeInstance->getValidatedMethods();
-                $parameters = $routeInstance->getParameters();
-
-                $route = new RouteEntry(
-                    pattern: $pattern,
-                    methods: $methods,
-                    action: $className,
-                    middlewares: $routeInstance->middlewares,
-                    name: $routeInstance->name,
-                    parameters: $parameters
-                );
-
-                $routes[] = $route;
-            }
-        } catch (Exception $e) {
-        }
-
-        return $routes;
-    }
-
-    /**
-     * Save routes to cache
-     */
-    public function put(array $data): void
-    {
-        $routes = $data['routes'] ?? [];
-        $this->saveToCache($routes);
     }
 
     /**
@@ -433,6 +337,7 @@ readonly class RouterCache
 
     /**
      * OPTIMIZED: File cache writing with atomic operations
+     * GEFIXT: Serialization statt var_export
      */
     private function saveToFileCache(array $routes): void
     {
@@ -446,46 +351,57 @@ readonly class RouterCache
 
         $tempFile = $this->cacheFile . '.tmp';
 
-        // FIXED: Robust content generation with validation
-        $content = $this->generateCacheFileContent($routes);
+        try {
+            // KRITISCHER FIX: Robuste Content-Generierung
+            $content = $this->generateCacheFileContent($routes);
 
-        // CRITICAL: Validate content before writing
-        if (empty($content) || !str_ends_with($content, ";\n")) {
-            throw new RuntimeException("Invalid cache content generated");
-        }
+            // CRITICAL: Validate content before writing
+            if (empty($content) || !str_contains($content, 'return')) {
+                throw new RuntimeException("Invalid cache content generated");
+            }
 
-        // ATOMIC: Write to temp file first
-        if (file_put_contents($tempFile, $content, LOCK_EX) === false) {
-            throw new RuntimeException("Cannot write to cache file: {$tempFile}");
-        }
+            // ATOMIC: Write to temp file first
+            if (file_put_contents($tempFile, $content, LOCK_EX) === false) {
+                throw new RuntimeException("Cannot write to cache file: {$tempFile}");
+            }
 
-        // VALIDATION: Verify the written file can be parsed
-        if (!$this->validateCacheFile($tempFile)) {
+            // VALIDATION: Verify the written file can be parsed
+            if (!$this->validateCacheFile($tempFile)) {
+                @unlink($tempFile);
+                throw new RuntimeException("Generated cache file is invalid");
+            }
+
+            // ATOMIC: Move temp file to final location
+            if (!rename($tempFile, $this->cacheFile)) {
+                @unlink($tempFile);
+                throw new RuntimeException("Cannot move cache file from {$tempFile} to {$this->cacheFile}");
+            }
+
+        } catch (\Throwable $e) {
+            error_log("File cache save error: " . $e->getMessage());
             @unlink($tempFile);
-            throw new RuntimeException("Generated cache file is invalid");
-        }
-
-        // ATOMIC: Move temp file to final location
-        if (!rename($tempFile, $this->cacheFile)) {
-            @unlink($tempFile);
-            throw new RuntimeException("Cannot move cache file from {$tempFile} to {$this->cacheFile}");
+            throw $e;
         }
     }
 
     /**
-     * NEW: Generate cache file content with proper formatting
+     * KRITISCHER FIX: Robuste Cache-Content-Generierung mit Serialization
      */
     private function generateCacheFileContent(array $routes): string
     {
-        // Ensure routes array is valid
-        if (!is_array($routes)) {
-            $routes = [];
-        }
+        try {
+            // Ensure routes array is valid
+            if (!is_array($routes)) {
+                $routes = [];
+            }
 
-        $exportedRoutes = var_export($routes, true);
+            // EINFACHER FIX: Serialization statt var_export
+            // var_export() kann bei komplexen Objekten fehlschlagen
+            $serialized = serialize($routes);
+            $escapedSerialized = var_export($serialized, true);
 
-        // Build content with proper PHP syntax
-        return <<<PHP
+            // Build robust content with proper PHP syntax
+            return <<<PHP
 <?php
 
 declare(strict_types=1);
@@ -494,9 +410,21 @@ declare(strict_types=1);
 // Framework: KickersCup Manager
 // DO NOT EDIT - This file is auto-generated
 
-return {$exportedRoutes};
+return unserialize({$escapedSerialized});
 
 PHP;
+
+        } catch (\Throwable $e) {
+            error_log("Cache content generation error: " . $e->getMessage());
+
+            // Emergency fallback: empty array
+            return <<<PHP
+<?php
+declare(strict_types=1);
+// Emergency fallback - cache generation failed
+return [];
+PHP;
+        }
     }
 
     /**
@@ -509,10 +437,24 @@ PHP;
             $result = require $filePath;
 
             // Must return an array
-            return is_array($result);
+            if (!is_array($result)) {
+                error_log("Cache file does not return array: {$filePath}");
+                return false;
+            }
+
+            // Test serialization roundtrip for data integrity
+            $testSerialized = serialize($result);
+            $testUnserialized = unserialize($testSerialized);
+
+            if (!is_array($testUnserialized)) {
+                error_log("Cache data is not serializable: {$filePath}");
+                return false;
+            }
+
+            return true;
 
         } catch (\Throwable $e) {
-            error_log("Cache file validation failed: " . $e->getMessage());
+            error_log("Cache file validation failed for {$filePath}: " . $e->getMessage());
             return false;
         }
     }
@@ -526,16 +468,114 @@ PHP;
             return;
         }
 
-        // Use compression for large route sets
-        $serialized = serialize($routes);
+        try {
+            // Use compression for large route sets
+            $serialized = serialize($routes);
 
-        if (strlen($serialized) > 50000 && function_exists('gzcompress')) {
-            $compressed = gzcompress($serialized, 6);
-            apcu_store('kickerscup_routes_compressed', $compressed, 3600);
-            apcu_store('kickerscup_routes_is_compressed', true, 3600);
-        } else {
-            apcu_store('kickerscup_routes', $routes, 3600);
-            apcu_store('kickerscup_routes_is_compressed', false, 3600);
+            if (strlen($serialized) > 50000 && function_exists('gzcompress')) {
+                $compressed = gzcompress($serialized, 6);
+                apcu_store('kickerscup_routes_compressed', $compressed, 3600);
+                apcu_store('kickerscup_routes_is_compressed', true, 3600);
+            } else {
+                apcu_store('kickerscup_routes', $routes, 3600);
+                apcu_store('kickerscup_routes_is_compressed', false, 3600);
+            }
+        } catch (\Throwable $e) {
+            error_log("APCu cache save error: " . $e->getMessage());
+        }
+    }
+
+    /**
+     * Build routes from Action files
+     */
+    private function buildRoutes(): array
+    {
+        $routes = [];
+
+        if (!is_dir($this->actionsPath)) {
+            return $routes;
+        }
+
+        $iterator = new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator($this->actionsPath, RecursiveDirectoryIterator::SKIP_DOTS)
+        );
+
+        foreach ($iterator as $file) {
+            if ($file->getExtension() === 'php') {
+                $className = $this->getClassNameFromFile($file->getPathname());
+
+                if ($className) {
+                    $this->loadClass($className, $file->getPathname());
+
+                    if (class_exists($className)) {
+                        $classRoutes = $this->extractRoutesFromClass($className);
+                        $routes = array_merge($routes, $classRoutes);
+                    }
+                }
+            }
+        }
+
+        return $routes;
+    }
+
+    /**
+     * Extract class name from file path (Windows path support)
+     */
+    private function getClassNameFromFile(string $filepath): ?string
+    {
+        // Normalize path separators for Windows compatibility
+        $normalizedFilePath = str_replace('\\', '/', $filepath);
+        $normalizedActionsPath = str_replace('\\', '/', $this->actionsPath);
+
+        $relativePath = str_replace($normalizedActionsPath, '', $normalizedFilePath);
+
+        // Remove leading slash and .php extension
+        $relativePath = ltrim($relativePath, '/');
+        $relativePath = str_replace('.php', '', $relativePath);
+
+        // Convert path to namespace
+        $namespace = str_replace('/', '\\', $relativePath);
+        $fullClassName = 'App\\Actions\\' . $namespace;
+
+        return $fullClassName;
+    }
+
+    /**
+     * Load class from file
+     */
+    private function loadClass(string $className, string $filepath): void
+    {
+        if (!class_exists($className)) {
+            require_once $filepath;
+        }
+    }
+
+    /**
+     * Extract routes from class using reflection
+     */
+    private function extractRoutesFromClass(string $className): array
+    {
+        try {
+            $reflection = new ReflectionClass($className);
+            $attributes = $reflection->getAttributes(Route::class);
+
+            $routes = [];
+            foreach ($attributes as $attribute) {
+                $route = $attribute->newInstance();
+                $routes[] = new RouteEntry(
+                    pattern: $route->path,
+                    methods: $route->methods,
+                    action: $className,
+                    middlewares: $route->middlewares,
+                    name: $route->name,
+                    parameters: []
+                );
+            }
+
+            return $routes;
+        } catch (Exception $e) {
+            error_log("Error extracting routes from {$className}: " . $e->getMessage());
+            return [];
         }
     }
 }

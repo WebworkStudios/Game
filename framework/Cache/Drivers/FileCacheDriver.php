@@ -7,6 +7,9 @@ use Framework\Cache\CacheDriverInterface;
 
 /**
  * FileCacheDriver - File System Implementation
+ *
+ * GEFIXT: Serialization statt var_export für robuste Cache-Speicherung
+ * Löst das Problem mit weißen Seiten beim Cache-Refresh
  */
 readonly class FileCacheDriver implements CacheDriverInterface
 {
@@ -25,6 +28,13 @@ readonly class FileCacheDriver implements CacheDriverInterface
         }
 
         try {
+            // GEFIXT: Robuste Cache-Validierung vor dem Laden
+            if (!$this->validateCacheFile($file)) {
+                error_log("Corrupted cache file detected, removing: {$file}");
+                @unlink($file);
+                return null;
+            }
+
             $cached = require $file;
 
             // Check TTL
@@ -34,7 +44,12 @@ readonly class FileCacheDriver implements CacheDriverInterface
             }
 
             return $cached['data'] ?? null;
-        } catch (\Throwable) {
+
+        } catch (\Throwable $e) {
+            error_log("Cache file loading error: " . $e->getMessage());
+
+            // Cleanup corrupted cache file
+            @unlink($file);
             return null;
         }
     }
@@ -54,8 +69,40 @@ readonly class FileCacheDriver implements CacheDriverInterface
             'created_at' => time()
         ];
 
-        $content = "<?php\n\nreturn " . var_export($data, true) . ";\n";
-        return file_put_contents($file, $content, LOCK_EX) !== false;
+        try {
+            // KRITISCHER FIX: Serialization statt var_export
+            // var_export() kann bei komplexen Objekten fehlschlagen
+            $serialized = serialize($data);
+
+            // Robuste Content-Generierung
+            $content = $this->generateCacheContent($serialized);
+
+            // Atomic write mit Temp-Datei
+            $tempFile = $file . '.tmp';
+
+            if (file_put_contents($tempFile, $content, LOCK_EX) === false) {
+                return false;
+            }
+
+            // Validierung vor dem finalen Move
+            if (!$this->validateCacheFile($tempFile)) {
+                @unlink($tempFile);
+                error_log("Generated cache file failed validation");
+                return false;
+            }
+
+            // Atomic move
+            if (!rename($tempFile, $file)) {
+                @unlink($tempFile);
+                return false;
+            }
+
+            return true;
+
+        } catch (\Throwable $e) {
+            error_log("Cache put error: " . $e->getMessage());
+            return false;
+        }
     }
 
     public function forget(string $key): bool
@@ -78,7 +125,62 @@ readonly class FileCacheDriver implements CacheDriverInterface
 
     public function exists(string $key): bool
     {
-        return file_exists($this->getCacheFile($key));
+        $file = $this->getCacheFile($key);
+        return file_exists($file) && $this->validateCacheFile($file);
+    }
+
+    /**
+     * NEU: Robuste Cache-Content-Generierung
+     */
+    private function generateCacheContent(string $serializedData): string
+    {
+        // Escaping für sichere String-Einbettung
+        $escapedData = var_export($serializedData, true);
+
+        return <<<PHP
+<?php
+
+declare(strict_types=1);
+
+// Cache file generated at: {date('Y-m-d H:i:s')}
+// Framework: KickersCup Manager
+// DO NOT EDIT - This file is auto-generated
+
+return unserialize({$escapedData});
+
+PHP;
+    }
+
+    /**
+     * NEU: Cache-Datei-Validierung
+     */
+    private function validateCacheFile(string $file): bool
+    {
+        try {
+            // Test ob Datei parseable ist
+            $result = require $file;
+
+            // Muss Array sein
+            if (!is_array($result)) {
+                return false;
+            }
+
+            // Muss erforderliche Felder haben
+            if (!isset($result['data'], $result['expires_at'], $result['created_at'])) {
+                return false;
+            }
+
+            // Timestamp-Validierung
+            if (!is_int($result['expires_at']) || !is_int($result['created_at'])) {
+                return false;
+            }
+
+            return true;
+
+        } catch (\Throwable $e) {
+            error_log("Cache file validation failed: " . $e->getMessage());
+            return false;
+        }
     }
 
     private function ensureCacheDirectory(): void
