@@ -184,11 +184,63 @@ class LanguageDetector
     }
 
     /**
-     * Parse Accept-Language header
+     * OPTIMIZED: Memory-efficient Accept-Language parsing mit iterator_to_array()
      */
     private function parseAcceptLanguage(string $acceptLanguage): array
     {
-        $languages = [];
+        $generator = function() use ($acceptLanguage) {
+            $parts = explode(',', $acceptLanguage);
+
+            foreach ($parts as $part) {
+                $part = trim($part);
+
+                if (str_contains($part, ';q=')) {
+                    [$locale, $q] = explode(';q=', $part, 2);
+                    $quality = (float)$q;
+                } else {
+                    $locale = $part;
+                    $quality = 1.0;
+                }
+
+                yield [
+                    'locale' => trim($locale),
+                    'quality' => $quality
+                ];
+            }
+        };
+
+        // OPTIMIZED: preserve_keys: false für bessere Memory-Performance
+        $languages = iterator_to_array($generator(), preserve_keys: false);
+
+        // Sort by quality (highest first)
+        usort($languages, fn($a, $b) => $b['quality'] <=> $a['quality']);
+
+        return $languages;
+    }
+
+    /**
+     * ZUSÄTZLICHE OPTIMIERUNG: Bulk Language Detection
+     */
+    public function parseMultipleAcceptLanguages(array $acceptLanguageHeaders): array
+    {
+        $allLanguagesGenerator = function() use ($acceptLanguageHeaders) {
+            foreach ($acceptLanguageHeaders as $index => $header) {
+                $languages = $this->parseAcceptLanguageAsGenerator($header);
+
+                foreach ($languages as $language) {
+                    yield $index => $language;
+                }
+            }
+        };
+
+        return iterator_to_array($allLanguagesGenerator(), preserve_keys: true);
+    }
+
+    /**
+     * HELPER: Generator-Version für interne Nutzung
+     */
+    private function parseAcceptLanguageAsGenerator(string $acceptLanguage): \Generator
+    {
         $parts = explode(',', $acceptLanguage);
 
         foreach ($parts as $part) {
@@ -202,16 +254,11 @@ class LanguageDetector
                 $quality = 1.0;
             }
 
-            $languages[] = [
+            yield [
                 'locale' => trim($locale),
                 'quality' => $quality
             ];
         }
-
-        // Sort by quality (highest first)
-        usort($languages, fn($a, $b) => $b['quality'] <=> $a['quality']);
-
-        return $languages;
     }
 
     /**

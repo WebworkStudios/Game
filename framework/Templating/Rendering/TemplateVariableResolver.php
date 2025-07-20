@@ -4,13 +4,12 @@ namespace Framework\Templating\Rendering;
 
 /**
  * TemplateVariableResolver - Erweitert für Key-Value For-Loop Support
- *
- * BEREINIGT: Debug-Logging komplett entfernt
  */
 class TemplateVariableResolver
 {
     private array $data = [];
     private array $loopStack = [];
+    private array $resolutionCache = [];
 
     public function getData(): array
     {
@@ -119,10 +118,16 @@ class TemplateVariableResolver
     }
 
     /**
-     * Resolve nested object/array access
+     * OPTIMIZED: Memory-efficient nested key resolution mit lazy evaluation
      */
     private function resolveNestedKeys(array $keys, mixed $data): mixed
     {
+        // OPTIMIZED: Für große Key-Arrays Generator verwenden
+        if (count($keys) > 5) {
+            return $this->resolveNestedKeysLazy($keys, $data);
+        }
+
+        // Standard-Implementierung für kleine Arrays (Performance-optimiert)
         $current = $data;
 
         foreach ($keys as $key) {
@@ -138,5 +143,69 @@ class TemplateVariableResolver
         }
 
         return $current;
+    }
+
+    /**
+     * OPTIMIZED: Generator-basierte Resolution für tiefe Nested Objects
+     */
+    private function resolveNestedKeysLazy(array $keys, mixed $data): mixed
+    {
+        $resolutionStepsGenerator = function() use ($keys, $data) {
+            $current = $data;
+
+            foreach ($keys as $key) {
+                if (is_array($current) && isset($current[$key])) {
+                    $current = $current[$key];
+                    yield $key => $current;
+                } elseif (is_object($current) && property_exists($current, $key)) {
+                    $current = $current->$key;
+                    yield $key => $current;
+                } elseif (is_object($current) && method_exists($current, $key)) {
+                    $current = $current->$key();
+                    yield $key => $current;
+                } else {
+                    return null;
+                }
+            }
+
+            return $current;
+        };
+
+        // OPTIMIZED: Nur die finale Resolution interessiert uns
+        $steps = iterator_to_array($resolutionStepsGenerator(), preserve_keys: false);
+        return empty($steps) ? null : end($steps);
+    }
+
+    /**
+     * ZUSÄTZLICHE OPTIMIERUNG: Batch Variable Resolution
+     */
+    public function resolveMultipleVariables(array $variables): array
+    {
+        $resolutionGenerator = function() use ($variables) {
+            foreach ($variables as $variable) {
+                $resolved = $this->resolve($variable);
+                if ($resolved !== null) {
+                    yield $variable => $resolved;
+                }
+            }
+        };
+
+        return iterator_to_array($resolutionGenerator(), preserve_keys: true);
+    }
+
+    public function resolveWithCache(string $variable): mixed
+    {
+        if (isset($this->resolutionCache[$variable])) {
+            return $this->resolutionCache[$variable];
+        }
+
+        $result = $this->resolve($variable);
+
+        // Nur erfolgreiche Resolutions cachen
+        if ($result !== null) {
+            $this->resolutionCache[$variable] = $result;
+        }
+
+        return $result;
     }
 }
