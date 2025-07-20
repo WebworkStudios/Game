@@ -100,10 +100,6 @@ class SessionMiddleware implements MiddlewareInterface
         }
     }
 
-    // =============================================================================
-    // PUBLIC API - Manual Operations
-    // =============================================================================
-
     private function shouldSkipSession(Request $request): bool
     {
         $path = $request->getPath();
@@ -134,10 +130,6 @@ class SessionMiddleware implements MiddlewareInterface
             }
         }
 
-        // Session required for:
-        // - POST requests (for CSRF)
-        // - When session cookie exists
-        // - Forms
         return $request->getMethod()->value === 'POST'
             || isset($request->getCookies()[session_name()])
             || str_contains($request->getHeader('Content-Type') ?? '', 'form-data')
@@ -242,10 +234,6 @@ class SessionMiddleware implements MiddlewareInterface
 
     private function cleanup(): void
     {
-        // Optional cleanup logic
-        // Could trigger garbage collection, cleanup expired data, etc.
-
-        // Probabilistic garbage collection (5% chance)
         if (mt_rand(1, 100) <= 5) {
             try {
                 $this->session->gc();
@@ -271,10 +259,6 @@ class SessionMiddleware implements MiddlewareInterface
 
         error_log('SessionMiddleware: ' . json_encode($logData));
     }
-
-    // =============================================================================
-    // PRIVATE METHODS - Logging
-    // =============================================================================
 
     public function forceSessionStart(Request $request): void
     {

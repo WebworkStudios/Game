@@ -7,13 +7,6 @@ use Framework\Cache\CacheDriverInterface;
 
 /**
  * FileCacheDriver - GEFIXT: Template Caching Problem behoben
- *
- * PROBLEM BEHOBEN:
- * ✅ Doppelte Serialisierung eliminiert
- * ✅ Robuste Cache-Validierung
- * ✅ Atomic File Operations
- * ✅ Corruption Recovery
- * ✅ Emergency Fallbacks
  */
 readonly class FileCacheDriver implements CacheDriverInterface
 {
@@ -38,7 +31,6 @@ readonly class FileCacheDriver implements CacheDriverInterface
                 return null;
             }
 
-            // GEFIXT: Direktes require ohne Deserialisierung
             $cached = require $file;
 
             // Structure validation
@@ -80,7 +72,6 @@ readonly class FileCacheDriver implements CacheDriverInterface
         ];
 
         try {
-            // GEFIXT: Einfache var_export Strategie ohne doppelte Serialisierung
             $content = $this->generateSafeContent($data);
 
             // Atomic write mit Temp-Datei
@@ -144,12 +135,11 @@ readonly class FileCacheDriver implements CacheDriverInterface
     }
 
     /**
-     * KRITISCHER FIX: Sichere Content-Generierung ohne Serialisierung
+     * Sichere Content-Generierung ohne Serialisierung
      */
     private function generateSafeContent(array $data): string
     {
         try {
-            // GEFIXT: Direkte var_export ohne Serialisierung
             $exportedData = var_export($data, true);
 
             // Validierung des exportierten Contents
@@ -180,7 +170,7 @@ PHP;
     }
 
     /**
-     * ROBUST: Cache-Datei-Validierung
+     * Cache-Datei-Validierung
      */
     private function validateCacheFile(string $file): bool
     {
@@ -207,7 +197,7 @@ PHP;
     }
 
     /**
-     * SAFE: Test-Include einer Cache-Datei
+     * Test-Include einer Cache-Datei
      */
     private function testIncludeFile(string $file): mixed
     {

@@ -20,9 +20,9 @@ class ValidationFailedException extends RuntimeException
     public function __construct(
         private readonly MessageBag $errors,
         string $message = 'The given data was invalid.',
-        int $code = 422
+        HttpStatus $status = HttpStatus::UNPROCESSABLE_ENTITY
     ) {
-        parent::__construct($message, $code);
+        parent::__construct($message, $status->value);
     }
 
     /**
