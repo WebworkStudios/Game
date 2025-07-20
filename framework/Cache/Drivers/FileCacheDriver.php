@@ -6,10 +6,14 @@ namespace Framework\Cache\Drivers;
 use Framework\Cache\CacheDriverInterface;
 
 /**
- * FileCacheDriver - File System Implementation
+ * FileCacheDriver - GEFIXT: Template Caching Problem behoben
  *
- * GEFIXT: Serialization statt var_export für robuste Cache-Speicherung
- * Löst das Problem mit weißen Seiten beim Cache-Refresh
+ * PROBLEM BEHOBEN:
+ * ✅ Doppelte Serialisierung eliminiert
+ * ✅ Robuste Cache-Validierung
+ * ✅ Atomic File Operations
+ * ✅ Corruption Recovery
+ * ✅ Emergency Fallbacks
  */
 readonly class FileCacheDriver implements CacheDriverInterface
 {
@@ -28,27 +32,33 @@ readonly class FileCacheDriver implements CacheDriverInterface
         }
 
         try {
-            // GEFIXT: Robuste Cache-Validierung vor dem Laden
+            // ROBUST: Cache-Validierung vor dem Laden
             if (!$this->validateCacheFile($file)) {
                 error_log("Corrupted cache file detected, removing: {$file}");
                 @unlink($file);
                 return null;
             }
 
+            // GEFIXT: Direktes require ohne Deserialisierung
             $cached = require $file;
 
-            // Check TTL
-            if (isset($cached['expires_at']) && $cached['expires_at'] < time()) {
-                unlink($file);
+            // Structure validation
+            if (!is_array($cached) || !isset($cached['data'], $cached['expires_at'])) {
+                error_log("Invalid cache structure in file: {$file}");
+                @unlink($file);
                 return null;
             }
 
-            return $cached['data'] ?? null;
+            // TTL Check
+            if ($cached['expires_at'] < time()) {
+                @unlink($file);
+                return null;
+            }
+
+            return $cached['data'];
 
         } catch (\Throwable $e) {
-            error_log("Cache file loading error: " . $e->getMessage());
-
-            // Cleanup corrupted cache file
+            error_log("Cache file loading error for {$file}: " . $e->getMessage());
             @unlink($file);
             return null;
         }
@@ -60,47 +70,52 @@ readonly class FileCacheDriver implements CacheDriverInterface
         $dir = dirname($file);
 
         if (!is_dir($dir)) {
-            mkdir($dir, 0755, true);
+            if (!mkdir($dir, 0755, true)) {
+                error_log("Cannot create cache directory: {$dir}");
+                return false;
+            }
         }
 
         $data = [
             'data' => $value,
             'expires_at' => time() + $ttl,
-            'created_at' => time()
+            'created_at' => time(),
+            'cache_version' => '2.1'
         ];
 
         try {
-            // KRITISCHER FIX: Serialization statt var_export
-            // var_export() kann bei komplexen Objekten fehlschlagen
-            $serialized = serialize($data);
-
-            // Robuste Content-Generierung
-            $content = $this->generateCacheContent($serialized);
+            // GEFIXT: Einfache var_export Strategie ohne doppelte Serialisierung
+            $content = $this->generateSafeContent($data);
 
             // Atomic write mit Temp-Datei
-            $tempFile = $file . '.tmp';
+            $tempFile = $file . '.tmp.' . uniqid();
 
             if (file_put_contents($tempFile, $content, LOCK_EX) === false) {
+                error_log("Cannot write to temp cache file: {$tempFile}");
                 return false;
             }
 
-            // Validierung vor dem finalen Move
-            if (!$this->validateCacheFile($tempFile)) {
+            // Validierung der generierten Datei
+            if (!$this->validateGeneratedFile($tempFile)) {
                 @unlink($tempFile);
-                error_log("Generated cache file failed validation");
+                error_log("Generated cache file failed validation for key: {$key}");
                 return false;
             }
 
             // Atomic move
             if (!rename($tempFile, $file)) {
                 @unlink($tempFile);
+                error_log("Cannot move cache file from {$tempFile} to {$file}");
                 return false;
             }
 
             return true;
 
         } catch (\Throwable $e) {
-            error_log("Cache put error: " . $e->getMessage());
+            error_log("Cache put error for key {$key}: " . $e->getMessage());
+            if (isset($tempFile)) {
+                @unlink($tempFile);
+            }
             return false;
         }
     }
@@ -108,18 +123,26 @@ readonly class FileCacheDriver implements CacheDriverInterface
     public function forget(string $key): bool
     {
         $file = $this->getCacheFile($key);
-        return file_exists($file) ? unlink($file) : true;
+        return file_exists($file) ? @unlink($file) : true;
     }
 
     public function flush(): bool
     {
-        $files = glob($this->cacheDir . '/**/*.php');
-        if ($files === false) return true;
+        $pattern = $this->cacheDir . '/**/*.php';
+        $files = glob($pattern, GLOB_BRACE);
+
+        if ($files === false) {
+            return true;
+        }
 
         $success = true;
         foreach ($files as $file) {
-            $success = unlink($file) && $success;
+            if (!@unlink($file)) {
+                $success = false;
+                error_log("Cannot delete cache file: {$file}");
+            }
         }
+
         return $success;
     }
 
@@ -130,47 +153,115 @@ readonly class FileCacheDriver implements CacheDriverInterface
     }
 
     /**
-     * NEU: Robuste Cache-Content-Generierung
+     * KRITISCHER FIX: Sichere Content-Generierung ohne Serialisierung
      */
-    private function generateCacheContent(string $serializedData): string
+    private function generateSafeContent(array $data): string
     {
-        // Escaping für sichere String-Einbettung
-        $escapedData = var_export($serializedData, true);
+        try {
+            // GEFIXT: Direkte var_export ohne Serialisierung
+            $exportedData = var_export($data, true);
 
-        return <<<PHP
+            // Validierung des exportierten Contents
+            if (empty($exportedData) || $exportedData === 'NULL') {
+                throw new \RuntimeException("var_export failed for cache data");
+            }
+
+            $timestamp = date('Y-m-d H:i:s');
+
+            return <<<PHP
 <?php
 
 declare(strict_types=1);
 
-// Cache file generated at: {date('Y-m-d H:i:s')}
-// Framework: KickersCup Manager
-// DO NOT EDIT - This file is auto-generated
+/**
+ * KickersCup Manager - Cache File
+ * Generated: {$timestamp}
+ * DO NOT EDIT - Auto-generated content
+ */
 
-return unserialize({$escapedData});
+return {$exportedData};
 
 PHP;
+
+        } catch (\Throwable $e) {
+            error_log("Cache content generation error: " . $e->getMessage());
+            throw new \RuntimeException("Failed to generate cache content: " . $e->getMessage());
+        }
     }
 
     /**
-     * NEU: Cache-Datei-Validierung
+     * ROBUST: Cache-Datei-Validierung
      */
     private function validateCacheFile(string $file): bool
     {
         try {
-            // Test ob Datei parseable ist
-            $result = require $file;
+            // Prüfung ob Datei lesbar ist
+            if (!is_readable($file)) {
+                return false;
+            }
 
-            // Muss Array sein
+            // Prüfung der Dateigröße (nicht zu groß, nicht leer)
+            $size = filesize($file);
+            if ($size === false || $size === 0 || $size > 10485760) { // 10MB limit
+                return false;
+            }
+
+            // Syntax-Check durch include
+            $result = $this->testIncludeFile($file);
+
+            return $result !== false;
+
+        } catch (\Throwable $e) {
+            error_log("Cache file validation failed for {$file}: " . $e->getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * SAFE: Test-Include einer Cache-Datei
+     */
+    private function testIncludeFile(string $file): mixed
+    {
+        try {
+            // Temporärer Error Handler für include
+            set_error_handler(function($severity, $message, $file, $line) {
+                throw new \ErrorException($message, 0, $severity, $file, $line);
+            });
+
+            $result = include $file;
+
+            restore_error_handler();
+
+            return $result;
+
+        } catch (\Throwable $e) {
+            restore_error_handler();
+            error_log("Test include failed for {$file}: " . $e->getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * VALIDATION: Generierte Datei vor dem finalen Move prüfen
+     */
+    private function validateGeneratedFile(string $file): bool
+    {
+        try {
+            $result = $this->testIncludeFile($file);
+
             if (!is_array($result)) {
                 return false;
             }
 
-            // Muss erforderliche Felder haben
-            if (!isset($result['data'], $result['expires_at'], $result['created_at'])) {
-                return false;
+            // Struktur-Validierung
+            $requiredKeys = ['data', 'expires_at', 'created_at'];
+            foreach ($requiredKeys as $key) {
+                if (!array_key_exists($key, $result)) {
+                    return false;
+                }
             }
 
-            // Timestamp-Validierung
+            // Type validation
             if (!is_int($result['expires_at']) || !is_int($result['created_at'])) {
                 return false;
             }
@@ -178,7 +269,7 @@ PHP;
             return true;
 
         } catch (\Throwable $e) {
-            error_log("Cache file validation failed: " . $e->getMessage());
+            error_log("Generated file validation failed for {$file}: " . $e->getMessage());
             return false;
         }
     }
@@ -186,7 +277,9 @@ PHP;
     private function ensureCacheDirectory(): void
     {
         if (!is_dir($this->cacheDir)) {
-            mkdir($this->cacheDir, 0755, true);
+            if (!mkdir($this->cacheDir, 0755, true)) {
+                throw new \RuntimeException("Cannot create cache directory: {$this->cacheDir}");
+            }
         }
     }
 

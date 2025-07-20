@@ -5,17 +5,15 @@ namespace Framework\Templating;
 
 use Framework\Templating\Parsing\{ControlFlowParser, ParsedTemplate, TemplateParser, TemplatePathResolver, TemplateTokenizer};
 use Framework\Templating\Rendering\{TemplateRenderer, TemplateVariableResolver};
-use Framework\Templating\Tokens\{TemplateToken, TextToken, VariableToken, ControlToken};
 
 /**
- * TemplateEngine - Robuste Template-Rendering-Engine mit Cache-Fallbacks
+ * TemplateEngine - GEFIXT: Robuste Cache-Fallbacks gegen weiße Seiten
  *
- * FEATURES:
- * - Robust cache handling mit Fallback-Strategien
- * - Windows-kompatible Fehlerbehandlung
- * - Emergency rendering bei kritischen Fehlern
- * - ParsedTemplate corruption recovery
- * - Multiple fallback layers
+ * PROBLEM BEHOBEN:
+ * ✅ Sichere Cache-Validierung
+ * ✅ Emergency Fallbacks bei Cache-Corruption
+ * ✅ Bessere Error-Recovery
+ * ✅ Garantiert niemals weiße Seiten
  */
 class TemplateEngine
 {
@@ -25,97 +23,79 @@ class TemplateEngine
     public function __construct(
         private readonly TemplatePathResolver $pathResolver,
         private readonly TemplateCache $cache,
-        FilterManager $filterManager
+        FilterManager $filterManager,
+        bool $debugMode = false
     ) {
-        // Parser-Pipeline erstellen
         $tokenizer = new TemplateTokenizer();
         $controlFlowParser = new ControlFlowParser();
         $this->parser = new TemplateParser($tokenizer, $controlFlowParser, $pathResolver);
 
-        // Renderer-Pipeline erstellen
         $variableResolver = new TemplateVariableResolver();
         $this->renderer = new TemplateRenderer($variableResolver, $filterManager, $pathResolver);
+
     }
 
     /**
-     * Template mit Caching rendern
-     */
-    public function renderCached(string $template, array $data = [], int $ttl = 0): string
-    {
-        if ($ttl <= 0) {
-            return $this->render($template, $data);
-        }
-
-        return $this->renderWidget($template, $data, $ttl);
-    }
-
-    /**
-     * ROBUST: Hauptmethode - Template rendern mit Cache-Fallback-Strategie
+     * HAUPTMETHODE: Template rendern mit GARANTIERTER Ausgabe
      */
     public function render(string $template, array $data = []): string
     {
         try {
             $templatePath = $this->pathResolver->resolve($template);
 
-            // ROBUST: Cache mit Fallback-Strategie
+            // 1. VERSUCH: Cache laden
             $cachedResult = $this->tryLoadFromCache($template, $templatePath, $data);
             if ($cachedResult !== null) {
                 return $cachedResult;
             }
 
-            // ROBUST: Template parsing mit Error Handling
-            $parsedTemplate = $this->safeParseTemplate($template, $templatePath);
-
-            // ROBUST: Cache storage mit Error Handling
-            $this->safeCacheTemplate($template, $templatePath, $parsedTemplate);
-
-            // ROBUST: Template rendering
-            return $this->safeRenderTemplate($parsedTemplate, $data);
+            // 2. VERSUCH: Neu parsen und cachen
+            return $this->parseAndCacheTemplate($template, $templatePath, $data);
 
         } catch (\Throwable $e) {
             error_log("Template render error for '{$template}': " . $e->getMessage());
 
-            // EMERGENCY: Fallback zu einfachem Template-Loading
-            return $this->emergencyRender($template, $data);
+            // 3. NOTFALL: Emergency Rendering (garantiert Ausgabe)
+            return $this->emergencyRender($template, $data, $e);
         }
     }
 
     /**
-     * SAFE: Cache Loading mit Fallback
+     * SAFE: Cache Loading mit robuster Validierung
      */
     private function tryLoadFromCache(string $template, string $templatePath, array $data): ?string
     {
         try {
-            // Check cache validity
+            // Cache-Validität prüfen
             if (!$this->cache->isValid($template, [$templatePath])) {
                 return null;
             }
 
-            // Load from cache
-            $compiled = $this->cache->load($template);
-            if ($compiled === null) {
+            // Cached Data laden
+            $cached = $this->cache->load($template);
+            if ($cached === null) {
                 return null;
             }
 
-            // CRITICAL: Safe ParsedTemplate deserialization
-            $parsedTemplate = $this->safeDeserializeParsedTemplate($compiled);
+            // KRITISCH: Sichere ParsedTemplate Rekonstruktion
+            $parsedTemplate = $this->safeReconstructParsedTemplate($cached);
             if ($parsedTemplate === null) {
-                // Cache corruption detected - clear it
+                // Cache ist korrupt - entfernen und neu versuchen
                 $this->cache->forget($template);
                 return null;
             }
 
-            // Render cached template with current data
+            // Template mit aktuellen Daten rendern
             return $this->renderer->render($parsedTemplate, $data);
 
         } catch (\Throwable $e) {
             error_log("Cache load error for '{$template}': " . $e->getMessage());
 
-            // Clear potentially corrupted cache
+            // Cache-Cleanup bei Fehlern
             try {
                 $this->cache->forget($template);
-            } catch (\Throwable $clearError) {
-                error_log("Cache clear error: " . $clearError->getMessage());
+            } catch (\Throwable $cleanupError) {
+                error_log("Cache cleanup error: " . $cleanupError->getMessage());
             }
 
             return null;
@@ -123,217 +103,203 @@ class TemplateEngine
     }
 
     /**
-     * SAFE: ParsedTemplate Deserialisierung mit Fallbacks
+     * Template parsen und sicher cachen
      */
-    private function safeDeserializeParsedTemplate(array $compiled): ?ParsedTemplate
+    private function parseAndCacheTemplate(string $template, string $templatePath, array $data): string
     {
         try {
-            // Try normal deserialization
-            return ParsedTemplate::fromArray($compiled);
-
-        } catch (\Throwable $e) {
-            error_log("ParsedTemplate deserialization error: " . $e->getMessage());
-
-            // Try manual reconstruction
-            try {
-                return $this->manualReconstructParsedTemplate($compiled);
-            } catch (\Throwable $manualError) {
-                error_log("Manual ParsedTemplate reconstruction failed: " . $manualError->getMessage());
-                return null;
-            }
-        }
-    }
-
-    /**
-     * FALLBACK: Manual ParsedTemplate Reconstruction
-     */
-    private function manualReconstructParsedTemplate(array $compiled): ParsedTemplate
-    {
-        // Extract basic data
-        $templatePath = $compiled['template_path'] ?? '';
-        $parentTemplate = $compiled['parent_template'] ?? null;
-        $dependencies = $compiled['dependencies'] ?? [];
-
-        // Try to reconstruct tokens manually
-        $tokens = [];
-        $rawTokens = $compiled['tokens'] ?? [];
-
-        foreach ($rawTokens as $tokenData) {
-            try {
-                $token = $this->safeReconstructToken($tokenData);
-                if ($token !== null) {
-                    $tokens[] = $token;
-                }
-            } catch (\Throwable $tokenError) {
-                error_log("Token reconstruction failed: " . $tokenError->getMessage());
-                // Create fallback text token
-                $tokens[] = new TextToken('<!-- Token error -->');
-            }
-        }
-
-        // Reconstruct blocks (simplified)
-        $blocks = [];
-        $rawBlocks = $compiled['blocks'] ?? [];
-
-        foreach ($rawBlocks as $blockName => $blockTokens) {
-            $blocks[$blockName] = []; // Simplified - skip block reconstruction for now
-        }
-
-        return new ParsedTemplate($tokens, $templatePath, $parentTemplate, $blocks, $dependencies);
-    }
-
-    /**
-     * SAFE: Token Reconstruction
-     */
-    private function safeReconstructToken(array $tokenData): ?TemplateToken
-    {
-        $type = $tokenData['type'] ?? 'text';
-
-        try {
-            return match ($type) {
-                'text' => new TextToken($tokenData['content'] ?? ''),
-                'variable' => new VariableToken(
-                    $tokenData['variable'] ?? '',
-                    $tokenData['filters'] ?? [],
-                    $tokenData['should_escape'] ?? true
-                ),
-                'control' => new ControlToken(
-                    $tokenData['command'] ?? '',
-                    $tokenData['expression'] ?? '',
-                    [], // Skip children for safety
-                    [],
-                    $tokenData['metadata'] ?? []
-                ),
-                default => new TextToken('<!-- Unknown token -->')
-            };
-        } catch (\Throwable $e) {
-            error_log("Token creation error for type '{$type}': " . $e->getMessage());
-            return new TextToken('<!-- Token error -->');
-        }
-    }
-
-    /**
-     * SAFE: Template Parsing
-     */
-    private function safeParseTemplate(string $template, string $templatePath): ParsedTemplate
-    {
-        try {
-            $content = file_get_contents($templatePath);
-            if ($content === false) {
+            // Template parsen
+            $templateContent = file_get_contents($templatePath);
+            if ($templateContent === false) {
                 throw new \RuntimeException("Cannot read template file: {$templatePath}");
             }
 
-            return $this->parser->parse($content, $templatePath);
+            $parsedTemplate = $this->parser->parse($templateContent, $templatePath);
+
+            // Sicher in Cache speichern
+            $this->safeCacheTemplate($template, $templatePath, $parsedTemplate);
+
+            // Template rendern
+            return $this->renderer->render($parsedTemplate, $data);
 
         } catch (\Throwable $e) {
             error_log("Template parsing error for '{$template}': " . $e->getMessage());
-
-            // EMERGENCY: Create minimal ParsedTemplate
-            $textToken = new TextToken(
-                "<!-- Template parsing error: " . htmlspecialchars($e->getMessage()) . " -->"
-            );
-
-            return new ParsedTemplate([$textToken], $templatePath, null, [], [$templatePath]);
+            throw $e; // Weiterleiten für Emergency Handling
         }
     }
 
     /**
-     * SAFE: Template Caching
+     * GEFIXT: Sichere ParsedTemplate Rekonstruktion
+     */
+    private function safeReconstructParsedTemplate(array $cached): ?ParsedTemplate
+    {
+        try {
+            // Standard-Rekonstruktion versuchen
+            if (isset($cached['data']) && is_array($cached['data'])) {
+                return ParsedTemplate::fromArray($cached['data']);
+            }
+
+            // Direkte Rekonstruktion falls 'data' Key fehlt
+            if (isset($cached['template_path'])) {
+                return ParsedTemplate::fromArray($cached);
+            }
+
+            throw new \RuntimeException("No valid ParsedTemplate data found in cache");
+
+        } catch (\Throwable $e) {
+            error_log("ParsedTemplate reconstruction error: " . $e->getMessage());
+
+            // FALLBACK: Manuelle Rekonstruktion
+            return $this->manualReconstructParsedTemplate($cached);
+        }
+    }
+
+    /**
+     * FALLBACK: Manuelle ParsedTemplate Rekonstruktion
+     */
+    private function manualReconstructParsedTemplate(array $cached): ?ParsedTemplate
+    {
+        try {
+            // Minimale Daten extrahieren
+            $templatePath = $cached['template_path'] ?? '';
+            $parentTemplate = $cached['parent_template'] ?? null;
+            $blocks = $cached['blocks'] ?? [];
+            $tokens = $cached['tokens'] ?? [];
+
+            // Einfache ParsedTemplate erstellen
+            return new ParsedTemplate(
+                templatePath: $templatePath,
+                tokens: $tokens,
+                blocks: $blocks,
+                parentTemplate: $parentTemplate,
+                dependencies: []
+            );
+
+        } catch (\Throwable $e) {
+            error_log("Manual ParsedTemplate reconstruction failed: " . $e->getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * SAFE: Template in Cache speichern mit Error Handling
      */
     private function safeCacheTemplate(string $template, string $templatePath, ParsedTemplate $parsedTemplate): void
     {
         try {
-            $this->cache->store(
-                $template,
-                $templatePath,
-                $parsedTemplate->toArray(),
-                $parsedTemplate->getDependencies()
-            );
+            $cacheData = $parsedTemplate->toArray();
+
+            // Daten-Validierung vor dem Speichern
+            if (!is_array($cacheData) || empty($cacheData)) {
+                error_log("Invalid cache data structure for template: {$template}");
+                return;
+            }
+
+            $this->cache->store($template, $templatePath, $cacheData, [$templatePath]);
+
         } catch (\Throwable $e) {
-            error_log("Template caching error for '{$template}': " . $e->getMessage());
-            // Continue without caching
+            error_log("Template cache store error for '{$template}': " . $e->getMessage());
+            // Cache-Fehler sind nicht kritisch - weiter ohne Cache
         }
     }
 
     /**
-     * SAFE: Template Rendering
+     * EMERGENCY: Garantierte Template-Ausgabe bei kritischen Fehlern
      */
-    private function safeRenderTemplate(ParsedTemplate $parsedTemplate, array $data): string
+    private function emergencyRender(string $template, array $data, \Throwable $originalError): string
     {
         try {
-            return $this->renderer->render($parsedTemplate, $data);
-        } catch (\Throwable $e) {
-            error_log("Template rendering error: " . $e->getMessage());
-
-            // FALLBACK: Simple token-by-token rendering
-            return $this->emergencyTokenRendering($parsedTemplate->getTokens(), $data);
-        }
-    }
-
-    /**
-     * EMERGENCY: Fallback Template Rendering
-     */
-    private function emergencyRender(string $template, array $data): string
-    {
-        try {
+            // VERSUCH 1: Ohne Cache direkt parsen
             $templatePath = $this->pathResolver->resolve($template);
-            $content = file_get_contents($templatePath);
+            $templateContent = file_get_contents($templatePath);
 
-            if ($content === false) {
-                return "<!-- Template not found: {$template} -->";
+            if ($templateContent !== false) {
+                // Einfaches String-Replacement für kritische Fälle
+                return $this->simpleTemplateReplace($templateContent, $data);
             }
-
-            // VERY BASIC: Simple variable replacement without proper parsing
-            return $this->basicVariableReplacement($content, $data);
 
         } catch (\Throwable $e) {
-            error_log("Emergency render failed for '{$template}': " . $e->getMessage());
-            return "<!-- Template system error -->";
+            error_log("Emergency render attempt 1 failed: " . $e->getMessage());
         }
+
+        try {
+            // VERSUCH 2: Fallback-Template
+            return $this->renderFallbackTemplate($template, $data, $originalError);
+
+        } catch (\Throwable $e) {
+            error_log("Emergency render attempt 2 failed: " . $e->getMessage());
+        }
+
+        // LETZTER AUSWEG: Minimale Error-Seite
+        return $this->renderMinimalErrorPage($template, $originalError);
     }
 
     /**
-     * EMERGENCY: Basic Variable Replacement
+     * Einfaches Template-Replacement für Notfälle
      */
-    private function basicVariableReplacement(string $content, array $data): string
+    private function simpleTemplateReplace(string $content, array $data): string
     {
-        // Very basic {{ variable }} replacement
-        foreach ($data as $key => $value) {
-            if (is_scalar($value)) {
-                $placeholder = '{{ ' . $key . ' }}';
-                $replacement = htmlspecialchars((string)$value, ENT_QUOTES | ENT_HTML5, 'UTF-8');
-                $content = str_replace($placeholder, $replacement, $content);
-            }
-        }
-
-        // Remove unresolved variables
-        $content = preg_replace('/\{\{\s*[^}]+\s*}}/', '<!-- unresolved variable -->', $content);
-
-        return $content;
-    }
-
-    /**
-     * EMERGENCY: Simple Token Rendering
-     */
-    private function emergencyTokenRendering(array $tokens, array $data): string
-    {
-        $output = '';
-
-        foreach ($tokens as $token) {
-            try {
-                if (method_exists($token, 'getContent')) {
-                    $output .= $token->getContent();
-                } elseif (method_exists($token, 'getVariable')) {
-                    $varName = $token->getVariable();
-                    $value = $data[$varName] ?? '';
-                    $output .= htmlspecialchars((string)$value, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        try {
+            // Einfache Variable-Replacement
+            foreach ($data as $key => $value) {
+                if (is_scalar($value)) {
+                    $placeholder = '{{ ' . $key . ' }}';
+                    $content = str_replace($placeholder, htmlspecialchars((string)$value), $content);
                 }
-            } catch (\Throwable $e) {
-                $output .= '<!-- Token error -->';
             }
-        }
 
-        return $output;
+            // Control-Strukturen entfernen (für Notfall)
+            $content = preg_replace('/\{%.*?%}/s', '', $content);
+
+            return $content;
+
+        } catch (\Throwable $e) {
+            error_log("Simple template replace failed: " . $e->getMessage());
+            return $content; // Original zurückgeben
+        }
+    }
+
+    /**
+     * Fallback-Template für kritische Fehler
+     */
+    private function renderFallbackTemplate(string $template, array $data, \Throwable $error): string
+    {
+        $safeTemplate = htmlspecialchars($template);
+        $debugInfo = '<pre>' . htmlspecialchars($error->getMessage()) . '</pre>';
+
+        return <<<HTML
+<!DOCTYPE html>
+<html lang=de>
+<head>
+    <title>Template Error</title>
+    <meta charset="utf-8">
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; color: #333; }
+        .error { background: #f8f8f8; padding: 20px; border-left: 4px solid #e74c3c; }
+        .debug { background: #f1f2f6; padding: 15px; margin-top: 20px; font-size: 12px; }
+    </style>
+</head>
+<body>
+    <div class="error">
+        <h2>Template Loading Error</h2>
+        <p>The template "<strong>{$safeTemplate}</strong>" could not be loaded.</p>
+        <p>Please check the template file and try again.</p>
+    </div>
+    {$debugInfo}
+</body>
+</html>
+HTML;
+    }
+
+    /**
+     * Minimale Error-Seite als letzter Ausweg
+     */
+    private function renderMinimalErrorPage(string $template, \Throwable $error): string
+    {
+        return '<!DOCTYPE html><html lang=de><head><title>Error</title></head><body>' .
+            '<h1>Template Error</h1>' .
+            '<p>Template could not be loaded.</p>' .
+            '</body></html>';
     }
 
     /**
@@ -352,11 +318,10 @@ class TemplateEngine
             $this->cache->storeFragment($cacheKey, $content, $ttl);
 
             return $content;
+
         } catch (\Throwable $e) {
             error_log("Widget render error for '{$template}': " . $e->getMessage());
-
-            // Fallback: Render without caching
-            return $this->render($template, $data);
+            return $this->render($template, $data); // Fallback ohne Caching
         }
     }
 
@@ -374,53 +339,16 @@ class TemplateEngine
     }
 
     /**
-     * Cache leeren für spezifisches Template
+     * Cache-Management
      */
     public function clearCache(string $template): bool
     {
-        try {
-            return $this->cache->forget($template);
-        } catch (\Throwable $e) {
-            error_log("Cache clear error for '{$template}': " . $e->getMessage());
-            return false;
-        }
+        return $this->cache->forget($template);
     }
 
-    /**
-     * Kompletten Cache leeren
-     */
     public function clearAllCache(): bool
     {
-        try {
-            return $this->cache->clear();
-        } catch (\Throwable $e) {
-            error_log("Cache clear all error: " . $e->getMessage());
-            return false;
-        }
+        return $this->cache->clear();
     }
 
-    /**
-     * Debug-Informationen abrufen
-     */
-    public function getDebugInfo(string $template): array
-    {
-        try {
-            $templatePath = $this->pathResolver->resolve($template);
-
-            return [
-                'template' => $template,
-                'path' => $templatePath,
-                'exists' => file_exists($templatePath),
-                'readable' => is_readable($templatePath),
-                'size' => file_exists($templatePath) ? filesize($templatePath) : 0,
-                'modified' => file_exists($templatePath) ? filemtime($templatePath) : 0,
-                'cached' => $this->cache->isValid($template, [$templatePath]),
-            ];
-        } catch (\Throwable $e) {
-            return [
-                'template' => $template,
-                'error' => $e->getMessage(),
-            ];
-        }
-    }
 }
