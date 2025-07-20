@@ -15,7 +15,8 @@
     "ext-intl": "*",
     "ext-apcu": "*",
     "ext-redis": "*",
-    "ext-memcached": "*"
+    "ext-memcached": "*",
+    "ext-zlib": "*"
   },
   "autoload": {
     "psr-4": {
