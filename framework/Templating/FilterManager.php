@@ -25,7 +25,6 @@ class FilterManager
 {
     private FilterRegistry $registry;
     private FilterExecutor $executor;
-    private array $registrationErrors = [];
 
     public function __construct(
         private readonly ?Translator $translator = null
@@ -52,9 +51,6 @@ class FilterManager
             if ($this->translator !== null) {
                 $this->registerTranslationFilters();
             }
-
-            // Log erfolgreich registrierte Filter
-            $this->logRegistrationResults();
 
         } catch (\Throwable $e) {
             error_log("Critical error in FilterManager::registerDefaultFilters(): " . $e->getMessage());
@@ -181,13 +177,6 @@ class FilterManager
             return '<pre>' . htmlspecialchars(var_export($value, true)) . '</pre>';
         });
 
-        $this->registry->registerLazy('var_dump', fn() => function(mixed $value): string {
-            ob_start();
-            var_dump($value);
-            $output = ob_get_clean();
-            return '<pre>' . htmlspecialchars($output) . '</pre>';
-        });
-
         $this->registry->registerLazy('json_debug', fn() => function(mixed $value): string {
             return '<pre>' . htmlspecialchars(JsonFilters::jsonPretty($value)) . '</pre>';
         });
@@ -236,34 +225,6 @@ class FilterManager
             $this->registrationErrors[$group] = $errors;
             error_log("Failed to register filters in group '{$group}': " . implode(', ', $errors));
         }
-    }
-
-    /**
-     * HINZUGEFÜGT: Logging der Registrierungsergebnisse
-     */
-    private function logRegistrationResults(): void
-    {
-        $totalFilters = $this->registry->count();
-        $errorCount = array_sum(array_map('count', $this->registrationErrors));
-
-        if ($errorCount > 0) {
-            error_log("FilterManager: Registered {$totalFilters} filters with {$errorCount} errors");
-            error_log("Registration errors: " . json_encode($this->registrationErrors));
-        } else {
-            error_log("FilterManager: Successfully registered {$totalFilters} filters");
-        }
-    }
-
-    // ===================================================================
-    // PUBLIC API METHODS (unverändert, aber mit Error-Handling)
-    // ===================================================================
-
-    /**
-     * VERBESSERT: Registriert Custom Filter mit Validierung
-     */
-    public function register(string $name, callable|array $filter): bool
-    {
-        return $this->registry->registerSafe($name, $filter);
     }
 
     /**
@@ -322,35 +283,4 @@ class FilterManager
         return $this->executor;
     }
 
-    /**
-     * HINZUGEFÜGT: Debug-Informationen für Troubleshooting
-     */
-    public function getDebugInfo(): array
-    {
-        return [
-            'filter_manager' => [
-                'translator_available' => $this->translator !== null,
-                'total_filters' => $this->registry->count(),
-                'registration_errors' => $this->registrationErrors,
-            ],
-            'registry_debug' => $this->registry->getDebugInfo(),
-        ];
-    }
-
-    /**
-     * HINZUGEFÜGT: Prüft Systemzustand
-     */
-    public function getHealthCheck(): array
-    {
-        $filterNames = $this->getFilterNames();
-        $totalErrors = array_sum(array_map('count', $this->registrationErrors));
-
-        return [
-            'status' => $totalErrors === 0 ? 'healthy' : 'degraded',
-            'total_filters' => count($filterNames),
-            'error_count' => $totalErrors,
-            'sample_filters' => array_slice($filterNames, 0, 10),
-            'missing_filters' => $this->registrationErrors,
-        ];
-    }
 }

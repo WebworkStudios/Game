@@ -53,7 +53,7 @@ class TeamPlayerFilters {
 
         // Versuche Konfiguration aus globalem js_config zu laden
         if (typeof window.js_config !== 'undefined') {
-            return { ...defaultConfig, ...window.js_config };
+            return {...defaultConfig, ...window.js_config};
         }
 
         return defaultConfig;
@@ -195,7 +195,7 @@ class TeamPlayerFilters {
             }
         }
 
-        return { players: visiblePlayersCount, sections: visibleSectionsCount };
+        return {players: visiblePlayersCount, sections: visibleSectionsCount};
     }
 
     /**
@@ -276,51 +276,14 @@ class TeamPlayerFilters {
                 // Nur resetten wenn Filter aktiv sind
                 const hasActiveFilters = Object.values(this.filters).some(value => value !== 'all');
 
-                if (hasActiveFilters && this.config.debug_mode) {
-                    console.log('Auto-Reset nach Timeout ausgeführt');
+                if (hasActiveFilters) {
                     this.resetAllFilters();
                 }
             }, this.config.filter_settings.auto_reset_timeout);
         }
     }
 
-    /**
-     * Loggt Filter-Aktionen für Debugging
-     */
-    logFilterAction(filterType, value) {
-        if (this.config.debug_mode) {
-            console.log(`Filter ${filterType} geändert zu: ${value}`);
-            console.log('Aktive Filter:', this.filters);
-        }
-    }
 
-    /**
-     * Public API für externe Verwendung
-     */
-    getActiveFilters() {
-        return { ...this.filters };
-    }
-
-    getVisiblePlayersCount() {
-        return this.elements.playerCards.length -
-            document.querySelectorAll('.player-card.hidden').length;
-    }
-
-    // Debug-Hilfsmethoden
-    getDebugInfo() {
-        return {
-            config: this.config,
-            filters: this.filters,
-            elements: {
-                positionFilter: !!this.elements.positionFilter,
-                statusFilter: !!this.elements.statusFilter,
-                ageFilter: !!this.elements.ageFilter,
-                playerCards: this.elements.playerCards.length,
-                positionSections: this.elements.positionSections.length
-            },
-            visiblePlayers: this.getVisiblePlayersCount()
-        };
-    }
 }
 
 // Auto-Initialisierung

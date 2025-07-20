@@ -119,26 +119,6 @@ readonly class ViewRenderer
     }
 
     /**
-     * Debug-Informationen für Troubleshooting
-     */
-    public function getDebugInfo(): array
-    {
-        return [
-            'view_renderer' => [
-                'template_engine_class' => get_class($this->engine),
-                'debug_mode' => $this->configManager->isDebugMode(),
-            ],
-            'config_manager' => $this->configManager->getDebugInfo(),
-            'services' => [
-                'data_injector' => get_class($this->dataInjector),
-                'asset_manager' => get_class($this->assetManager),
-                'error_handler' => get_class($this->errorHandler),
-                'config_manager' => get_class($this->configManager),
-            ]
-        ];
-    }
-
-    /**
      * Asset Manager Zugriff für externe Services
      */
     public function getAssetManager(): AssetIntegrationManager

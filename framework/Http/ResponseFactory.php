@@ -374,10 +374,6 @@ readonly class ResponseFactory
         ]);
     }
 
-    // ===================================================================
-    // TEMPLATE-SPECIFIC METHODS
-    // ===================================================================
-
     /**
      * HINZUGEFÜGT: Template mit JSON-Daten für JavaScript
      */
@@ -401,29 +397,6 @@ readonly class ResponseFactory
 
         return $this->view($template, $templateData, $status);
     }
-
-    /**
-     * HINZUGEFÜGT: Debug-Template für Development
-     */
-    public function debug(array $data, string $title = 'Debug Information'): Response
-    {
-        $debugData = [
-            'title' => $title,
-            'data' => $data,
-            'json_data' => JsonUtility::prettyEncode($data),
-            'debug_info' => [
-                'timestamp' => date('Y-m-d H:i:s'),
-                'memory_usage' => memory_get_usage(true),
-                'execution_time' => microtime(true) - $_SERVER['REQUEST_TIME_FLOAT']
-            ]
-        ];
-
-        return $this->json($debugData);
-    }
-
-    // ===================================================================
-    // CONDITIONAL RESPONSES
-    // ===================================================================
 
     /**
      * HINZUGEFÜGT: Conditional Response basierend auf Request-Type

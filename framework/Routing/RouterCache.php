@@ -432,6 +432,8 @@ readonly class RouterCache
         }
 
         $tempFile = $this->cacheFile . '.tmp';
+
+        // KORRIGIERT: Vollständige String-Konkatenation mit Semikolon und Newline
         $content = "<?php\n\ndeclare(strict_types=1);\n\nreturn " . var_export($routes, true) . ";\n";
 
         if (file_put_contents($tempFile, $content, LOCK_EX) === false) {

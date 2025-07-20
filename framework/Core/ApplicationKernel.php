@@ -78,6 +78,9 @@ class ApplicationKernel
     /**
      * VERBESSERT: Lädt vollständige App-Config mit besserer Exception-Behandlung
      */
+    /**
+     * BEREINIGT: Lädt vollständige App-Config ohne Debug-Bloat
+     */
     private function loadApplicationConfig(): void
     {
         try {
@@ -85,34 +88,46 @@ class ApplicationKernel
             $configManager = $this->container->get(ConfigManager::class);
             $config = $configManager->get('app/Config/app.php');
 
-            // Debug-Modus erneut setzen (falls ConfigManager andere Werte liefert)
+            // Debug-Modus konsistent setzen (ohne unnötige Logs)
             if (isset($config['debug'])) {
-                $debugValue = (bool) $config['debug'];
-
-                if ($debugValue !== $this->debug) {
-                    if ($this->debug) {
-                        error_log("🔄 Debug-Modus geändert: früh={$this->debug}, ConfigManager={$debugValue}");
-                    }
-                    $this->setDebug($debugValue);
-                }
+                $this->setDebug((bool) $config['debug']);
             }
 
-            // Environment anpassen falls nötig
-            if (isset($config['timezone']) || isset($config['charset']) || isset($config['memory_limit'])) {
+            // Environment-Setup falls Konfiguration vorhanden
+            if ($this->shouldUpdateEnvironment($config)) {
                 $environmentManager = new EnvironmentManager();
                 $environmentManager->setup($config);
             }
 
         } catch (ConfigNotFoundException $e) {
-            // Spezifische Behandlung für fehlende Config-Datei
-            error_log("❌ Config-Datei nicht gefunden: " . $e->getMessage());
+            // Strukturiertes Logging ohne Emoji
+            error_log(sprintf(
+                'Configuration file not found: %s (using defaults)',
+                $e->getMessage()
+            ));
 
         } catch (Throwable $e) {
-            // Generische Exception-Behandlung mit besserer Information
-            error_log("❌ Fehler beim Config-Loading: " . $e->getMessage());
-            error_log("   Klasse: " . get_class($e));
-            error_log("   Datei: " . $e->getFile() . ":" . $e->getLine());
+            // Minimales strukturiertes Error-Logging
+            error_log(sprintf(
+                'Config loading failed: %s in %s:%d',
+                $e->getMessage(),
+                $e->getFile(),
+                $e->getLine()
+            ));
+
+            // Fallback zu sicheren Defaults
+            $this->setDebug(false);
         }
+    }
+
+    /**
+     * NEUE HILFSMETHODE: Prüft ob Environment-Update notwendig
+     */
+    private function shouldUpdateEnvironment(array $config): bool
+    {
+        return isset($config['timezone'])
+            || isset($config['charset'])
+            || isset($config['memory_limit']);
     }
 
     /**
@@ -188,20 +203,6 @@ class ApplicationKernel
     {
         $this->debug = $debug;
         return $this;
-    }
-
-    /**
-     * NEUE METHODE: Debug-Status für Troubleshooting
-     */
-    public function getDebugInfo(): array
-    {
-        return [
-            'debug_mode' => $this->debug,
-            'base_path' => $this->basePath,
-            'config_file_exists' => file_exists($this->basePath . '/app/Config/app.php'),
-            'container_has_services' => $this->container->has(Router::class) && $this->container->has(ConfigManager::class),
-            'error_handler_set' => $this->errorHandler !== null,
-        ];
     }
 
     /**

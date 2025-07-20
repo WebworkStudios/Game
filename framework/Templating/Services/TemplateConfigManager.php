@@ -129,23 +129,6 @@ readonly class TemplateConfigManager
     }
 
     /**
-     * Debug-Informationen für Troubleshooting
-     */
-    public function getDebugInfo(): array
-    {
-        return [
-            'config_loaded' => !empty($this->config),
-            'debug_mode' => $this->isDebugMode(),
-            'config_source' => $this->determineConfigSource(),
-            'config_keys' => array_keys($this->config),
-            'app_name' => $this->getAppName(),
-            'app_version' => $this->getAppVersion(),
-            'locale' => $this->getLocale(),
-            'environment' => $this->getEnvironment(),
-        ];
-    }
-
-    /**
      * Ermittelt die Quelle der Konfiguration
      */
     private function determineConfigSource(): string
