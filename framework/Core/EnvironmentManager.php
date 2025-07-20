@@ -6,12 +6,6 @@ namespace Framework\Core;
 
 /**
  * EnvironmentManager - Verwaltet PHP Environment Setup
- *
- * Verantwortlichkeiten:
- * - Error Reporting konfigurieren
- * - Timezone setzen
- * - Charset konfigurieren
- * - Memory Limits (optional)
  */
 class EnvironmentManager
 {

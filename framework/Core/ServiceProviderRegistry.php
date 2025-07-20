@@ -5,7 +5,7 @@ namespace Framework\Core;
 
 use Framework\Cache\CacheServiceProvider;
 use Framework\Database\DatabaseServiceProvider;
-use Framework\Localization\LocalizationServiceProvider;  // ← ADD
+use Framework\Localization\LocalizationServiceProvider;
 use Framework\Security\SecurityServiceProvider;
 use Framework\Templating\TemplatingServiceProvider;
 
@@ -15,13 +15,10 @@ use Framework\Templating\TemplatingServiceProvider;
 class ServiceProviderRegistry
 {
     private const array DEFAULT_PROVIDERS = [
-        // Basis-Services zuerst
         CacheServiceProvider::class,
         DatabaseServiceProvider::class,
         SecurityServiceProvider::class,
-
-        // Localization vor Templating (Dependency!)
-        LocalizationServiceProvider::class,  // ← WICHTIG: Vor Templating!
+        LocalizationServiceProvider::class,
         TemplatingServiceProvider::class,
     ];
 

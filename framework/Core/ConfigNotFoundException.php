@@ -1,5 +1,4 @@
 <?php
-
 declare(strict_types=1);
 
 namespace Framework\Core;
@@ -8,8 +7,6 @@ use RuntimeException;
 
 /**
  * ConfigNotFoundException - Einheitliche Exception für fehlende Config-Dateien
- *
- * Eliminiert duplizierte Error-Messages zwischen ServiceProviders.
  */
 class ConfigNotFoundException extends RuntimeException
 {

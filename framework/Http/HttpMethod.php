@@ -15,8 +15,8 @@ enum HttpMethod: string
     case DELETE = 'DELETE';
     case HEAD = 'HEAD';
     case OPTIONS = 'OPTIONS';
-    case TRACE = 'TRACE';    // HINZUGEFÜGT: Fehlende HTTP-Methode
-    case CONNECT = 'CONNECT'; // HINZUGEFÜGT: Fehlende HTTP-Methode
+    case TRACE = 'TRACE';
+    case CONNECT = 'CONNECT';
 
     /**
      * NEU: Gibt alle verfügbaren Methoden als Array zurück

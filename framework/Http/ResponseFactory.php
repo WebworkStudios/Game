@@ -22,10 +22,6 @@ readonly class ResponseFactory
         private ?Session      $session = null  // Optional dependency injection
     ) {}
 
-    // ===================================================================
-    // EXISTING METHODS (unchanged for brevity)
-    // ===================================================================
-
     public function response(string $body = '', HttpStatus $status = HttpStatus::OK, array $headers = []): Response
     {
         return new Response($status, $headers, $body);
@@ -78,10 +74,6 @@ readonly class ResponseFactory
         $referer = $request->getReferer() ?? $fallback;
         return $this->redirect($referer);
     }
-
-    // ===================================================================
-    // FLASH MESSAGE IMPLEMENTATIONS (FIXED)
-    // ===================================================================
 
     /**
      * IMPLEMENTIERT: Redirect mit Flash-Message
@@ -167,10 +159,6 @@ readonly class ResponseFactory
         return $this->redirectWithMessage($url, $message, 'info');
     }
 
-    // ===================================================================
-    // FORM RESPONSES WITH FLASH SUPPORT
-    // ===================================================================
-
     /**
      * ERWEITERT: Form Response mit Flash-Message Support
      */
@@ -212,10 +200,6 @@ readonly class ResponseFactory
 
         return $this->view($template, $templateData, $status);
     }
-
-    // ===================================================================
-    // OTHER EXISTING METHODS (error responses, etc.)
-    // ===================================================================
 
     public function notFound(string $message = 'Not Found'): Response
     {

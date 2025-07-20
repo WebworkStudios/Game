@@ -1,5 +1,4 @@
 <?php
-
 declare(strict_types=1);
 
 namespace Framework\Core;
@@ -9,12 +8,6 @@ use RuntimeException;
 
 /**
  * Config Manager - Zentrale Konfigurationsverwaltung für das Framework
- *
- * Eliminiert Code-Duplikation zwischen Service Providern und bietet:
- * - Lazy Loading mit Memory-Caching
- * - Auto-Publishing von Default-Konfigurationen
- * - Konsistente Fehlerbehandlung
- * - Validation von Config-Strukturen
  */
 class ConfigManager
 {

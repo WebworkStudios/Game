@@ -53,8 +53,7 @@ class JavaScriptAssetServiceProvider extends AbstractServiceProvider
             return new ViewRenderer(
                 engine: $this->container->get(TemplateEngine::class),
                 translator: $this->container->has(Translator::class) ? $this->container->get(Translator::class) : null,
-                csrf: $this->container->has(Csrf::class) ? $this->container->get(Csrf::class) : null,
-                assetManager: $assetManager
+                csrf: $this->container->has(Csrf::class) ? $this->container->get(Csrf::class) : null
             );
         });
     }

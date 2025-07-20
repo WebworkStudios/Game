@@ -222,8 +222,6 @@ class JavaScriptAssetManager
     public function clear(): self
     {
         $this->scripts = [];
-        // Optional: File-Cache auch leeren
-        // $this->fileCache = [];
         return $this;
     }
 

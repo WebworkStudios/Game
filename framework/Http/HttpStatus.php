@@ -12,7 +12,7 @@ enum HttpStatus: int
     case CONTINUE = 100;
     case SWITCHING_PROTOCOLS = 101;
     case PROCESSING = 102;
-    case EARLY_HINTS = 103; // HINZUGEFÜGT: RFC 8297
+    case EARLY_HINTS = 103;
 
     // 2xx Success
     case OK = 200;
@@ -22,9 +22,9 @@ enum HttpStatus: int
     case NO_CONTENT = 204;
     case RESET_CONTENT = 205;
     case PARTIAL_CONTENT = 206;
-    case MULTI_STATUS = 207; // HINZUGEFÜGT: WebDAV
-    case ALREADY_REPORTED = 208; // HINZUGEFÜGT: WebDAV
-    case IM_USED = 226; // HINZUGEFÜGT: RFC 3229
+    case MULTI_STATUS = 207;
+    case ALREADY_REPORTED = 208;
+    case IM_USED = 226;
 
     // 3xx Redirection
     case MULTIPLE_CHOICES = 300;
@@ -55,18 +55,18 @@ enum HttpStatus: int
     case UNSUPPORTED_MEDIA_TYPE = 415;
     case RANGE_NOT_SATISFIABLE = 416;
     case EXPECTATION_FAILED = 417;
-    case IM_A_TEAPOT = 418; // HINZUGEFÜGT: RFC 2324 (April Fools)
+    case IM_A_TEAPOT = 418;
     case PAGE_EXPIRED = 419;
-    case MISDIRECTED_REQUEST = 421; // HINZUGEFÜGT: RFC 7540
+    case MISDIRECTED_REQUEST = 421;
     case UNPROCESSABLE_ENTITY = 422;
-    case LOCKED = 423; // HINZUGEFÜGT: WebDAV
-    case FAILED_DEPENDENCY = 424; // HINZUGEFÜGT: WebDAV
-    case TOO_EARLY = 425; // HINZUGEFÜGT: RFC 8470
-    case UPGRADE_REQUIRED = 426; // HINZUGEFÜGT: RFC 2817
-    case PRECONDITION_REQUIRED = 428; // HINZUGEFÜGT: RFC 6585
+    case LOCKED = 423;
+    case FAILED_DEPENDENCY = 424;
+    case TOO_EARLY = 425;
+    case UPGRADE_REQUIRED = 426;
+    case PRECONDITION_REQUIRED = 428;
     case TOO_MANY_REQUESTS = 429;
-    case REQUEST_HEADER_FIELDS_TOO_LARGE = 431; // HINZUGEFÜGT: RFC 6585
-    case UNAVAILABLE_FOR_LEGAL_REASONS = 451; // HINZUGEFÜGT: RFC 7725
+    case REQUEST_HEADER_FIELDS_TOO_LARGE = 431;
+    case UNAVAILABLE_FOR_LEGAL_REASONS = 451;
 
     // 5xx Server Error
     case INTERNAL_SERVER_ERROR = 500;
@@ -74,12 +74,12 @@ enum HttpStatus: int
     case BAD_GATEWAY = 502;
     case SERVICE_UNAVAILABLE = 503;
     case GATEWAY_TIMEOUT = 504;
-    case HTTP_VERSION_NOT_SUPPORTED = 505; // HINZUGEFÜGT
-    case VARIANT_ALSO_NEGOTIATES = 506; // HINZUGEFÜGT: RFC 2295
-    case INSUFFICIENT_STORAGE = 507; // HINZUGEFÜGT: WebDAV
-    case LOOP_DETECTED = 508; // HINZUGEFÜGT: WebDAV
-    case NOT_EXTENDED = 510; // HINZUGEFÜGT: RFC 2774
-    case NETWORK_AUTHENTICATION_REQUIRED = 511; // HINZUGEFÜGT: RFC 6585
+    case HTTP_VERSION_NOT_SUPPORTED = 505;
+    case VARIANT_ALSO_NEGOTIATES = 506;
+    case INSUFFICIENT_STORAGE = 507;
+    case LOOP_DETECTED = 508;
+    case NOT_EXTENDED = 510;
+    case NETWORK_AUTHENTICATION_REQUIRED = 511;
 
     /**
      * MODERNISIERT: Typed Class Constants (PHP 8.3+)
@@ -150,49 +150,31 @@ enum HttpStatus: int
         511 => 'Network Authentication Required',
     ];
 
-    /**
-     * MODERNISIERT: Bessere Implementierung mit match
-     */
     public function getText(): string
     {
         return self::STATUS_TEXTS[$this->value] ?? 'Unknown Status';
     }
 
-    /**
-     * Prüft ob Status-Code successful ist (2xx)
-     */
     public function isSuccessful(): bool
     {
         return $this->value >= 200 && $this->value < 300;
     }
 
-    /**
-     * Prüft ob Status-Code redirect ist (3xx)
-     */
     public function isRedirect(): bool
     {
         return $this->value >= 300 && $this->value < 400;
     }
 
-    /**
-     * Prüft ob Status-Code client error ist (4xx)
-     */
     public function isClientError(): bool
     {
         return $this->value >= 400 && $this->value < 500;
     }
 
-    /**
-     * Prüft ob Status-Code server error ist (5xx)
-     */
     public function isServerError(): bool
     {
         return $this->value >= 500 && $this->value < 600;
     }
 
-    /**
-     * NEU: Prüft ob Status-Code eine Antwort mit Body erwarten kann
-     */
     public function mayHaveBody(): bool
     {
         return match ($this) {
@@ -201,17 +183,11 @@ enum HttpStatus: int
         };
     }
 
-    /**
-     * Prüft ob Status-Code informational ist (1xx)
-     */
     public function isInformational(): bool
     {
         return $this->value >= 100 && $this->value < 200;
     }
 
-    /**
-     * NEU: Prüft ob Status cacheable ist
-     */
     public function isCacheable(): bool
     {
         return match ($this) {

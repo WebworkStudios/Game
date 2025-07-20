@@ -6,8 +6,6 @@ namespace Framework\Core;
 
 /**
  * Abstract Service Provider - Basis-Klasse für alle Service Provider
- *
- * UPDATED: Constructor verwendet ApplicationKernel statt Application
  */
 abstract class AbstractServiceProvider
 {
@@ -51,10 +49,6 @@ abstract class AbstractServiceProvider
         // Default: Keine Interface-Bindings
     }
 
-    // ===================================================================
-    // Container Helper Methods (unverändert)
-    // ===================================================================
-
     protected function singleton(string $abstract, callable|string|null $concrete = null): void
     {
         $this->container->singleton($abstract, $concrete);
@@ -84,10 +78,6 @@ abstract class AbstractServiceProvider
     {
         return $this->app->getBasePath() . ($path ? '/' . ltrim($path, '/') : '');
     }
-
-    // ===================================================================
-    // Path & Config Methods (unverändert)
-    // ===================================================================
 
     /**
      * Lädt Konfiguration über ConfigManager

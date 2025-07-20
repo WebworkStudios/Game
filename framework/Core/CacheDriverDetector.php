@@ -1,13 +1,10 @@
 <?php
-
-
 declare(strict_types=1);
 
 namespace Framework\Core;
 
 /**
  * CacheDriverDetector - Einfache Auto-Detection für Cache-Driver
- *
  * Implementiert nur die intelligente Driver-Selection, nichts mehr.
  */
 class CacheDriverDetector

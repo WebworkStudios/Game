@@ -8,8 +8,6 @@ use JsonException;
 
 /**
  * HTTP Request - Modernisiert mit JsonUtility Integration
- *
- * UPDATED: Vollständige JSON-Modernisierung mit json_validate()
  */
 readonly class Request
 {
@@ -95,10 +93,6 @@ readonly class Request
 
         return $headers;
     }
-
-    // ===================================================================
-    // MODERNISIERTE JSON-METHODEN mit JsonUtility
-    // ===================================================================
 
     /**
      * MODERNISIERT: JSON Body Parsing mit JsonUtility
@@ -278,11 +272,6 @@ readonly class Request
             'body_preview' => substr($this->body, 0, 100) . (strlen($this->body) > 100 ? '...' : '')
         ];
     }
-
-    // ===================================================================
-    // BESTEHENDE METHODEN (unverändert)
-    // ===================================================================
-
     public function getMethod(): HttpMethod
     {
         return $this->method;
@@ -358,10 +347,6 @@ readonly class Request
         return $this->pathParameters[$name] ?? $default;
     }
 
-    // ===================================================================
-    // INPUT METHODS (bestehend)
-    // ===================================================================
-
     public function input(string $key, mixed $default = null): mixed
     {
         return $this->query[$key] ?? $this->post[$key] ?? $default;
@@ -388,10 +373,6 @@ readonly class Request
         $all = $this->all();
         return array_diff_key($all, array_flip($keys));
     }
-
-    // ===================================================================
-    // IMMUTABLE BUILDERS (bestehend)
-    // ===================================================================
 
     public function withPathParameters(array $parameters): self
     {
@@ -443,10 +424,6 @@ readonly class Request
             pathParameters: $this->pathParameters,
         );
     }
-
-    // ===================================================================
-    // UTILITY METHODS (bestehend + erweitert)
-    // ===================================================================
 
     public function ip(): string
     {

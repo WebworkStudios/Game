@@ -12,11 +12,6 @@ use Framework\Templating\ViewRenderer;
 
 /**
  * CoreServiceRegistrar - Registriert Framework Core Services
- *
- * Verantwortlichkeiten:
- * - Container, ConfigManager, Router, etc. registrieren
- * - Core Service Abhängigkeiten verwalten
- * - Framework-essenzielle Services bereitstellen
  */
 class CoreServiceRegistrar
 {

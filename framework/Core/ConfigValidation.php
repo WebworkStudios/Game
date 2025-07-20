@@ -1,5 +1,4 @@
 <?php
-
 declare(strict_types=1);
 
 namespace Framework\Core;
@@ -9,9 +8,6 @@ namespace Framework\Core;
  *
  * Stellt einheitliche Config-Validierung für alle ServiceProvider zur Verfügung.
  * Eliminiert das duplizierte Config-Loading-Pattern.
- *
- * WICHTIG: Dieses Trait erfordert AbstractServiceProvider als Basis-Klasse,
- * da es auf basePath() und getConfig() Methoden angewiesen ist.
  */
 trait ConfigValidation
 {

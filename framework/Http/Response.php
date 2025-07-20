@@ -9,8 +9,6 @@ use JsonException;
 
 /**
  * HTTP Response - Modernisiert mit JsonUtility Integration
- *
- * UPDATED: Erweiterte JSON-Response-Funktionalität
  */
 class Response
 {
@@ -121,16 +119,12 @@ class Response
             ->jsonError($message, $errors, 'VALIDATION_ERROR');
     }
 
-    // ===================================================================
-    // STATIC FACTORY METHODS (erweitert)
-    // ===================================================================
-
     /**
      * MODERNISIERT: JSON Factory-Methode
      */
     public static function jsonResponse(array|object $data, HttpStatus $status = HttpStatus::OK): self
     {
-        return (new self($status))->json($data);
+        return new self($status)->json($data);
     }
 
     /**
@@ -138,7 +132,7 @@ class Response
      */
     public static function apiSuccess(mixed $data = null, string $message = 'Success', HttpStatus $status = HttpStatus::OK): self
     {
-        return (new self($status))->apiResponse($data, $message);
+        return new self($status)->apiResponse($data, $message);
     }
 
     /**
@@ -146,7 +140,7 @@ class Response
      */
     public static function apiError(string $message, HttpStatus $status = HttpStatus::BAD_REQUEST, array $errors = []): self
     {
-        return (new self($status))->jsonError($message, $errors);
+        return new self($status)->jsonError($message, $errors);
     }
 
     /**
@@ -154,7 +148,7 @@ class Response
      */
     public static function validationError(array $errors, string $message = 'Validation failed'): self
     {
-        return (new self(HttpStatus::UNPROCESSABLE_ENTITY))->jsonValidationError($errors, $message);
+        return new self(HttpStatus::UNPROCESSABLE_ENTITY)->jsonValidationError($errors, $message);
     }
 
     /**
@@ -162,7 +156,7 @@ class Response
      */
     public static function notFoundJson(string $message = 'Resource not found'): self
     {
-        return (new self(HttpStatus::NOT_FOUND))->jsonError($message, [], 'NOT_FOUND');
+        return new self(HttpStatus::NOT_FOUND)->jsonError($message, [], 'NOT_FOUND');
     }
 
     /**
@@ -170,7 +164,7 @@ class Response
      */
     public static function unauthorizedJson(string $message = 'Unauthorized'): self
     {
-        return (new self(HttpStatus::UNAUTHORIZED))->jsonError($message, [], 'UNAUTHORIZED');
+        return new self(HttpStatus::UNAUTHORIZED)->jsonError($message, [], 'UNAUTHORIZED');
     }
 
     // ===================================================================
@@ -226,11 +220,6 @@ class Response
     {
         return new self(HttpStatus::INTERNAL_SERVER_ERROR, [], $body);
     }
-
-    // ===================================================================
-    // BUILDER METHODS (erweitert)
-    // ===================================================================
-
     public function withStatus(HttpStatus $status): self
     {
         $this->status = $status;
@@ -276,10 +265,6 @@ class Response
         return $this->withHeaders($corsHeaders);
     }
 
-    // ===================================================================
-    // GETTER METHODS (bestehend)
-    // ===================================================================
-
     public function getStatus(): HttpStatus
     {
         return $this->status;
@@ -309,11 +294,6 @@ class Response
     {
         return $this->sent;
     }
-
-    // ===================================================================
-    // OUTPUT METHODS (bestehend)
-    // ===================================================================
-
     public function send(): void
     {
         if ($this->sent) {
