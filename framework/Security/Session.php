@@ -8,12 +8,6 @@ use RuntimeException;
 
 /**
  * Session - Pure Data Layer für Session Management
- *
- * Verantwortlichkeiten:
- * - Session Start/Stop/Destroy
- * - Daten Get/Set (User-Daten + Framework-interne Daten)
- * - Flash Messages
- * - Session-Status
  */
 class Session
 {
@@ -135,10 +129,6 @@ class Session
         return $result;
     }
 
-    // =============================================================================
-    // PUBLIC API - Data Management
-    // =============================================================================
-
     public function set(string $key, mixed $value): void
     {
         $this->start();
@@ -175,10 +165,6 @@ class Session
         $_SESSION = [];
     }
 
-    // =============================================================================
-    // PUBLIC API - Framework Internal Data
-    // =============================================================================
-
     public function flash(string $key, mixed $value): void
     {
         $this->setFramework(self::FLASH_NAMESPACE . '.' . $key, $value);
@@ -203,10 +189,6 @@ class Session
         return $_SESSION[self::FRAMEWORK_NAMESPACE][$key] ?? $default;
     }
 
-    // =============================================================================
-    // PUBLIC API - Flash Messages
-    // =============================================================================
-
     public function removeFramework(string $key): void
     {
         $this->start();
@@ -230,10 +212,6 @@ class Session
         $this->start();
         return isset($_SESSION[self::FRAMEWORK_NAMESPACE][$key]);
     }
-
-    // =============================================================================
-    // PUBLIC API - Status & Information
-    // =============================================================================
 
     public function isStarted(): bool
     {

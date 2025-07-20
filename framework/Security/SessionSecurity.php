@@ -63,10 +63,6 @@ class SessionSecurity
         $this->config = array_merge($this->config, $config);
     }
 
-    // =============================================================================
-    // PUBLIC API - Security Validation
-    // =============================================================================
-
     public function validateSession(Request $request): array
     {
         $result = [
@@ -155,10 +151,6 @@ class SessionSecurity
         return $isValid;
     }
 
-    // =============================================================================
-    // PUBLIC API - Login Attempts Management
-    // =============================================================================
-
     private function generateFingerprint(Request $request): string
     {
         $components = [];
@@ -215,11 +207,6 @@ class SessionSecurity
 
         return count($violations) >= $this->config['max_security_violations'];
     }
-
-    // =============================================================================
-    // PUBLIC API - Security Information
-    // =============================================================================
-
     private function shouldRegenerateSession(): bool
     {
         $lastRegeneration = $this->session->getFramework(self::LAST_REGENERATION, 0);
@@ -231,10 +218,6 @@ class SessionSecurity
     {
         $this->session->setFramework(self::LAST_ACTIVITY, time());
     }
-
-    // =============================================================================
-    // PRIVATE METHODS - Security Logic
-    // =============================================================================
 
     public function initializeSession(Request $request): void
     {
