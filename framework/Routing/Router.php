@@ -53,11 +53,6 @@ class Router
 
         $matchedRoute = $this->findRoute($path, $method);
 
-        // DEBUG: Route-Matching Ergebnis
-        if ($matchedRoute === null) {
-            return $this->handleNotFound($request);
-        }
-
         if (!$matchedRoute['route']->supportsMethod($method)) {
             return $this->handleMethodNotAllowed($request, $matchedRoute['route']);
         }

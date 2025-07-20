@@ -12,12 +12,6 @@ use Throwable;
 
 /**
  * ApplicationKernel - VERBESSERT: Robustere Debug-Konfiguration
- *
- * FIXES:
- * ✅ Debug-Config wird früher geladen
- * ✅ Fallback-Config-Loading ohne ConfigManager
- * ✅ Besseres Exception-Handling
- * ✅ Debug-Logging für Troubleshooting
  */
 class ApplicationKernel
 {
@@ -42,25 +36,19 @@ class ApplicationKernel
      */
     private function bootstrap(): void
     {
-        // 1. DEBUG-CONFIG ZUERST LADEN (FIX)
         $this->loadDebugConfigEarly();
 
-        // 2. Environment Setup
         $environmentManager = new EnvironmentManager();
         $environmentManager->setup();
 
-        // 3. Core Services registrieren
         $coreRegistrar = new CoreServiceRegistrar($this->container, $this->basePath);
         $coreRegistrar->registerAll($this);
 
-        // 4. Vollständige App-Config laden (mit ConfigManager)
         $this->loadApplicationConfig();
 
-        // 5. Service Provider registrieren
         $providerRegistry = new ServiceProviderRegistry($this->container, $this);
         $providerRegistry->registerAll();
 
-        // 6. Router Setup
         $this->setupRouter();
     }
 
@@ -134,8 +122,6 @@ class ApplicationKernel
             error_log("❌ Fehler beim Config-Loading: " . $e->getMessage());
             error_log("   Klasse: " . get_class($e));
             error_log("   Datei: " . $e->getFile() . ":" . $e->getLine());
-
-            // Debug-Status beibehalten (wurde bereits früh gesetzt)
         }
     }
 
@@ -153,9 +139,6 @@ class ApplicationKernel
     private function setupRouter(): void
     {
         $this->router = $this->container->get(Router::class);
-
-        // Hier könnten globale Middleware registriert werden:
-        // $this->registerGlobalMiddleware();
     }
 
     /**
@@ -200,10 +183,6 @@ class ApplicationKernel
         return new Response(HttpStatus::INTERNAL_SERVER_ERROR, [], $message);
     }
 
-    // ===================================================================
-    // Configuration & Debugging
-    // ===================================================================
-
     /**
      * Gibt Debug-Status zurück
      */
@@ -217,14 +196,7 @@ class ApplicationKernel
      */
     public function setDebug(bool $debug): self
     {
-        $oldDebug = $this->debug;
         $this->debug = $debug;
-
-        // Logging nur wenn sich der Wert ändert
-        if ($oldDebug !== $debug) {
-            error_log("🔧 Debug-Modus geändert: {$oldDebug} → {$debug}");
-        }
-
         return $this;
     }
 
@@ -251,24 +223,12 @@ class ApplicationKernel
         return $this;
     }
 
-    // ===================================================================
-    // Path Utilities
-    // ===================================================================
-
     /**
      * Gibt Application Base Path zurück
      */
     public function getBasePath(): string
     {
         return $this->basePath;
-    }
-
-    /**
-     * Alias für path() für BC compatibility
-     */
-    public function basePath(string $path = ''): string
-    {
-        return $this->path($path);
     }
 
     /**
@@ -279,26 +239,11 @@ class ApplicationKernel
         return $this->basePath . ($path ? '/' . ltrim($path, '/') : '');
     }
 
-    // ===================================================================
-    // Container Access (Minimal)
-    // ===================================================================
-
     /**
      * Gibt Service Container zurück
      */
     public function getContainer(): ServiceContainer
     {
         return $this->container;
-    }
-
-    /**
-     * Registriert globale Middleware (optional)
-     *
-     * Kann überschrieben oder erweitert werden für spezifische Anforderungen
-     */
-    protected function registerGlobalMiddleware(): void
-    {
-        // Beispiel:
-        // $this->router->addGlobalMiddleware(SomeMiddleware::class);
     }
 }

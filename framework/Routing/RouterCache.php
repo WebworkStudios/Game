@@ -15,27 +15,15 @@ use Throwable;
 
 /**
  * Router Cache - COMPLETE with ALL original methods + PHP 8.4 iterator_to_array() Optimizations
- *
- * COMPLETE IMPLEMENTATION:
- * ✅ All original public methods preserved
- * ✅ Full backward compatibility
- * ✅ PHP 8.4 optimizations under the hood
- * ✅ Memory-efficient lazy loading
- * ✅ Smart caching with APCu + File fallback
  */
 readonly class RouterCache
 {
     public function __construct(
         private string $cacheFile,
-        private string $actionsPath,
-        private bool   $debugMode = false
+        private string $actionsPath
     )
     {
     }
-
-    // ===================================================================
-    // ORIGINAL PUBLIC API (Complete backward compatibility)
-    // ===================================================================
 
     /**
      * Check if cache file exists
@@ -46,27 +34,63 @@ readonly class RouterCache
     }
 
     /**
-     * Get cache file path
+     * Clear cache
      */
-    public function getCacheFile(): string
+    public function clear(): bool
     {
-        return $this->cacheFile;
+        $success = true;
+
+        // Clear file cache
+        if (file_exists($this->cacheFile)) {
+            $success = unlink($this->cacheFile) && $success;
+        }
+
+        // Clear APCu cache
+        if (function_exists('apcu_delete')) {
+            apcu_delete('kickerscup_routes');
+            apcu_delete('kickerscup_routes_compressed');
+            apcu_delete('kickerscup_routes_is_compressed');
+        }
+
+        return $success;
     }
 
     /**
-     * Get actions path
+     * Load route entries directly (backward compatibility)
      */
-    public function getActionsPath(): string
+    public function loadRouteEntries(): array
     {
-        return $this->actionsPath;
+        $cachedData = $this->get();
+        if ($cachedData && !empty($cachedData['routes'])) {
+            return $cachedData['routes'];
+        }
+
+        // No cache exists or empty - build routes
+        $routes = $this->buildRoutes();
+        if (!empty($routes)) {
+            $this->put(['routes' => $routes]);
+        }
+
+        return $routes;
     }
 
     /**
-     * Check if cache should be rebuilt
+     * Get cached routes and named routes
      */
-    public function shouldRebuild(): bool
+    public function get(): ?array
     {
-        return $this->shouldRebuildCache();
+        if (!$this->shouldRebuildCache()) {
+            $routes = $this->loadFromCache();
+
+            if (!empty($routes)) {
+                return [
+                    'routes' => $routes,
+                    'namedRoutes' => $this->buildNamedRoutesArray($routes),
+                ];
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -112,33 +136,6 @@ readonly class RouterCache
         }
 
         return false;
-    }
-
-    /**
-     * Load cache (alias for get)
-     */
-    public function load(): ?array
-    {
-        return $this->get();
-    }
-
-    /**
-     * Get cached routes and named routes
-     */
-    public function get(): ?array
-    {
-        if (!$this->shouldRebuildCache()) {
-            $routes = $this->loadFromCache();
-
-            if (!empty($routes)) {
-                return [
-                    'routes' => $routes,
-                    'namedRoutes' => $this->buildNamedRoutesArray($routes),
-                ];
-            }
-        }
-
-        return null;
     }
 
     /**
@@ -234,10 +231,6 @@ readonly class RouterCache
         return [];
     }
 
-    // ===================================================================
-    // ROUTE BUILDING SYSTEM (from original RouterCache)
-    // ===================================================================
-
     /**
      * OPTIMIZED: Build named routes array with lazy evaluation
      */
@@ -255,19 +248,113 @@ readonly class RouterCache
     }
 
     /**
-     * Save routes (alias for put)
+     * Build routes from Action files
      */
-    public function save(array $routes): bool
+    private function buildRoutes(): array
     {
-        try {
-            $this->put(['routes' => $routes]);
-            return true;
-        } catch (Throwable $e) {
-            if ($this->debugMode) {
-                error_log("RouterCache: Failed to save routes - " . $e->getMessage());
-            }
-            return false;
+        $routes = [];
+
+        if (!is_dir($this->actionsPath)) {
+            return $routes;
         }
+
+        $iterator = new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator($this->actionsPath, RecursiveDirectoryIterator::SKIP_DOTS)
+        );
+
+
+        foreach ($iterator as $file) {
+
+            if ($file->getExtension() === 'php') {
+
+                $className = $this->getClassNameFromFile($file->getPathname());
+
+                if ($className) {
+
+                    $this->loadClass($className, $file->getPathname());
+
+                    if (class_exists($className)) {
+                        $classRoutes = $this->extractRoutesFromClass($className);
+                    }
+
+                    $routes = array_merge($routes, $classRoutes);
+                }
+            }
+        }
+        return $routes;
+    }
+
+    /**
+     * Extract class name from file path (Windows path support)
+     */
+    private function getClassNameFromFile(string $filepath): ?string
+    {
+        // Normalize path separators for Windows compatibility
+        $normalizedFilePath = str_replace('\\', '/', $filepath);
+        $normalizedActionsPath = str_replace('\\', '/', $this->actionsPath);
+
+        $relativePath = str_replace($normalizedActionsPath, '', $normalizedFilePath);
+
+        // Remove leading slash and .php extension
+        $relativePath = ltrim($relativePath, '/');
+        $relativePath = str_replace('.php', '', $relativePath);
+
+        // Convert path to namespace
+        $namespace = str_replace('/', '\\', $relativePath);
+        $fullClassName = 'App\\Actions\\' . $namespace;
+
+        return $fullClassName;
+    }
+
+    /**
+     * Load class from file
+     */
+    private function loadClass(string $className, string $filepath): void
+    {
+        if (!class_exists($className)) try {
+            require_once $filepath;
+
+        } catch (Throwable $e) {
+        }
+    }
+
+    /**
+     * Extract routes from class using Route attributes
+     */
+    private function extractRoutesFromClass(string $className): array
+    {
+        $routes = [];
+
+        try {
+
+            $reflection = new ReflectionClass($className);
+            $attributes = $reflection->getAttributes(Route::class);
+
+            foreach ($attributes as $attribute) {
+
+                // Create route instance
+                $routeInstance = $attribute->newInstance();
+
+                // Get route data
+                $pattern = $routeInstance->getPattern();
+                $methods = $routeInstance->getValidatedMethods();
+                $parameters = $routeInstance->getParameters();
+
+                $route = new RouteEntry(
+                    pattern: $pattern,
+                    methods: $methods,
+                    action: $className,
+                    middlewares: $routeInstance->middlewares,
+                    name: $routeInstance->name,
+                    parameters: $parameters
+                );
+
+                $routes[] = $route;
+            }
+        } catch (Exception $e) {
+        }
+
+        return $routes;
     }
 
     /**
@@ -292,10 +379,6 @@ readonly class RouterCache
         $this->saveToMemoryCache($processedRoutes);
     }
 
-    // ===================================================================
-    // OPTIMIZED: Core Implementation with iterator_to_array()
-    // ===================================================================
-
     /**
      * OPTIMIZED: Process routes for caching with chunked processing
      */
@@ -315,11 +398,6 @@ readonly class RouterCache
 
             $processedChunk = iterator_to_array($chunkGenerator(), preserve_keys: false);
             $processedRoutes = array_merge($processedRoutes, $processedChunk);
-
-            // Optional: Trigger garbage collection after each chunk
-            if (function_exists('gc_collect_cycles')) {
-                gc_collect_cycles();
-            }
         }
 
         return $processedRoutes;
@@ -386,278 +464,5 @@ readonly class RouterCache
             apcu_store('kickerscup_routes', $routes, 3600);
             apcu_store('kickerscup_routes_is_compressed', false, 3600);
         }
-    }
-
-    /**
-     * Clear cache
-     */
-    public function clear(): bool
-    {
-        $success = true;
-
-        // Clear file cache
-        if (file_exists($this->cacheFile)) {
-            $success = unlink($this->cacheFile) && $success;
-        }
-
-        // Clear APCu cache
-        if (function_exists('apcu_delete')) {
-            apcu_delete('kickerscup_routes');
-            apcu_delete('kickerscup_routes_compressed');
-            apcu_delete('kickerscup_routes_is_compressed');
-        }
-
-        return $success;
-    }
-
-    /**
-     * Get cache statistics
-     */
-    public function getStats(): array
-    {
-        return $this->getStatistics();
-    }
-
-    /**
-     * Get comprehensive cache statistics
-     */
-    public function getStatistics(): array
-    {
-        return [
-            'file_cache' => $this->getFileCacheStats(),
-            'memory_cache' => $this->getMemoryCacheStats(),
-            'performance' => $this->getPerformanceStats(),
-        ];
-    }
-
-    /**
-     * File cache statistics
-     */
-    private function getFileCacheStats(): array
-    {
-        if (!file_exists($this->cacheFile)) {
-            return [
-                'exists' => false,
-                'size' => 0,
-                'age' => 0,
-            ];
-        }
-
-        $size = filesize($this->cacheFile);
-        $age = time() - filemtime($this->cacheFile);
-
-        return [
-            'exists' => true,
-            'size' => $size,
-            'size_human' => $this->formatBytes($size),
-            'age' => $age,
-            'age_human' => $this->formatDuration($age),
-        ];
-    }
-
-    /**
-     * Format bytes in human readable format
-     */
-    private function formatBytes(int $bytes): string
-    {
-        $units = ['B', 'KB', 'MB', 'GB'];
-        $factor = floor(log($bytes) / log(1024));
-        return sprintf('%.2f %s', $bytes / (1024 ** $factor), $units[$factor] ?? 'TB');
-    }
-
-    /**
-     * Format duration in human readable format
-     */
-    private function formatDuration(int $seconds): string
-    {
-        if ($seconds < 60) return "{$seconds}s";
-        if ($seconds < 3600) return sprintf('%.1fm', $seconds / 60);
-        if ($seconds < 86400) return sprintf('%.1fh', $seconds / 3600);
-        return sprintf('%.1fd', $seconds / 86400);
-    }
-
-    /**
-     * Memory cache statistics
-     */
-    private function getMemoryCacheStats(): array
-    {
-        if (!function_exists('apcu_exists')) {
-            return ['available' => false];
-        }
-
-        $exists = apcu_exists('kickerscup_routes');
-        $isCompressed = apcu_exists('kickerscup_routes_is_compressed') &&
-            apcu_fetch('kickerscup_routes_is_compressed');
-
-        return [
-            'available' => true,
-            'exists' => $exists,
-            'compressed' => $isCompressed,
-            'apcu_info' => function_exists('apcu_cache_info') ? apcu_cache_info() : null,
-        ];
-    }
-
-    /**
-     * Performance metrics
-     */
-    private function getPerformanceStats(): array
-    {
-        $memoryUsage = memory_get_usage(true);
-        $peakMemory = memory_get_peak_usage(true);
-
-        return [
-            'memory_usage' => $memoryUsage,
-            'memory_usage_human' => $this->formatBytes($memoryUsage),
-            'peak_memory' => $peakMemory,
-            'peak_memory_human' => $this->formatBytes($peakMemory),
-            'cache_driver' => CacheDriverDetector::detectOptimalDriver(),
-        ];
-    }
-
-    // ===================================================================
-    // STATISTICS AND MONITORING
-    // ===================================================================
-
-    /**
-     * Load route entries directly (backward compatibility)
-     */
-    public function loadRouteEntries(): array
-    {
-        $cachedData = $this->get();
-        if ($cachedData && !empty($cachedData['routes'])) {
-            return $cachedData['routes'];
-        }
-
-        // No cache exists or empty - build routes
-        $routes = $this->buildRoutes();
-        if (!empty($routes)) {
-            $this->put(['routes' => $routes]);
-        }
-
-        return $routes;
-    }
-
-    /**
-     * Build routes from Action files
-     */
-    private function buildRoutes(): array
-    {
-        $routes = [];
-
-        if (!is_dir($this->actionsPath)) {
-            return $routes;
-        }
-
-        $iterator = new RecursiveIteratorIterator(
-            new RecursiveDirectoryIterator($this->actionsPath, RecursiveDirectoryIterator::SKIP_DOTS)
-        );
-
-        $processedFiles = 0;
-        foreach ($iterator as $file) {
-
-            if ($file->getExtension() === 'php') {
-                $processedFiles++;
-
-                $className = $this->getClassNameFromFile($file->getPathname());
-
-
-                if ($className) {
-
-                    $this->loadClass($className, $file->getPathname());
-
-                    if (class_exists($className)) {
-                        $classRoutes = $this->extractRoutesFromClass($className);
-                    }
-
-                    $routes = array_merge($routes, $classRoutes);
-                }
-            }
-        }
-        return $routes;
-    }
-
-    /**
-     * Extract class name from file path (Windows path support)
-     */
-    private function getClassNameFromFile(string $filepath): ?string
-    {
-        // Normalize path separators for Windows compatibility
-        $normalizedFilePath = str_replace('\\', '/', $filepath);
-        $normalizedActionsPath = str_replace('\\', '/', $this->actionsPath);
-
-        $relativePath = str_replace($normalizedActionsPath, '', $normalizedFilePath);
-
-        // Remove leading slash and .php extension
-        $relativePath = ltrim($relativePath, '/');
-        $relativePath = str_replace('.php', '', $relativePath);
-
-        // Convert path to namespace
-        $namespace = str_replace('/', '\\', $relativePath);
-        $fullClassName = 'App\\Actions\\' . $namespace;
-
-        return $fullClassName;
-    }
-
-    /**
-     * Load class from file
-     */
-    private function loadClass(string $className, string $filepath): void
-    {
-        if (!class_exists($className)) try {
-            require_once $filepath;
-
-        } catch (Throwable $e) {
-        }
-    }
-
-    // ===================================================================
-    // UTILITY METHODS
-    // ===================================================================
-
-    /**
-     * Extract routes from class using Route attributes
-     */
-    private function extractRoutesFromClass(string $className): array
-    {
-        $routes = [];
-
-        try {
-
-            $reflection = new ReflectionClass($className);
-            $attributes = $reflection->getAttributes(Route::class);
-
-            foreach ($attributes as $attribute) {
-
-                // Create route instance
-                $routeInstance = $attribute->newInstance();
-
-                // Get route data
-                $pattern = $routeInstance->getPattern();
-                $methods = $routeInstance->getValidatedMethods();
-                $parameters = $routeInstance->getParameters();
-
-                $route = new RouteEntry(
-                    pattern: $pattern,
-                    methods: $methods,
-                    action: $className,
-                    middlewares: $routeInstance->middlewares,
-                    name: $routeInstance->name,
-                    parameters: $parameters
-                );
-
-                $routes[] = $route;
-            }
-        } catch (Exception $e) {
-        }
-
-        return $routes;
-    }
-
-    /**
-     * Store route entries directly (backward compatibility)
-     */
-    public function storeRouteEntries(array $routes): void
-    {
-        $this->put(['routes' => $routes]);
     }
 }
