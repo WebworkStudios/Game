@@ -4,13 +4,19 @@ declare(strict_types=1);
 
 namespace Framework\Routing;
 
+use Exception;
 use Framework\Core\ServiceContainer;
 use Framework\Http\HttpMethod;
+use Framework\Http\HttpStatus;
 use Framework\Http\Request;
 use Framework\Http\Response;
 use Framework\Http\ResponseFactory;
 use InvalidArgumentException;
+use ReflectionAttribute;
+use ReflectionClass;
+use ReflectionException;
 use RuntimeException;
+use Throwable;
 
 /**
  * Router - Attribute-based HTTP Router mit Middleware-Support
@@ -45,47 +51,16 @@ class Router
         $method = $request->getMethod();
         $path = $request->getPath();
 
-        // DEBUG: Ausgabe der aktuellen Route-Anfrage
-        error_log("=== ROUTER DEBUG ===");
-        error_log("Requested method: " . $method->value);
-        error_log("Requested path: " . $path);
-        error_log("Routes loaded: " . ($this->routesLoaded ? 'YES' : 'NO'));
-        error_log("Total routes: " . count($this->routes));
-
-        // DEBUG: Alle verfügbaren Routes anzeigen
-        if (!empty($this->routes)) {
-            error_log("Available routes:");
-            foreach ($this->routes as $route) {
-                error_log("  - " . $route->pattern . " [" . implode(',', array_map(fn($m) => $m->value, $route->methods)) . "] -> " . $route->action);
-            }
-        } else {
-            error_log("NO ROUTES FOUND!");
-        }
-
-        // DEBUG: Named routes
-        if (!empty($this->namedRoutes)) {
-            error_log("Named routes:");
-            foreach ($this->namedRoutes as $name => $route) {
-                error_log("  - {$name}: " . $route->pattern . " -> " . $route->action);
-            }
-        }
-
         $matchedRoute = $this->findRoute($path, $method);
 
         // DEBUG: Route-Matching Ergebnis
         if ($matchedRoute === null) {
-            error_log("NO ROUTE MATCHED for path: " . $path);
             return $this->handleNotFound($request);
-        } else {
-            error_log("ROUTE MATCHED: " . $matchedRoute['route']->action);
-            error_log("Parameters: " . json_encode($matchedRoute['parameters']));
         }
 
         if (!$matchedRoute['route']->supportsMethod($method)) {
-            error_log("METHOD NOT ALLOWED: " . $method->value);
             return $this->handleMethodNotAllowed($request, $matchedRoute['route']);
         }
-
         return $this->executeRoute($request, $matchedRoute['route'], $matchedRoute['parameters']);
     }
 
@@ -95,56 +70,28 @@ class Router
     private function loadRoutes(): void
     {
         if ($this->routesLoaded) {
-            error_log("Routes already loaded, skipping...");
             return;
         }
 
-        error_log("=== LOADING ROUTES ===");
-        error_log("Cache file: " . $this->cache->getCacheFile());
-        error_log("Actions path: " . $this->cache->getActionsPath());
-        error_log("Cache exists: " . ($this->cache->exists() ? 'YES' : 'NO'));
-
-        // Zeige Cache-Debug-Informationen
-        $cacheDebug = $this->cache->debug();
-        error_log("Cache debug info: " . json_encode($cacheDebug, JSON_PRETTY_PRINT));
-
-        // Lösche Cache für frische Generierung
-        error_log("Clearing cache for fresh build...");
         $this->cache->clear();
 
         // Lade Routes über Cache
         $routes = $this->cache->loadRouteEntries();
-        error_log("Routes loaded from cache: " . count($routes));
-
-        if (!empty($routes)) {
-            foreach ($routes as $route) {
-                error_log("Loaded route: " . $route->pattern . " [" .
-                    implode(',', array_map(fn($m) => $m->value, $route->methods)) . "] -> " . $route->action);
-            }
-        }
 
         $this->routes = $routes;
         $this->buildNamedRoutes();
-
-        error_log("Named routes built: " . count($this->namedRoutes));
-
         $this->routesLoaded = true;
     }
 
     private function buildNamedRoutes(): void
     {
-        error_log("=== BUILDING NAMED ROUTES ===");
-
         $this->namedRoutes = [];
 
         foreach ($this->routes as $route) {
             if ($route->name !== null) {
-                error_log("Named route: " . $route->name . " -> " . $route->pattern);
                 $this->namedRoutes[$route->name] = $route;
             }
         }
-
-        error_log("Total named routes: " . count($this->namedRoutes));
     }
 
     /**
@@ -255,7 +202,6 @@ class Router
             headers: $request->getHeaders(),
             query: $query,
             post: $request->getPost(),
-            files: $request->getFiles(),
             cookies: $request->getCookies(),
             server: $request->getServer(),
             body: $request->getBody(),
@@ -287,7 +233,7 @@ class Router
 
             return $response;
 
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             return $this->handleActionError($e, $request);
         }
     }
@@ -295,7 +241,7 @@ class Router
     /**
      * Behandelt Action-Fehler
      */
-    private function handleActionError(\Throwable $e, Request $request): Response
+    private function handleActionError(Throwable $e, Request $request): Response
     {
         $responseFactory = $this->container->get(ResponseFactory::class);
 
@@ -309,7 +255,7 @@ class Router
             ];
 
             if ($request->expectsJson()) {
-                return $responseFactory->json($errorDetails, \Framework\Http\HttpStatus::INTERNAL_SERVER_ERROR);
+                return $responseFactory->json($errorDetails, HttpStatus::INTERNAL_SERVER_ERROR);
             } else {
                 return $responseFactory->serverError(
                     $this->formatErrorForHtml($errorDetails)
@@ -321,7 +267,7 @@ class Router
         if ($request->expectsJson()) {
             return $responseFactory->json(
                 ['error' => 'Internal server error'],
-                \Framework\Http\HttpStatus::INTERNAL_SERVER_ERROR
+                HttpStatus::INTERNAL_SERVER_ERROR
             );
         }
 
@@ -336,7 +282,7 @@ class Router
         try {
             $config = $this->container->get('config');
             return $config['app']['debug'] ?? false;
-        } catch (\Exception) {
+        } catch (Exception) {
             return false;
         }
     }
@@ -428,14 +374,14 @@ class Router
     private function getRouteAttributes(string $actionClass): array
     {
         try {
-            $reflection = new \ReflectionClass($actionClass);
+            $reflection = new ReflectionClass($actionClass);
             $attributes = $reflection->getAttributes(Route::class);
 
             return array_map(
-                fn(\ReflectionAttribute $attr) => $attr->newInstance(),
+                fn(ReflectionAttribute $attr) => $attr->newInstance(),
                 $attributes
             );
-        } catch (\ReflectionException) {
+        } catch (ReflectionException) {
             return [];
         }
     }

@@ -246,29 +246,10 @@ class Session
         return $this->sessionId;
     }
 
-    public function getConfig(): array
-    {
-        return $this->config;
-    }
-
-    public function getStatus(): array
-    {
-        return [
-            'started' => $this->started,
-            'id' => $this->sessionId,
-            'status' => session_status(),
-        ];
-    }
-
     public function gc(): int
     {
         $this->start();
         return (int)session_gc();
     }
 
-    public function getDataSize(): int
-    {
-        $this->start();
-        return strlen(serialize($_SESSION));
-    }
 }

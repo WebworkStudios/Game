@@ -39,22 +39,6 @@ class ConfigManager
     }
 
     /**
-     * Leert Cache für spezifische Config
-     */
-    public static function clearCacheFor(string $configPath): void
-    {
-        unset(self::$cache[$configPath]);
-    }
-
-    /**
-     * Holt alle gecachten Config-Pfade (für Debugging)
-     */
-    public static function getCachedPaths(): array
-    {
-        return array_keys(self::$cache);
-    }
-
-    /**
      * Überprüft ob eine Konfiguration existiert (Datei oder Cache)
      */
     public function exists(string $configPath): bool

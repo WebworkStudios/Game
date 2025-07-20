@@ -9,6 +9,7 @@ use Framework\Http\Request;
 use Framework\Http\Response;
 use Framework\Http\ResponseFactory;
 use Framework\Routing\MiddlewareInterface;
+use Throwable;
 
 /**
  * SessionMiddleware - Request Orchestration Layer
@@ -92,7 +93,7 @@ class SessionMiddleware implements MiddlewareInterface
 
             return $response;
 
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             $this->logError('Session middleware error', $e);
             // Continue without session on errors
             return $next($request);
@@ -152,38 +153,14 @@ class SessionMiddleware implements MiddlewareInterface
             if (!$this->session->hasFramework('security_initialized')) {
                 $this->sessionSecurity->initializeSession($request);
                 $this->session->setFramework('security_initialized', true);
-
-                $this->logSessionEvent('session_started', $request);
             }
         }
     }
 
-    // =============================================================================
-    // PRIVATE METHODS - Orchestration Logic
-    // =============================================================================
-
-    private function logSessionEvent(string $event, Request $request): void
-    {
-        $logData = [
-            'type' => 'session_event',
-            'event' => $event,
-            'request' => [
-                'method' => $request->getMethod()->value,
-                'path' => $request->getPath(),
-                'ip' => $request->ip(),
-            ],
-            'session_id' => $this->session->getId(),
-            'timestamp' => time(),
-        ];
-
-        error_log('SessionMiddleware: ' . json_encode($logData));
-    }
 
     private function handleSecurityViolation(Request $request, array $validation): Response
     {
         $violations = $validation['violations'] ?? [];
-
-        $this->logSecurityViolation($request, $violations);
 
         // Handle first violation type (most critical)
         $violation = $violations[0] ?? [];
@@ -196,23 +173,6 @@ class SessionMiddleware implements MiddlewareInterface
         };
     }
 
-    private function logSecurityViolation(Request $request, array $violations): void
-    {
-        $logData = [
-            'type' => 'security_violation',
-            'violations' => $violations,
-            'request' => [
-                'method' => $request->getMethod()->value,
-                'path' => $request->getPath(),
-                'ip' => $request->ip(),
-                'user_agent' => $request->getHeader('User-Agent'),
-            ],
-            'session_id' => $this->session->getId(),
-            'timestamp' => time(),
-        ];
-
-        error_log('SessionMiddleware: ' . json_encode($logData));
-    }
 
     private function handleSessionExpired(Request $request): Response
     {
@@ -289,13 +249,13 @@ class SessionMiddleware implements MiddlewareInterface
         if (mt_rand(1, 100) <= 5) {
             try {
                 $this->session->gc();
-            } catch (\Throwable $e) {
+            } catch (Throwable $e) {
                 $this->logError('Session garbage collection failed', $e);
             }
         }
     }
 
-    private function logError(string $message, \Throwable $e): void
+    private function logError(string $message, Throwable $e): void
     {
         $logData = [
             'type' => 'middleware_error',
@@ -330,7 +290,7 @@ class SessionMiddleware implements MiddlewareInterface
     {
         try {
             return $this->sessionSecurity->regenerateSession($reason);
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             $this->logError('Force regeneration failed', $e);
             return false;
         }
