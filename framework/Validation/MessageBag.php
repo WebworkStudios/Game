@@ -451,7 +451,6 @@ class MessageBag implements Countable, Iterator
         echo "\n=== MESSAGE BAG DEBUG ===\n";
         echo "Total Messages: " . $debugInfo['summary']['total_messages'] . "\n";
         echo "Field Count: " . $debugInfo['summary']['field_count'] . "\n";
-        echo "Memory Usage: " . round($debugInfo['summary']['memory_usage'] / 1024 / 1024, 2) . "MB\n";
         echo "Fields by Error Count: " . json_encode($this->getFieldsByErrorCount()) . "\n";
         echo "Sample Messages: " . json_encode($debugInfo['sample_flat']) . "\n";
         echo "========================\n\n";
@@ -461,6 +460,7 @@ class MessageBag implements Countable, Iterator
 
     /**
      * OPTIMIZED: String conversion with size awareness
+     * @throws JsonException
      */
     public function __toString(): string
     {

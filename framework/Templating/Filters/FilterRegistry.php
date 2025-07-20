@@ -9,13 +9,6 @@ use Generator;
 
 /**
  * FilterRegistry - OPTIMIZED with PHP 8.4 iterator_to_array() Features
- *
- * PHASE 2 OPTIMIZATIONS:
- * ✅ Lazy filter loading and validation with Generators
- * ✅ Memory-efficient debug info with iterator_to_array()
- * ✅ Chunked filter registration for large filter sets
- * ✅ Streaming filter validation and processing
- * ✅ Smart filter dependency resolution with lazy evaluation
  */
 class FilterRegistry
 {
@@ -30,10 +23,6 @@ class FilterRegistry
 
     /** @var array<string, int> Filter-Zugriffszähler für Performance-Monitoring */
     private array $accessCounts = [];
-
-    // ===================================================================
-    // OPTIMIZED: Core Registration Methods with iterator_to_array()
-    // ===================================================================
 
     /**
      * OPTIMIZED: Registriert einen Filter mit Metadaten-Tracking
@@ -117,10 +106,6 @@ class FilterRegistry
         $this->accessCounts[$name] = 0;
     }
 
-    // ===================================================================
-    // OPTIMIZED: Filter Retrieval with Lazy Loading
-    // ===================================================================
-
     /**
      * OPTIMIZED: Filter abrufen mit lazy loading und access tracking
      */
@@ -193,23 +178,6 @@ class FilterRegistry
         return $filter;
     }
 
-    // ===================================================================
-    // OPTIMIZED: Debug and Monitoring with Generators
-    // ===================================================================
-
-    /**
-     * OPTIMIZED: Debug-Informationen mit lazy generation
-     */
-    public function getDebugInfo(): array
-    {
-        return [
-            'summary' => $this->getDebugSummary(),
-            'filter_details' => $this->getFilterDetailsLazy(),
-            'performance' => $this->getPerformanceMetrics(),
-            'memory' => $this->getMemoryUsage(),
-        ];
-    }
-
     /**
      * OPTIMIZED: Filter-Details mit lazy evaluation
      */
@@ -258,58 +226,6 @@ class FilterRegistry
     }
 
     /**
-     * OPTIMIZED: Performance-Metriken mit lazy computation
-     */
-    private function getPerformanceMetrics(): array
-    {
-        // Most accessed filters
-        $accessCounts = $this->accessCounts;
-        arsort($accessCounts);
-
-        return [
-            'total_filters' => $this->count(),
-            'loaded_filters' => count($this->filters),
-            'lazy_filters' => count($this->lazyFilters),
-            'most_accessed' => array_slice($accessCounts, 0, 10, true),
-            'least_accessed' => array_slice(array_reverse($accessCounts, true), 0, 5, true),
-            'never_accessed' => array_keys(array_filter($accessCounts, fn($count) => $count === 0)),
-        ];
-    }
-
-    /**
-     * OPTIMIZED: Memory-Usage-Tracking
-     */
-    private function getMemoryUsage(): array
-    {
-        return [
-            'current_usage' => memory_get_usage(true),
-            'current_usage_human' => $this->formatBytes(memory_get_usage(true)),
-            'peak_usage' => memory_get_peak_usage(true),
-            'peak_usage_human' => $this->formatBytes(memory_get_peak_usage(true)),
-        ];
-    }
-
-    /**
-     * OPTIMIZED: Debug-Summary mit key metrics
-     */
-    private function getDebugSummary(): array
-    {
-        $totalAccess = array_sum($this->accessCounts);
-
-        return [
-            'total_filters' => $this->count(),
-            'loaded_count' => count($this->filters),
-            'lazy_count' => count($this->lazyFilters),
-            'total_access_count' => $totalAccess,
-            'avg_access_per_filter' => $this->count() > 0 ? $totalAccess / $this->count() : 0,
-        ];
-    }
-
-    // ===================================================================
-    // OPTIMIZED: Validation and Health Checks
-    // ===================================================================
-
-    /**
      * OPTIMIZED: Comprehensive filter validation
      */
     public function validateAll(): array
@@ -338,44 +254,6 @@ class FilterRegistry
 
         return $results;
     }
-
-    /**
-     * OPTIMIZED: Health check mit lazy evaluation
-     */
-    public function getHealthStatus(): array
-    {
-        $validation = $this->validateAll();
-        $performance = $this->getPerformanceMetrics();
-
-        $status = 'healthy';
-        $issues = [];
-
-        if (!empty($validation['invalid'])) {
-            $status = 'unhealthy';
-            $issues[] = 'Invalid filters detected: ' . implode(', ', $validation['invalid']);
-        }
-
-        if (!empty($validation['lazy_invalid'])) {
-            $status = 'degraded';
-            $issues[] = 'Invalid lazy factories: ' . implode(', ', $validation['lazy_invalid']);
-        }
-
-        if (count($performance['never_accessed']) > ($this->count() * 0.5)) {
-            $status = 'degraded';
-            $issues[] = 'Over 50% of filters are never accessed';
-        }
-
-        return [
-            'status' => $status,
-            'issues' => $issues,
-            'metrics' => $performance,
-            'memory' => $this->getMemoryUsage(),
-        ];
-    }
-
-    // ===================================================================
-    // OPTIMIZED: Filter Management Operations
-    // ===================================================================
 
     /**
      * OPTIMIZED: Bulk filter removal mit lazy processing
@@ -420,10 +298,6 @@ class FilterRegistry
         return $removed;
     }
 
-    // ===================================================================
-    // EXISTING METHODS (Enhanced with Performance Tracking)
-    // ===================================================================
-
     /**
      * Prüft ob ein Filter existiert (geladen oder lazy)
      */
@@ -467,10 +341,6 @@ class FilterRegistry
 
         return iterator_to_array($generator(), preserve_keys: false);
     }
-
-    // ===================================================================
-    // UTILITY METHODS
-    // ===================================================================
 
     /**
      * OPTIMIZED: Extract filter metadata for debugging
@@ -574,35 +444,5 @@ class FilterRegistry
         }
 
         return "unknown type: " . gettype($callable);
-    }
-
-    /**
-     * Format bytes in human readable format
-     */
-    private function formatBytes(int $bytes): string
-    {
-        $units = ['B', 'KB', 'MB', 'GB'];
-        $factor = floor(log($bytes) / log(1024));
-        return sprintf('%.2f %s', $bytes / (1024 ** $factor), $units[$factor] ?? 'TB');
-    }
-
-    // ===================================================================
-    // DEPRECATED METHODS (Backward Compatibility)
-    // ===================================================================
-
-    /**
-     * @deprecated Use registerMultiple() instead
-     */
-    public function registerBatch(array $filters): array
-    {
-        return $this->registerMultiple($filters);
-    }
-
-    /**
-     * @deprecated Use getDebugInfo() instead
-     */
-    public function getFilterInfo(): array
-    {
-        return $this->getDebugInfo();
     }
 }

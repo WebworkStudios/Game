@@ -65,22 +65,12 @@ class ApplicationKernel
                 $config = require $configPath;
 
                 if (is_array($config) && isset($config['debug'])) {
-                    $this->setDebug((bool) $config['debug']);
+                    $this->setDebug((bool)$config['debug']);
 
-                    // Debug-Logging falls Debug aktiv
-                    if ($this->debug) {
-                        error_log("✅ Debug-Modus aktiviert aus: {$configPath}");
-                    }
-                } else {
-                    error_log("⚠️ Debug-Key nicht gefunden in app.php - verwende default (false)");
                 }
-            } else {
-                error_log("⚠️ app/Config/app.php nicht gefunden - Debug bleibt false");
             }
 
         } catch (Throwable $e) {
-            // Robustes Fallback bei jedem Fehler
-            error_log("❌ Fehler beim frühen Debug-Config-Loading: " . $e->getMessage());
             $this->setDebug(false); // Explizit auf false setzen
         }
     }

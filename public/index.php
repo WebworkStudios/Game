@@ -18,15 +18,6 @@ declare(strict_types=1);
 // Performance: Start Output Buffering
 ob_start();
 
-// Security: Prevent direct access to this file via browser address bar
-if (basename($_SERVER['SCRIPT_NAME']) === 'index.php' &&
-    !isset($_SERVER['PATH_INFO']) &&
-    empty($_SERVER['QUERY_STRING'])) {
-    // Optional: Redirect to a default route instead of showing raw content
-    // header('Location: /home');
-    // exit;
-}
-
 // ===================================================================
 // Bootstrap & Autoloading
 // ===================================================================
@@ -81,7 +72,7 @@ try {
     if (isset($app) && $app->isDebug()) {
         // Development: Show detailed error
         echo "<!DOCTYPE html>
-<html>
+<html lang=de>
 <head>
     <title>Application Error</title>
     <style>
@@ -104,7 +95,7 @@ try {
     } else {
         // Production: Show generic error
         echo "<!DOCTYPE html>
-<html>
+<html lang=de>
 <head>
     <title>Service Unavailable</title>
     <style>

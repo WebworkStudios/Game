@@ -1,0 +1,54 @@
+<!-- framework/Views/errors/debug.html -->
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }} - KickersCup Manager</title>
+    <style>
+        body { font-family: monospace; margin: 20px; background: #1a1a1a; color: #fff; }
+        .error-container { max-width: 1200px; margin: 0 auto; }
+        .error-header { background: #dc3545; padding: 20px; border-radius: 5px; margin-bottom: 20px; }
+        .error-section { background: #333; padding: 15px; border-radius: 5px; margin-bottom: 15px; }
+        .error-section h3 { color: #ffc107; margin-top: 0; }
+        pre { background: #222; padding: 10px; border-radius: 3px; overflow-x: auto; white-space: pre-wrap; }
+        .highlight { background: #495057; padding: 2px 4px; border-radius: 3px; }
+        .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+        @media (max-width: 768px) { .info-grid { grid-template-columns: 1fr; } }
+    </style>
+</head>
+<body>
+<div class="error-container">
+    <div class="error-header">
+        <h1>{{ title }}</h1>
+        <p><strong>Template:</strong> <span class="highlight">{{ template }}</span></p>
+        <p><strong>Error:</strong> {{ error }}</p>
+    </div>
+
+    <div class="info-grid">
+        <div class="error-section">
+            <h3>📍 Location</h3>
+            <p><strong>File:</strong> {{ file }}</p>
+            <p><strong>Line:</strong> {{ line }}</p>
+        </div>
+
+        <div class="error-section">
+            <h3>📊 System Info</h3>
+            <p><strong>PHP:</strong> {{ php_version }}</p>
+            <p><strong>Memory:</strong> {{ memory_usage }}</p>
+            <p><strong>Peak:</strong> {{ memory_peak }}</p>
+        </div>
+    </div>
+
+    <div class="error-section">
+        <h3>🔍 Stack Trace</h3>
+        <pre>{{ trace }}</pre>
+    </div>
+
+    <div class="error-section">
+        <h3>📦 Available Template Data</h3>
+        <p><code>{{ data_keys }}</code></p>
+    </div>
+</div>
+</body>
+</html>

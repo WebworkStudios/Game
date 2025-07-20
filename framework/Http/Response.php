@@ -23,10 +23,6 @@ class Response
     ) {
     }
 
-    // ===================================================================
-    // MODERNISIERTE JSON-METHODEN mit JsonUtility
-    // ===================================================================
-
     /**
      * MODERNISIERT: JSON Response mit JsonUtility
      */
@@ -336,58 +332,5 @@ class Response
         echo $this->body;
 
         $this->sent = true;
-    }
-
-    /**
-     * ERWEITERT: Download Response Helper
-     */
-    public function download(string $content, string $filename, string $contentType = 'application/octet-stream'): self
-    {
-        return $this->withHeaders([
-            'Content-Type' => $contentType,
-            'Content-Disposition' => 'attachment; filename="' . $filename . '"',
-            'Content-Length' => (string)strlen($content),
-            'Cache-Control' => 'must-revalidate',
-            'Pragma' => 'public',
-        ])->withBody($content);
-    }
-
-    // ===================================================================
-    // DEBUG METHODS (erweitert)
-    // ===================================================================
-
-    public function dump(): void
-    {
-        echo "\n========================\n";
-        echo "Response Debug Information\n";
-        echo "========================\n";
-        echo "Status: " . $this->status->value . " " . $this->status->getText() . "\n";
-        echo "Sent: " . ($this->sent ? 'Yes' : 'No') . "\n";
-        echo "Headers:\n";
-        foreach ($this->headers as $name => $value) {
-            echo "  {$name}: {$value}\n";
-        }
-        echo "Body Length: " . strlen($this->body) . " bytes\n";
-        echo "Body Preview: " . substr($this->body, 0, 100) . (strlen($this->body) > 100 ? '...' : '') . "\n";
-        echo "Is Cacheable: " . ($this->status->isCacheable() ? 'Yes' : 'No') . "\n";
-        echo "May Have Body: " . ($this->status->mayHaveBody() ? 'Yes' : 'No') . "\n";
-
-        // JSON-spezifische Debug-Info
-        if ($this->hasHeader('Content-Type') && str_contains($this->getHeader('Content-Type'), 'application/json')) {
-            echo "JSON Valid: " . (JsonUtility::isValid($this->body) ? 'Yes' : 'No') . "\n";
-            if (JsonUtility::isValid($this->body)) {
-                try {
-                    $decoded = JsonUtility::decode($this->body);
-                    echo "JSON Structure: " . gettype($decoded) . "\n";
-                    if (is_array($decoded)) {
-                        echo "JSON Keys: " . implode(', ', array_keys($decoded)) . "\n";
-                    }
-                } catch (JsonException) {
-                    echo "JSON Parse Error\n";
-                }
-            }
-        }
-
-        echo "========================\n\n";
     }
 }

@@ -26,17 +26,18 @@ readonly class TemplateConfigManager
      */
     private function loadAppConfig(?ConfigManager $configManager): array
     {
-        if ($configManager === null) {
-            return $this->loadConfigDirectly();
+        if ($configManager !== null) {
+            try {
+                return $configManager->get('app/Config/app.php', fn() => $this->getDefaultConfig());
+            } catch (\Throwable) {
+            }
         }
-
-        try {
-            return $configManager->get('app/Config/app.php');
-        } catch (\Throwable $e) {
-            error_log("TemplateConfigManager: ConfigManager loading failed: " . $e->getMessage());
-            return $this->loadConfigDirectly();
-        }
+        return $this->loadConfigDirectly();
     }
+
+    /**
+     * Direktes Config-Loading als Fallback
+     */
 
     /**
      * Direktes Config-Loading als Fallback

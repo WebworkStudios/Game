@@ -46,15 +46,6 @@ class TeamOverviewAction
             50 // Hohe Priorität für Core-Funktionalität
         );
 
-        // Debug/Development Tools (nur im Debug-Modus)
-        if ($this->assetManager->debugMode) {
-            $this->assetManager->addScript(
-                'team/debug-tools.js',
-                ['defer' => true],
-                90 // Niedrige Priorität für Debug-Tools
-            );
-        }
-
         // Optional: Team Overview spezifische Utilities
         $this->assetManager->addScript(
             'team/team-overview.js',
