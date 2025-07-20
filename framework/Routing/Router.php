@@ -180,6 +180,7 @@ class Router
      */
     private function handleNotFound(Request $request): Response
     {
+        // Custom 404 Handler falls vorhanden
         if ($this->notFoundHandler !== null) {
             try {
                 $response = ($this->notFoundHandler)($request);
@@ -193,14 +194,119 @@ class Router
 
         try {
             $responseFactory = $this->container->get(ResponseFactory::class);
-            return $responseFactory->response(self::DEFAULT_404_MESSAGE, HttpStatus::NOT_FOUND);
+
+            // VERBESSERT: Verwende HTML-Template statt Text
+            return $responseFactory->view('errors/404', [
+                'title' => 'Seite nicht gefunden',
+                'message' => 'Die angeforderte Seite konnte nicht gefunden werden.',
+                'path' => $request->getPath(),
+                'home_url' => '/'
+            ], HttpStatus::NOT_FOUND);
+
         } catch (\Throwable $e) {
+
+            // Fallback: Einfache HTML-Response
             return new Response(
                 HttpStatus::NOT_FOUND,
-                ['Content-Type' => 'text/plain'],
-                self::DEFAULT_404_MESSAGE
+                ['Content-Type' => 'text/html; charset=UTF-8'],
+                $this->renderFallback404Html($request->getPath())
             );
         }
+    }
+
+    /**
+     * Fallback 404 HTML ohne Template-Engine
+     */
+    private function renderFallback404Html(string $path): string
+    {
+        $safePath = htmlspecialchars($path);
+
+        return <<<HTML
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>404 - Seite nicht gefunden | KickersCup Manager</title>
+    <style>
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            margin: 0; 
+            padding: 0; 
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #333;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .container { 
+            background: white; 
+            padding: 40px; 
+            border-radius: 10px; 
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            text-align: center; 
+            max-width: 500px; 
+            margin: 20px;
+        }
+        h1 { 
+            color: #e74c3c; 
+            font-size: 3em; 
+            margin: 0 0 20px 0; 
+            font-weight: 300;
+        }
+        h2 { 
+            color: #2c3e50; 
+            margin: 0 0 20px 0; 
+            font-weight: 400;
+        }
+        p { 
+            color: #7f8c8d; 
+            line-height: 1.6; 
+            margin: 0 0 20px 0;
+        }
+        .path { 
+            background: #ecf0f1; 
+            padding: 10px; 
+            border-radius: 5px; 
+            font-family: monospace; 
+            color: #2c3e50;
+            margin: 20px 0;
+        }
+        .btn { 
+            display: inline-block; 
+            background: #3498db; 
+            color: white; 
+            padding: 12px 30px; 
+            text-decoration: none; 
+            border-radius: 5px; 
+            transition: background 0.3s;
+            font-weight: 500;
+        }
+        .btn:hover { 
+            background: #2980b9; 
+        }
+        .logo {
+            font-size: 1.2em;
+            color: #3498db;
+            font-weight: bold;
+            margin-bottom: 30px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo">⚽ KickersCup Manager</div>
+        <h1>404</h1>
+        <h2>Seite nicht gefunden</h2>
+        <p>Die angeforderte Seite konnte leider nicht gefunden werden.</p>
+        <div class="path">Pfad: {$safePath}</div>
+        <p>Möglicherweise wurde die Seite verschoben oder ist nicht mehr verfügbar.</p>
+        <a href="/" class="btn">Zur Startseite</a>
+    </div>
+</body>
+</html>
+HTML;
     }
 
     /**
