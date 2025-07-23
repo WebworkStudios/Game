@@ -353,6 +353,9 @@ class MailService
     /**
      * Verarbeitet Mail-Queue (für Cron-Job)
      */
+    /**
+     * Verarbeitet Mail-Queue (für Cron-Job)
+     */
     public function processQueue(?int $limit = null): array
     {
         $limit = $limit ?? $this->config['queue']['batch_size'];
@@ -361,14 +364,11 @@ class MailService
         // Hole ausstehende E-Mails
         $mails = $this->queryBuilder
             ->table('mail_queue')
-            ->where('status', 'pending')
-            ->where('attempts', '<', 'max_attempts')
-            ->where(function ($query) {
-                $query->whereNull('send_at')
-                    ->orWhere('send_at', '<=', date('Y-m-d H:i:s'));
-            })
-            ->orderBy('priority', 'ASC')
-            ->orderBy('created_at', 'ASC')
+            ->where('status', '=', 'pending')
+            ->where('attempts', '<', $this->config['queue']['max_attempts'] ?? 3)
+            ->whereRaw('(send_at IS NULL OR send_at <= ?)', [date('Y-m-d H:i:s')])
+            ->orderBy('priority', \Framework\Database\Enums\OrderDirection::ASC)
+            ->orderBy('created_at', \Framework\Database\Enums\OrderDirection::ASC)
             ->limit($limit)
             ->get();
 
@@ -463,10 +463,7 @@ class MailService
     {
         $stats = $this->queryBuilder
             ->table('mail_queue')
-            ->select([
-                'status',
-                'COUNT(*) as count'
-            ])
+            ->select('status', 'COUNT(*) as count')
             ->groupBy('status')
             ->get();
 
