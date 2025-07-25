@@ -9,6 +9,7 @@ use App\Domain\User\Enums\UserRole;
 use Framework\Http\Request;
 use Framework\Http\Response;
 use Framework\Http\ResponseFactory;
+use Framework\Http\HttpMethod;
 use Framework\Routing\Route;
 use Framework\Security\AuthMiddleware;
 use Framework\Security\RoleMiddleware;
@@ -26,13 +27,13 @@ class UserManagementAction
 {
     public function __construct(
         private readonly UserService $userService,
-        private readonly AuthService $authService,
         private readonly ResponseFactory $responseFactory
     ) {}
 
     public function __invoke(Request $request): Response
     {
-        if ($request->isPost()) {
+        // PROBLEM 1 BEHOBEN: isPost() existiert nicht - verwende getMethod()
+        if ($request->getMethod() === HttpMethod::POST) {
             return $this->processAction($request);
         }
 
@@ -44,20 +45,27 @@ class UserManagementAction
      */
     private function showUserList(Request $request): Response
     {
-        $status = $request->query('status');
-        $role = $request->query('role');
-        $page = (int)($request->query('page', 1));
+        // PROBLEM 2 BEHOBEN: query() existiert nicht - verwende input()
+        $status = $request->input('status');
+        $role = $request->input('role');
+        $page = (int)($request->input('page', 1));
         $limit = 20;
         $offset = ($page - 1) * $limit;
 
         // Filter anwenden
         if ($status) {
-            $users = $this->userService->findByStatus(UserStatus::from($status), $limit, $offset);
+            // PROBLEM 3 BEHOBEN: UserService hat findByStatus() nicht - Repository hat es
+            // Wir müssen UserService erweitern oder Repository direkt nutzen
+            // Hier zeige ich eine korrekte Service-Implementierung
+            $users = $this->userService->getUsersByStatus(UserStatus::from($status), $limit, $offset);
         } elseif ($role) {
-            $users = $this->userService->findByRole(UserRole::from($role), $limit, $offset);
+            // PROBLEM 4 BEHOBEN: UserService hat findByRole() nicht - Repository hat es
+            // Wir müssen UserService erweitern oder Repository direkt nutzen
+            // Hier zeige ich eine korrekte Service-Implementierung
+            $users = $this->userService->getUsersByRole(UserRole::from($role), $limit, $offset);
         } else {
-            // Alle User laden (vereinfacht - in Produktion Pagination)
-            $users = [];
+            // Alle User laden mit Pagination
+            $users = $this->userService->getAllUsers($limit, $offset);
         }
 
         $stats = $this->userService->getUserStats();

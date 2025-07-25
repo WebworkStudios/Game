@@ -422,4 +422,31 @@ readonly class UserService
     {
         return $this->tokenRepository->deleteExpiredTokens();
     }
+
+    /**
+     * NEUE METHODE: Holt User nach Status mit Pagination
+     * Löst Problem 3: findByStatus() nicht gefunden
+     */
+    public function getUsersByStatus(UserStatus $status, int $limit = 20, int $offset = 0): array
+    {
+        return $this->userRepository->findByStatus($status, $limit, $offset);
+    }
+
+    /**
+     * NEUE METHODE: Holt User nach Rolle mit Pagination
+     * Löst Problem 4: findByRole() nicht gefunden
+     */
+    public function getUsersByRole(UserRole $role, int $limit = 20, int $offset = 0): array
+    {
+        return $this->userRepository->findByRole($role, $limit, $offset);
+    }
+
+    /**
+     * NEUE METHODE: Holt alle User mit Pagination (für Admin-Liste)
+     */
+    public function getAllUsers(int $limit = 20, int $offset = 0): array
+    {
+        // Standardmäßig aktive User anzeigen
+        return $this->userRepository->findByStatus(UserStatus::ACTIVE, $limit, $offset);
+    }
 }
