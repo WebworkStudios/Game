@@ -43,12 +43,13 @@ readonly class EditProfileAction
     /**
      * Zeigt Bearbeitungs-Formular
      */
-    private function showForm($user): Response
+    private function showForm($user, array $errors = []): Response
     {
         return $this->responseFactory->view('profile/edit', [
             'title' => 'Profil bearbeiten',
             'csrf_token' => $this->csrf->getToken(),
             'user' => $user,
+            'errors' => $errors, // Fehler direkt an Template übergeben
         ]);
     }
 
@@ -78,11 +79,13 @@ readonly class EditProfileAction
     private function updateUsername(Request $request, $user, array $data): Response
     {
         $validation = $this->validator->validate($data, [
-            'username' => 'required|string|min:3|max:50|unique:users,username,' . $user->getId()->toInt(),
+            'username' => 'required|string|min:3|max:50|unique:users,username,' .
+                $user->getId()->toInt(),
         ]);
 
         if ($validation->fails()) {
-            return $this->showForm($user)->withErrors($validation->errors(), 'username');
+            // Fehlerbehandlung über ResponseFactory und Template-Daten
+            return $this->showForm($user, $validation->errors()->toArray());
         }
 
         try {
@@ -92,7 +95,8 @@ readonly class EditProfileAction
             return $this->responseFactory->redirect('/profile?success=username_updated');
 
         } catch (\DomainException $e) {
-            return $this->showForm($user)->withError($e->getMessage(), 'username');
+            // Einzelfehler als Array formatieren
+            return $this->showForm($user, ['username' => [$e->getMessage()]]);
         }
     }
 
@@ -108,7 +112,7 @@ readonly class EditProfileAction
         ]);
 
         if ($validation->fails()) {
-            return $this->showForm($user)->withErrors($validation->errors(), 'password');
+            return $this->showForm($user, $validation->errors()->toArray());
         }
 
         try {
@@ -121,7 +125,7 @@ readonly class EditProfileAction
             return $this->responseFactory->redirect('/profile?success=password_updated');
 
         } catch (\DomainException $e) {
-            return $this->showForm($user)->withError($e->getMessage(), 'password');
+            return $this->showForm($user, ['password' => [$e->getMessage()]]);
         }
     }
 
@@ -130,10 +134,11 @@ readonly class EditProfileAction
      */
     private function updateProfileImage(Request $request, $user): Response
     {
-        $files = $request->files();
+        // KORRIGIERT: Direkter Zugriff auf $_FILES, da getFiles() nicht existiert
+        $files = $_FILES;
 
         if (!isset($files['profile_image']) || $files['profile_image']['error'] === UPLOAD_ERR_NO_FILE) {
-            return $this->showForm($user)->withError('Keine Datei ausgewählt', 'image');
+            return $this->showForm($user, ['image' => ['Keine Datei ausgewählt']]);
         }
 
         try {
@@ -153,7 +158,7 @@ readonly class EditProfileAction
             return $this->responseFactory->redirect('/profile?success=image_updated');
 
         } catch (\InvalidArgumentException|\RuntimeException $e) {
-            return $this->showForm($user)->withError($e->getMessage(), 'image');
+            return $this->showForm($user, ['image' => [$e->getMessage()]]);
         }
     }
 }
