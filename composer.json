@@ -16,7 +16,8 @@
     "ext-apcu": "*",
     "ext-redis": "*",
     "ext-memcached": "*",
-    "ext-zlib": "*"
+    "ext-zlib": "*",
+    "ext-gd": "*"
   },
   "autoload": {
     "psr-4": {
