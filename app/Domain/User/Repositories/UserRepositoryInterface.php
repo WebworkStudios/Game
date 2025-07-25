@@ -15,6 +15,10 @@ use App\Domain\User\Enums\UserRole;
  */
 interface UserRepositoryInterface
 {
+    // ========================================================================
+    // CORE CRUD OPERATIONS
+    // ========================================================================
+
     public function save(User $user): User;
 
     public function findById(UserId $id): ?User;
@@ -38,4 +42,28 @@ interface UserRepositoryInterface
     public function countByRole(UserRole $role): int;
 
     public function delete(UserId $id): bool;
+
+    // ========================================================================
+    // STATISTICS & ADMIN METHODS
+    // ========================================================================
+
+    /**
+     * Holt User-Statistiken für Admin-Dashboard
+     */
+    public function getUserStats(): array;
+
+    /**
+     * Holt Gesamtanzahl aller User
+     */
+    public function getTotalUserCount(): int;
+
+    /**
+     * Holt Anzahl aktiver User
+     */
+    public function getActiveUserCount(): int;
+
+    /**
+     * Holt kürzlich registrierte User
+     */
+    public function getRecentUsers(int $days = 7, int $limit = 10): array;
 }
