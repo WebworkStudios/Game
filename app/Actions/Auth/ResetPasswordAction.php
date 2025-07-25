@@ -3,6 +3,7 @@ declare(strict_types=1);
 namespace App\Actions\Auth;
 
 use App\Domain\User\Services\UserService;
+use Framework\Http\HttpMethod;
 use Framework\Http\Request;
 use Framework\Http\Response;
 use Framework\Http\ResponseFactory;
@@ -14,24 +15,24 @@ use Framework\Security\Csrf;
  * Reset Password Action - Passwort zurücksetzen
  */
 #[Route(path: '/auth/reset-password', methods: ['GET', 'POST'], name: 'auth.reset-password')]
-class ResetPasswordAction
+readonly class ResetPasswordAction
 {
     public function __construct(
-        private readonly UserService $userService,
-        private readonly ResponseFactory $responseFactory,
-        private readonly Validator $validator,
-        private readonly Csrf $csrf
+        private UserService     $userService,
+        private ResponseFactory $responseFactory,
+        private Validator       $validator,
+        private Csrf            $csrf
     ) {}
 
     public function __invoke(Request $request): Response
     {
-        $token = $request->query('token');
+        $token = $request->input('token');
 
         if (!$token) {
             return $this->responseFactory->redirect('/forgot-password');
         }
 
-        if ($request->isGet()) {
+        if ($request->getMethod() === HttpMethod::GET)  {
             return $this->showForm($token);
         }
 

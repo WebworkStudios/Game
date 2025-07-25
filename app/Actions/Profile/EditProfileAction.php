@@ -5,6 +5,7 @@ namespace App\Actions\Profile;
 use App\Domain\User\Services\AuthService;
 use App\Domain\User\Services\UserService;
 use App\Domain\User\Services\ImageUploadService;
+use Framework\Http\HttpMethod;
 use Framework\Http\Request;
 use Framework\Http\Response;
 use Framework\Http\ResponseFactory;
@@ -17,22 +18,22 @@ use Framework\Security\AuthMiddleware;
  * Edit Profile Action - Profil bearbeiten
  */
 #[Route(path: '/profile/edit', methods: ['GET', 'POST'], name: 'profile.edit', middlewares: [AuthMiddleware::class])]
-class EditProfileAction
+readonly class EditProfileAction
 {
     public function __construct(
-        private readonly AuthService $authService,
-        private readonly UserService $userService,
-        private readonly ImageUploadService $imageUploadService,
-        private readonly ResponseFactory $responseFactory,
-        private readonly Validator $validator,
-        private readonly Csrf $csrf
+        private AuthService        $authService,
+        private UserService        $userService,
+        private ImageUploadService $imageUploadService,
+        private ResponseFactory    $responseFactory,
+        private Validator          $validator,
+        private Csrf               $csrf
     ) {}
 
     public function __invoke(Request $request): Response
     {
         $user = $this->authService->getCurrentUser();
 
-        if ($request->isGet()) {
+        if ($request->getMethod() === HttpMethod::GET) {
             return $this->showForm($user);
         }
 

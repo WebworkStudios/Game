@@ -3,6 +3,7 @@ declare(strict_types=1);
 namespace App\Actions\Auth;
 
 use App\Domain\User\Services\UserService;
+use Framework\Http\HttpMethod;
 use Framework\Http\Request;
 use Framework\Http\Response;
 use Framework\Http\ResponseFactory;
@@ -14,18 +15,18 @@ use Framework\Security\Csrf;
  * Forgot Password Action - Passwort vergessen
  */
 #[Route(path: '/forgot-password', methods: ['GET', 'POST'], name: 'auth.forgot-password')]
-class ForgotPasswordAction
+readonly class ForgotPasswordAction
 {
     public function __construct(
-        private readonly UserService $userService,
-        private readonly ResponseFactory $responseFactory,
-        private readonly Validator $validator,
-        private readonly Csrf $csrf
+        private UserService     $userService,
+        private ResponseFactory $responseFactory,
+        private Validator       $validator,
+        private Csrf            $csrf
     ) {}
 
     public function __invoke(Request $request): Response
     {
-        if ($request->isGet()) {
+        if ($request->getMethod() === HttpMethod::GET) {
             return $this->showForm();
         }
 

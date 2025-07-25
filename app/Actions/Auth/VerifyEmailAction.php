@@ -12,16 +12,16 @@ use Framework\Routing\Route;
  * Verify Email Action - E-Mail-Verifikation
  */
 #[Route(path: '/auth/verify-email', methods: ['GET'], name: 'auth.verify-email')]
-class VerifyEmailAction
+readonly class VerifyEmailAction
 {
     public function __construct(
-        private readonly UserService $userService,
-        private readonly ResponseFactory $responseFactory
+        private UserService     $userService,
+        private ResponseFactory $responseFactory
     ) {}
 
     public function __invoke(Request $request): Response
     {
-        $token = $request->query('token');
+        $token = $request->input('token');
 
         if (!$token) {
             return $this->responseFactory->view('auth/verify-email-error', [

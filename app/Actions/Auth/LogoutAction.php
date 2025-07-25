@@ -12,11 +12,11 @@ use Framework\Routing\Route;
  * Logout Action - Benutzer-Abmeldung
  */
 #[Route(path: '/logout', methods: ['POST'], name: 'auth.logout')]
-class LogoutAction
+readonly class LogoutAction
 {
     public function __construct(
-        private readonly AuthService $authService,
-        private readonly ResponseFactory $responseFactory
+        private AuthService     $authService,
+        private ResponseFactory $responseFactory
     ) {}
 
     public function __invoke(Request $request): Response
