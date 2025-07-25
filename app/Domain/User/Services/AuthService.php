@@ -1,8 +1,10 @@
 <?php
+declare(strict_types=1);
 namespace App\Domain\User\Services;
 
 use App\Domain\User\Entities\User;
 use App\Domain\User\ValueObjects\UserId;
+use App\Domain\User\Repositories\UserRepositoryInterface;
 use Framework\Security\Session;
 
 /**
@@ -15,7 +17,7 @@ class AuthService
 
     public function __construct(
         private readonly Session $session,
-        private readonly UserService $userService
+        private readonly UserRepositoryInterface $userRepository // Repository statt UserService
     ) {}
 
     /**
@@ -71,8 +73,8 @@ class AuthService
         }
 
         try {
-            // User aus DB laden (immer aktuell)
-            return $this->userService->findById(UserId::fromInt($userId));
+            // User aus DB laden (immer aktuell) - über Repository
+            return $this->userRepository->findById(UserId::fromInt($userId));
         } catch (\Throwable) {
             // Bei Fehlern ausloggen
             $this->logout();

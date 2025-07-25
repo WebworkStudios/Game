@@ -12,6 +12,7 @@ use App\Domain\User\ValueObjects\Username;
 use Framework\Database\ConnectionManager;
 use Framework\Database\MySQLGrammar;
 use Framework\Database\QueryBuilder;
+use Framework\Database\Enums\OrderDirection;  // ✅ Import hinzugefügt
 
 /**
  * User Repository - MySQL Implementation
@@ -49,7 +50,7 @@ class UserRepository implements UserRepositoryInterface
 
             $this->queryBuilder
                 ->table('users')
-                ->where('id', $id)
+                ->where('id', '=', $id)  // ✅ Operator hinzugefügt
                 ->update($data);
         }
 
@@ -60,7 +61,7 @@ class UserRepository implements UserRepositoryInterface
     {
         $data = $this->queryBuilder
             ->table('users')
-            ->where('id', $id->toInt())
+            ->where('id', '=', $id->toInt())  // ✅ Operator hinzugefügt
             ->first();
 
         return $data ? User::fromArray($data) : null;
@@ -70,7 +71,7 @@ class UserRepository implements UserRepositoryInterface
     {
         $data = $this->queryBuilder
             ->table('users')
-            ->where('email', $email->toString())
+            ->where('email', '=', $email->toString())  // ✅ Operator hinzugefügt
             ->first();
 
         return $data ? User::fromArray($data) : null;
@@ -80,7 +81,7 @@ class UserRepository implements UserRepositoryInterface
     {
         $data = $this->queryBuilder
             ->table('users')
-            ->where('username', $username->toString())
+            ->where('username', '=', $username->toString())  // ✅ Operator hinzugefügt
             ->first();
 
         return $data ? User::fromArray($data) : null;
@@ -88,12 +89,32 @@ class UserRepository implements UserRepositoryInterface
 
     public function findByEmailOrUsername(string $identifier): ?User
     {
+        // ✅ LÖSUNG 1: Zwei separate Queries kombinieren
+        $userByEmail = $this->queryBuilder
+            ->table('users')
+            ->where('email', '=', $identifier)
+            ->first();
+
+        if ($userByEmail) {
+            return User::fromArray($userByEmail);
+        }
+
+        $userByUsername = $this->queryBuilder
+            ->table('users')
+            ->where('username', '=', $identifier)
+            ->first();
+
+        return $userByUsername ? User::fromArray($userByUsername) : null;
+    }
+
+    // ✅ ALTERNATIVE LÖSUNG mit whereRaw (falls OR-Logik gewünscht):
+    public function findByEmailOrUsernameAlternative(string $identifier): ?User
+    {
         $data = $this->queryBuilder
             ->table('users')
-            ->where(function($query) use ($identifier) {
-                $query->where('email', $identifier)
-                    ->orWhere('username', $identifier);
-            })
+            ->whereRaw('(email = :identifier OR username = :identifier)', [
+                'identifier' => $identifier
+            ])
             ->first();
 
         return $data ? User::fromArray($data) : null;
@@ -103,7 +124,7 @@ class UserRepository implements UserRepositoryInterface
     {
         return $this->queryBuilder
             ->table('users')
-            ->where('email', $email->toString())
+            ->where('email', '=', $email->toString())  // ✅ Operator hinzugefügt
             ->exists();
     }
 
@@ -111,7 +132,7 @@ class UserRepository implements UserRepositoryInterface
     {
         return $this->queryBuilder
             ->table('users')
-            ->where('username', $username->toString())
+            ->where('username', '=', $username->toString())  // ✅ Operator hinzugefügt
             ->exists();
     }
 
@@ -119,8 +140,8 @@ class UserRepository implements UserRepositoryInterface
     {
         $query = $this->queryBuilder
             ->table('users')
-            ->where('status', $status->value)
-            ->orderBy('created_at', 'DESC')
+            ->where('status', '=', $status->value)  // ✅ Operator hinzugefügt
+            ->orderBy('created_at', OrderDirection::DESC)  // ✅ Enum statt String
             ->offset($offset);
 
         if ($limit !== null) {
@@ -129,15 +150,17 @@ class UserRepository implements UserRepositoryInterface
 
         $results = $query->get();
 
-        return array_map(fn($data) => User::fromArray($data), $results);
+        // ✅ QueryResult in Array konvertieren
+        // Annahme: QueryResult hat eine toArray() oder all() Methode
+        return array_map(fn($data) => User::fromArray($data), $results->toArray());
     }
 
     public function findByRole(UserRole $role, ?int $limit = null, int $offset = 0): array
     {
         $query = $this->queryBuilder
             ->table('users')
-            ->where('role', $role->value)
-            ->orderBy('created_at', 'DESC')
+            ->where('role', '=', $role->value)  // ✅ Operator hinzugefügt
+            ->orderBy('created_at', OrderDirection::DESC)  // ✅ Enum statt String
             ->offset($offset);
 
         if ($limit !== null) {
@@ -146,14 +169,15 @@ class UserRepository implements UserRepositoryInterface
 
         $results = $query->get();
 
-        return array_map(fn($data) => User::fromArray($data), $results);
+        // ✅ QueryResult in Array konvertieren
+        return array_map(fn($data) => User::fromArray($data), $results->toArray());
     }
 
     public function countByStatus(UserStatus $status): int
     {
         return $this->queryBuilder
             ->table('users')
-            ->where('status', $status->value)
+            ->where('status', '=', $status->value)  // ✅ Operator hinzugefügt
             ->count();
     }
 
@@ -161,7 +185,7 @@ class UserRepository implements UserRepositoryInterface
     {
         return $this->queryBuilder
             ->table('users')
-            ->where('role', $role->value)
+            ->where('role', '=', $role->value)  // ✅ Operator hinzugefügt
             ->count();
     }
 
@@ -169,7 +193,7 @@ class UserRepository implements UserRepositoryInterface
     {
         $affected = $this->queryBuilder
             ->table('users')
-            ->where('id', $id->toInt())
+            ->where('id', '=', $id->toInt())  // ✅ Operator hinzugefügt
             ->delete();
 
         return $affected > 0;
@@ -178,38 +202,34 @@ class UserRepository implements UserRepositoryInterface
     /**
      * Admin-Funktionen für Statistiken
      */
-    public function getUserStats(): array
+    public function getTotalUserCount(): int
     {
-        $statusStats = $this->queryBuilder
+        return $this->queryBuilder
             ->table('users')
-            ->select(['status', 'COUNT(*) as count'])
-            ->groupBy('status')
-            ->get();
-
-        $roleStats = $this->queryBuilder
-            ->table('users')
-            ->select(['role', 'COUNT(*) as count'])
-            ->groupBy('role')
-            ->get();
-
-        return [
-            'total' => $this->queryBuilder->table('users')->count(),
-            'by_status' => array_column($statusStats, 'count', 'status'),
-            'by_role' => array_column($roleStats, 'count', 'role'),
-        ];
+            ->count();
     }
 
-    /**
-     * Findet User mit zu vielen Login-Versuchen
-     */
-    public function findBlockedUsers(): array
+    public function getActiveUserCount(): int
     {
+        return $this->queryBuilder
+            ->table('users')
+            ->where('status', '=', UserStatus::ACTIVE->value)  // ✅ Operator hinzugefügt
+            ->count();
+    }
+
+    public function getRecentUsers(int $days = 7, int $limit = 10): array
+    {
+        $cutoffDate = date('Y-m-d H:i:s', strtotime("-{$days} days"));
+
         $results = $this->queryBuilder
             ->table('users')
-            ->where('login_attempts', '>=', 5)
-            ->orderBy('login_attempts_reset_at', 'DESC')
+            ->where('created_at', '>=', $cutoffDate)  // ✅ Operator hinzugefügt
+            ->orderBy('created_at', OrderDirection::DESC)  // ✅ Enum statt String
+            ->limit($limit)
             ->get();
 
-        return array_map(fn($data) => User::fromArray($data), $results);
+        // ✅ QueryResult in Array konvertieren
+        return array_map(fn($data) => User::fromArray($data), $results->toArray());
     }
+
 }

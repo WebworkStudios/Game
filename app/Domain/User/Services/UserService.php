@@ -18,12 +18,12 @@ use Framework\Mail\MailService;
 /**
  * User Service - Haupt-Geschäftslogik für User-Management
  */
-class UserService
+readonly class UserService
 {
     public function __construct(
-        private readonly UserRepositoryInterface $userRepository,
-        private readonly UserTokenRepositoryInterface $tokenRepository,
-        private readonly MailService $mailService
+        private UserRepositoryInterface      $userRepository,
+        private UserTokenRepositoryInterface $tokenRepository,
+        private MailService                  $mailService
     ) {}
 
     // ========================================================================
